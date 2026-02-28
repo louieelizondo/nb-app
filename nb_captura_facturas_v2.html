@@ -1866,8 +1866,8 @@ function enviarGasto(){
   // Also POST to Apps Script if configured
   const scriptUrl = getScriptUrl();
   if(scriptUrl){
-    // Send without foto (too large for Apps Script; foto stays in localStorage only)
-    const payload = {...gasto, foto: undefined, action: 'create'};
+    // Send WITH foto — Apps Script saves it to Google Drive
+    const payload = {...gasto, action: 'create'};
     fetch(scriptUrl, {
       method: 'POST',
       headers: {'Content-Type':'text/plain'}, // Apps Script needs text/plain for CORS

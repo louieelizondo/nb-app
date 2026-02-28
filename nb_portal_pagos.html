@@ -556,7 +556,7 @@ function renderTable(){
       ? `<button class="btn btn-pay" onclick="openPayModal('${g.id}')">💰 Pagar</button>`
       : `<button class="btn btn-undo" onclick="undoPay('${g.id}')">↩ Deshacer</button>`;
 
-    const fotoBtn = g.foto
+    const fotoBtn = hasFoto(g)
       ? ` <button class="btn-foto" onclick="openFoto('${g.id}')">📷</button>`
       : '';
 
@@ -581,7 +581,7 @@ function renderTable(){
           <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
             ${estadoBadge}
             <span class="fp-chip ${fpClass}" style="font-size:10px">${fpIcons[fpKey]} ${g.forma_pago}</span>
-            ${g.foto?`<button class="btn-foto" onclick="event.stopPropagation();openFoto('${g.id}')" style="font-size:10px;padding:3px 6px">📷</button>`:''}
+            ${hasFoto(g)?`<button class="btn-foto" onclick="event.stopPropagation();openFoto('${g.id}')" style="font-size:10px;padding:3px 6px">📷</button>`:''}
           </div>
           <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px">
             <div style="font-size:12px;color:#7a6b5d">
@@ -688,11 +688,18 @@ function confirmDateChange(){
 }
 
 // ── Foto Modal ──
+function hasFoto(g){
+  return g && (g.foto_url || g.Foto_URL || g.foto);
+}
 function openFoto(id){
   const g = allGastos.find(x => x.id === id);
-  if(!g || !g.foto) return;
+  if(!g) return;
+  // Priority: Drive URL (from Sheet) → localStorage base64
+  const driveUrl = g.foto_url || g.Foto_URL || '';
+  const localB64 = g.foto || '';
+  if(!driveUrl && !localB64) return;
   document.getElementById('fotoTitle').textContent = `${g.proveedor} · ${g.folio||'Sin folio'} · ${formatDate(g.fecha_compra)}`;
-  document.getElementById('fotoImg').src = 'data:image/jpeg;base64,' + g.foto;
+  document.getElementById('fotoImg').src = driveUrl || ('data:image/jpeg;base64,' + localB64);
   document.getElementById('fotoModal').classList.add('open');
 }
 function closeFotoModal(){ document.getElementById('fotoModal').classList.remove('open'); }
@@ -769,9 +776,14 @@ async function syncFromSheet(){
       fecha_pago   : g.Fecha_Pago || g.fecha_pago || '',
       credit_days  : parseInt(g.Credit_Days || g.credit_days || 0),
       comprobante  : g.Comprobante || g.comprobante || '',
-      created_at   : g.Created_At || g.created_at || ''
+      created_at   : g.Created_At || g.created_at || '',
+      foto_url     : g.Foto_URL || g.foto_url || ''
     }));
 
+    // Preserve local base64 photos for entries that also exist in Sheet
+    const localMap = {};
+    allGastos.forEach(g => { if(g.foto) localMap[g.id] = g.foto; });
+    merged.forEach(g => { if(!g.foto_url && localMap[g.id]) g.foto = localMap[g.id]; });
     allGastos = [...merged, ...localOnly];
     saveGastos();
     applyFilters();
