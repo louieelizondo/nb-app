@@ -40,6 +40,23 @@ const INV_HEADERS = [
   'Temporada', 'Tags', 'Grupo', 'Presentacion'
 ];
 
+// NEW: Inventory Count History
+const INV_LOG_TAB = 'INVENTARIO_LOG';
+const INV_LOG_HEADERS = [
+  'Timestamp', 'Producto', 'Cantidad', 'Seccion', 'Categoria', 'Contó', 'Dispositivo'
+];
+
+// NEW: Orders tracking
+const PEDIDOS_TAB = 'PEDIDOS_LOG';
+const PEDIDOS_HEADERS = [
+  'ID', 'Proveedor', 'Productos_JSON', 'Modo', 'Status',
+  'Ordenado_por', 'Ordenado_at', 'Recibido_por', 'Recibido_at', 'Notas'
+];
+
+// NEW: Cross-app audit trail
+const AUDIT_TAB = 'AUDIT_LOG';
+const AUDIT_HEADERS = ['Timestamp', 'App', 'Action', 'User_Device', 'Details'];
+
 const FOTO_FOLDER_NAME = 'NB_Fotos_Facturas';
 const COMP_FOLDER_NAME = 'NB_Comprobantes';
 const FOTO_MAX_AGE_DAYS = 90; // 3 months
@@ -55,6 +72,7 @@ function doGet(e) {
       case 'list':          return jsonResp(listFacturas(e.parameter));
       case 'get':           return jsonResp(getFactura(e.parameter.id));
       case 'list_products': return jsonResp(listProducts());
+      case 'list_orders':   return jsonResp(listOrders());
       case 'health':        return jsonResp({ ok: true, ts: new Date().toISOString() });
       default:              return jsonResp({ error: 'Unknown action: ' + action }, 400);
     }
@@ -84,6 +102,11 @@ function doPost(e) {
       case 'add_product':      return jsonResp(addProduct(body));
       case 'toggle_product':   return jsonResp(toggleProduct(body));
       case 'update_product':   return jsonResp(updateProduct(body));
+      case 'log_inventory':    return jsonResp(logInventoryCounts(body));
+      case 'save_order':       return jsonResp(saveOrder(body));
+      case 'update_order':     return jsonResp(updateOrder(body));
+      case 'audit':            return jsonResp(writeAudit(body));
+      case 'sync_batch':       return jsonResp(processSyncBatch(body));
       default:                 return jsonResp({ error: 'Unknown action: ' + action }, 400);
     }
   } catch(err) {
@@ -523,6 +546,165 @@ function seedProductsFromArray() {
   }
   // This will be called from the inventory app with the full product array
   return { ok: true, message: 'Ready for seeding. Send products via add_product.' };
+}
+
+// ══════════════════════════════════════════════
+// INVENTORY COUNT HISTORY
+// ══════════════════════════════════════════════
+
+function logInventoryCounts(body) {
+  const items = body.items;
+  if (!items || !items.length) throw new Error('No items to log');
+  const sheet = getOrCreateTab(INV_LOG_TAB, INV_LOG_HEADERS);
+  const ts = new Date().toISOString();
+  const quien = body.quien || 'Desconocido';
+  const device = body.device || 'web';
+
+  const rows = items.map(item => [
+    ts,
+    item.producto || '',
+    item.cantidad,
+    item.seccion || '',
+    item.categoria || '',
+    quien,
+    device
+  ]);
+
+  if (rows.length > 0) {
+    sheet.getRange(sheet.getLastRow() + 1, 1, rows.length, INV_LOG_HEADERS.length).setValues(rows);
+  }
+
+  // Trim to last 10,000 rows to prevent Sheet bloat
+  const totalRows = sheet.getLastRow();
+  if (totalRows > 10001) {
+    sheet.deleteRows(2, totalRows - 10001);
+  }
+
+  log('INV_COUNT', items.length + ' products counted by ' + quien);
+  writeAuditInternal('Inventario', 'SECTION_COUNTED', device, items.length + ' products | ' + (items[0]?.seccion || ''));
+  return { ok: true, logged: rows.length, message: items.length + ' conteos registrados' };
+}
+
+// ══════════════════════════════════════════════
+// ORDERS TRACKING
+// ══════════════════════════════════════════════
+
+function saveOrder(body) {
+  const sheet = getOrCreateTab(PEDIDOS_TAB, PEDIDOS_HEADERS);
+  const o = body.order || body;
+  const id = o.id || 'ORD' + Date.now();
+  const row = [
+    id,
+    o.supplier || o.proveedor || '',
+    JSON.stringify(o.items || []),
+    o.mode || o.modo || '',
+    o.status || 'ordered',
+    o.ordered_by || '',
+    o.ordered_at || new Date().toISOString(),
+    '', '', ''
+  ];
+  sheet.appendRow(row);
+  log('SAVE_ORDER', id + ' | ' + o.supplier);
+  writeAuditInternal('Inventario', 'ORDER_PLACED', '', id + ' | ' + o.supplier + ' | ' + (o.items||[]).length + ' items');
+  return { ok: true, id, message: 'Pedido registrado' };
+}
+
+function updateOrder(body) {
+  const { id } = body;
+  if (!id) throw new Error('Missing order id');
+  const sheet = getOrCreateTab(PEDIDOS_TAB, PEDIDOS_HEADERS);
+  const data = sheet.getDataRange().getValues();
+
+  for (let i = 1; i < data.length; i++) {
+    if (String(data[i][0]) === String(id)) {
+      if (body.status) {
+        const col = PEDIDOS_HEADERS.indexOf('Status') + 1;
+        sheet.getRange(i + 1, col).setValue(body.status);
+      }
+      if (body.received_by || body.recibido_por) {
+        const col = PEDIDOS_HEADERS.indexOf('Recibido_por') + 1;
+        sheet.getRange(i + 1, col).setValue(body.received_by || body.recibido_por);
+      }
+      if (body.received_at || body.recibido_at) {
+        const col = PEDIDOS_HEADERS.indexOf('Recibido_at') + 1;
+        sheet.getRange(i + 1, col).setValue(body.received_at || body.recibido_at);
+      }
+      if (body.notes || body.notas) {
+        const col = PEDIDOS_HEADERS.indexOf('Notas') + 1;
+        sheet.getRange(i + 1, col).setValue(body.notes || body.notas);
+      }
+      log('UPDATE_ORDER', id + ' → ' + (body.status || ''));
+      writeAuditInternal('Inventario', 'ORDER_RECEIVED', body.received_by || '', id);
+      return { ok: true, message: 'Pedido actualizado' };
+    }
+  }
+  throw new Error('Order not found: ' + id);
+}
+
+function listOrders() {
+  const sheet = getOrCreateTab(PEDIDOS_TAB, PEDIDOS_HEADERS);
+  const data = sheet.getDataRange().getValues();
+  if (data.length <= 1) return { orders: [], count: 0 };
+  const headers = data[0];
+  const orders = data.slice(1).map(r => {
+    const obj = {};
+    headers.forEach((h, i) => obj[h] = r[i]);
+    try { obj.items = JSON.parse(obj.Productos_JSON || '[]'); } catch(e) { obj.items = []; }
+    return obj;
+  });
+  return { orders, count: orders.length };
+}
+
+// ══════════════════════════════════════════════
+// AUDIT LOG
+// ══════════════════════════════════════════════
+
+function writeAudit(body) {
+  writeAuditInternal(body.app || '', body.action_name || body.action_detail || '', body.user_device || '', body.details || '');
+  return { ok: true };
+}
+
+function writeAuditInternal(app, actionName, userDevice, details) {
+  try {
+    const sheet = getOrCreateTab(AUDIT_TAB, AUDIT_HEADERS);
+    sheet.appendRow([new Date().toISOString(), app, actionName, userDevice, details]);
+    // Trim to 5,000 rows
+    const rows = sheet.getLastRow();
+    if (rows > 5001) sheet.deleteRows(2, rows - 5001);
+  } catch(e) { /* silent */ }
+}
+
+// ══════════════════════════════════════════════
+// SYNC BATCH — process multiple queued operations at once
+// ══════════════════════════════════════════════
+
+function processSyncBatch(body) {
+  const ops = body.operations || [];
+  if (!ops.length) return { ok: true, results: [], message: 'No operations' };
+
+  const results = [];
+  for (const op of ops) {
+    try {
+      let result;
+      switch (op.action) {
+        case 'create':         result = createFactura(op); break;
+        case 'update_status':  result = updateStatus(op); break;
+        case 'update_date':    result = updateDate(op); break;
+        case 'update_factura': result = updateFactura(op); break;
+        case 'log_inventory':  result = logInventoryCounts(op); break;
+        case 'save_order':     result = saveOrder(op); break;
+        case 'update_order':   result = updateOrder(op); break;
+        case 'audit':          result = writeAudit(op); break;
+        default: result = { ok: false, error: 'Unknown action: ' + op.action };
+      }
+      results.push({ queue_id: op.queue_id || null, ok: true, result });
+    } catch(err) {
+      results.push({ queue_id: op.queue_id || null, ok: false, error: err.message });
+    }
+  }
+
+  log('SYNC_BATCH', results.length + ' ops processed, ' + results.filter(r => r.ok).length + ' ok');
+  return { ok: true, results, processed: results.length };
 }
 
 // ══════════════════════════════════════════════

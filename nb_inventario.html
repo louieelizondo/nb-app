@@ -636,6 +636,29 @@ function markDone(encodedKey) {
   saveState();
   renderSections();
   toast('✓ Sección completada');
+  // Push inventory counts for this section to Sheet
+  pushSectionCountsToSheet(key);
+}
+
+function pushSectionCountsToSheet(sectionKey) {
+  const url = getScriptUrl();
+  if (!url) return;
+  const [cat, loc] = [sectionKey.split('|')[0], sectionKey.split('|').slice(1).join('|')];
+  const items = [];
+  PRODUCTS.forEach((p, i) => {
+    if (p.c === cat && p.l === loc && p.active !== false) {
+      const qty = counts[i] !== undefined ? counts[i] : p.inv;
+      items.push({ producto: p.n, cantidad: qty, seccion: loc, categoria: cat });
+    }
+  });
+  if (items.length === 0) return;
+  fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain' },
+    body: JSON.stringify({ action: 'log_inventory', items, quien: 'App', device: navigator.userAgent.includes('Mobile') ? 'mobile' : 'desktop' })
+  }).then(r => r.json()).then(d => {
+    if (d.ok) console.log('📊 ' + items.length + ' counts logged to Sheet');
+  }).catch(e => console.log('Count push error:', e));
 }
 
 function resetSection(encodedKey) {
@@ -1286,17 +1309,20 @@ function placeOrder(supplier) {
   const selected = getNeedsOrder().filter(p => (p.s || 'Sin tienda') === supplier && !pedirExcluded[p.idx]);
   if (selected.length === 0) { toast('Selecciona al menos un producto'); return; }
 
-  orders.push({
+  const newOrder = {
     id: 'ORD' + Date.now(),
     supplier,
     items: selected.map(p => ({ name: p.n, qty: p.needed, unit: p.u || '' })),
     mode: pedirModeOverrides[supplier] || 'Pedido domicilio',
     status: 'ordered',
     ordered_at: new Date().toISOString()
-  });
+  };
+  orders.push(newOrder);
   saveOrders();
   renderPedir();
   toast(`📦 Pedido a ${supplier} registrado`);
+  // Sync order to Sheet
+  pushOrderToSheet(newOrder);
 }
 
 function copySupplierList(supplier) {
@@ -1426,6 +1452,8 @@ async function confirmReceive() {
   closeReceiveModal();
   renderRecibir();
   toast(`✅ ${order.supplier} recibido por ${receiver}`);
+  // Sync receive to Sheet
+  pushOrderUpdateToSheet(order.id, receiver, order.received_at, order.notes);
 }
 
 function loadImage(file) {
@@ -1550,9 +1578,9 @@ function toggleProductActive(idx) {
   const p = PRODUCTS[idx];
   if (url && p.id) {
     fetch(url, { method:'POST', headers:{'Content-Type':'text/plain'},
-      body: JSON.stringify({ action:'toggle_product', id: p.id, active: p.active !== false }),
-      mode:'no-cors'
-    }).catch(e => console.log('Toggle push error:', e));
+      body: JSON.stringify({ action:'toggle_product', id: p.id, active: p.active !== false })
+    }).then(r => r.json()).then(d => { if(d.ok) console.log('🔀 Toggle synced:', p.id); })
+      .catch(e => console.log('Toggle push error:', e));
   }
   toast(PRODUCTS[idx].active !== false ? '✅ Activado' : '⬜ Desactivado');
 }
@@ -1632,24 +1660,51 @@ function getScriptUrl() {
   return localStorage.getItem('nb_script_url') || '';
 }
 
+// ── Order sync to Sheet ──
+function pushOrderToSheet(order) {
+  const url = getScriptUrl();
+  if (!url) return;
+  fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain' },
+    body: JSON.stringify({ action: 'save_order', order: { id: order.id, supplier: order.supplier, items: order.items, mode: order.mode, status: order.status, ordered_at: order.ordered_at } })
+  }).then(r => r.json()).then(d => {
+    if (d.ok) console.log('📦 Order synced:', order.id);
+  }).catch(e => console.log('Order push error:', e));
+}
+
+function pushOrderUpdateToSheet(id, receiver, receivedAt, notes) {
+  const url = getScriptUrl();
+  if (!url) return;
+  fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain' },
+    body: JSON.stringify({ action: 'update_order', id, status: 'received', received_by: receiver, received_at: receivedAt, notes: notes || '' })
+  }).then(r => r.json()).then(d => {
+    if (d.ok) console.log('✅ Order receive synced:', id);
+  }).catch(e => console.log('Order update error:', e));
+}
+
 async function pushProductToSheet(p, isUpdate) {
   const url = getScriptUrl();
   if (!url) return;
   try {
     if (isUpdate && p.id) {
-      await fetch(url, { method:'POST', headers:{'Content-Type':'text/plain'},
+      const resp = await fetch(url, { method:'POST', headers:{'Content-Type':'text/plain'},
         body: JSON.stringify({ action:'update_product', id: p.id, fields: {
           Producto: p.n, Categoria: p.c, Ubicacion: p.l, Tienda: p.s, Unidad: p.u,
           Forma_Pedido: p.f, Inventario_Min: p.inv, Inventario_Max: p.max,
           Temporada: p.temporada||'Siempre', Tags: p.tags||'', Grupo: p.grupo||'', Presentacion: p.presentacion||''
-        }}), mode:'no-cors' });
+        }}) });
+      const d = await resp.json(); if(d.ok) console.log('✏️ Product updated:', p.id);
     } else {
-      await fetch(url, { method:'POST', headers:{'Content-Type':'text/plain'},
+      const resp2 = await fetch(url, { method:'POST', headers:{'Content-Type':'text/plain'},
         body: JSON.stringify({ action:'add_product', product: {
           ID: p.id, Producto: p.n, Categoria: p.c, Ubicacion: p.l, Tienda: p.s, Unidad: p.u,
           Forma_Pedido: p.f, Inventario_Min: p.inv, Inventario_Max: p.max, Activo: true,
           Temporada: p.temporada||'Siempre', Tags: p.tags||'', Grupo: p.grupo||'', Presentacion: p.presentacion||''
-        }}), mode:'no-cors' });
+        }}) });
+      const d2 = await resp2.json(); if(d2.ok) console.log('➕ Product added:', p.id);
     }
   } catch(e) { console.log('Product push error:', e); }
 }
@@ -1668,7 +1723,7 @@ async function seedProductsToSheet() {
           ID: p.id, Producto: p.n, Categoria: p.c, Ubicacion: p.l, Tienda: p.s, Unidad: p.u,
           Forma_Pedido: p.f, Inventario_Min: p.inv, Inventario_Max: p.max, Activo: p.active !== false,
           Temporada: p.temporada||'Siempre', Tags: p.tags||'', Grupo: p.grupo||'', Presentacion: p.presentacion||''
-        }}), mode:'no-cors' });
+        }}) });
       sent++;
     } catch(e) { console.log('Seed error:', e); }
   }
@@ -1763,10 +1818,37 @@ function showView(viewId) {
   document.getElementById('summaryBar').style.display = (viewId === 'viewSections') ? 'block' : 'none';
 }
 
+// ── localStorage Size Management ──
+function checkStorageSize() {
+  let totalSize = 0;
+  for (let i = 0; i < localStorage.length; i++) {
+    const k = localStorage.key(i);
+    totalSize += (k.length + (localStorage.getItem(k) || '').length) * 2;
+  }
+  const mb = (totalSize / 1024 / 1024).toFixed(2);
+  if (totalSize > 4 * 1024 * 1024) {
+    console.warn(`⚠️ localStorage at ${mb}MB — nearing limit!`);
+    toast(`⚠️ Almacenamiento local al ${mb}MB`);
+  } else {
+    console.log(`💾 localStorage: ${mb}MB`);
+  }
+  // Prune old orders (older than 6 months)
+  try {
+    const orders = JSON.parse(localStorage.getItem('nb_orders') || '[]');
+    const cutoff = new Date(); cutoff.setMonth(cutoff.getMonth() - 6);
+    const pruned = orders.filter(o => new Date(o.ordered_at || o.created_at || 0) > cutoff);
+    if (pruned.length < orders.length) {
+      localStorage.setItem('nb_orders', JSON.stringify(pruned));
+      console.log(`🧹 Orders pruned: ${orders.length} → ${pruned.length}`);
+    }
+  } catch(e) {}
+}
+
 // Initialize the app
 loadOrders();
 loadProductsFromCache(); // Load cached products (overrides hardcoded if available)
 init();
+checkStorageSize();
 // Try refreshing from Sheet in background (non-blocking)
 loadProductsFromSheet().then(loaded => {
   if (loaded) { console.log('Products refreshed from Sheet'); renderRoutes(); }

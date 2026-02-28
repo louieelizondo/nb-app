@@ -24,6 +24,19 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; b
 .month-rotator .mr-today { font-size:12px; font-weight:600; color:#2e6b2e; cursor:pointer; padding:4px 12px; border-radius:8px; border:1.5px solid #2e6b2e; background:white; transition:all .15s; }
 .month-rotator .mr-today:hover { background:#e8f5e9; }
 
+/* SYNC STATUS INDICATOR */
+.sync-indicator { display:flex; align-items:center; gap:6px; font-size:11px; font-weight:600; padding:4px 10px; border-radius:8px; margin-left:8px; white-space:nowrap; }
+.sync-indicator .dot { width:8px; height:8px; border-radius:50%; flex-shrink:0; }
+.sync-indicator.synced .dot { background:#4caf50; }
+.sync-indicator.synced { color:#2e7d32; background:rgba(76,175,80,.1); }
+.sync-indicator.pending .dot { background:#ff9800; animation:pulse-dot 1.5s infinite; }
+.sync-indicator.pending { color:#e65100; background:rgba(255,152,0,.1); }
+.sync-indicator.offline .dot { background:#f44336; }
+.sync-indicator.offline { color:#c62828; background:rgba(244,67,54,.1); }
+.sync-indicator.error .dot { background:#f44336; }
+.sync-indicator.error { color:#c62828; background:rgba(244,67,54,.1); }
+@keyframes pulse-dot { 0%,100%{opacity:1} 50%{opacity:.3} }
+
 /* SUMMARY CARDS */
 .summary-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 22px; }
 .summary-card { background: white; border-radius: 16px; padding: 20px 22px; box-shadow: 0 2px 12px rgba(0,0,0,.05); border-left: 4px solid #ddd; transition: transform .15s, box-shadow .15s; }
@@ -245,6 +258,7 @@ tbody tr.editing { background:#fffde7 !important; }
     <button class="btn btn-brown" onclick="saveScriptUrl()">Guardar</button>
     <button class="btn btn-pay" onclick="syncFromSheet()" id="syncBtn">🔄 Sincronizar</button>
     <span id="syncStatus" style="font-size:12px;color:#999">Sin conexión — usando datos locales</span>
+    <span class="sync-indicator synced" id="syncIndicator"><span class="dot"></span><span id="syncIndicatorText">Synced</span></span>
   </div>
 
   <div class="month-rotator">
@@ -361,6 +375,95 @@ let currentStatusFilter = 'all';
 let editingId = null;
 let selectedIds = new Set();
 const LS_KEY = 'nb_gastos';
+const SYNC_QUEUE_KEY = 'nb_sync_queue';
+const LS_SIZE_WARN = 4 * 1024 * 1024; // 4MB warning threshold
+
+// ══════════════════════════════════════════════
+// SYNC QUEUE — replaces fire-and-forget no-cors
+// ══════════════════════════════════════════════
+let syncQueue = [];
+let syncRetryTimer = null;
+const SYNC_RETRY_MS = 30000; // retry every 30s
+
+function loadSyncQueue(){
+  try { syncQueue = JSON.parse(localStorage.getItem(SYNC_QUEUE_KEY) || '[]'); } catch(e){ syncQueue = []; }
+}
+function saveSyncQueue(){
+  localStorage.setItem(SYNC_QUEUE_KEY, JSON.stringify(syncQueue));
+  updateSyncIndicator();
+}
+
+function enqueueSync(payload){
+  payload.queue_id = 'Q' + Date.now() + '_' + Math.random().toString(36).slice(2,6);
+  payload.queued_at = new Date().toISOString();
+  syncQueue.push(payload);
+  saveSyncQueue();
+  processSyncQueue(); // try immediately
+}
+
+async function processSyncQueue(){
+  const url = getScriptUrl();
+  if(!url || syncQueue.length === 0) { updateSyncIndicator(); return; }
+
+  // Take up to 10 items for a batch
+  const batch = syncQueue.slice(0, 10);
+  try {
+    const resp = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({ action: 'sync_batch', operations: batch })
+    });
+    const data = await resp.json();
+    if(data.ok && data.results){
+      // Remove successfully processed items
+      const doneIds = new Set(data.results.filter(r => r.ok).map(r => r.queue_id));
+      syncQueue = syncQueue.filter(item => !doneIds.has(item.queue_id));
+      // Items that failed stay in queue for retry
+      const failed = data.results.filter(r => !r.ok);
+      if(failed.length > 0) console.warn('Sync failures:', failed);
+    }
+    saveSyncQueue();
+    // If more items remain, process next batch
+    if(syncQueue.length > 0) setTimeout(processSyncQueue, 1000);
+  } catch(e){
+    console.log('Sync queue offline, will retry:', e.message);
+    updateSyncIndicator();
+    scheduleSyncRetry();
+  }
+}
+
+function scheduleSyncRetry(){
+  if(syncRetryTimer) return;
+  syncRetryTimer = setTimeout(() => {
+    syncRetryTimer = null;
+    processSyncQueue();
+  }, SYNC_RETRY_MS);
+}
+
+function updateSyncIndicator(){
+  const el = document.getElementById('syncIndicator');
+  const txt = document.getElementById('syncIndicatorText');
+  if(!el) return;
+  const url = getScriptUrl();
+  if(!url){
+    el.className = 'sync-indicator offline';
+    txt.textContent = 'Sin conexión';
+  } else if(syncQueue.length > 0){
+    el.className = 'sync-indicator pending';
+    txt.textContent = syncQueue.length + ' pendiente' + (syncQueue.length > 1 ? 's' : '');
+  } else {
+    el.className = 'sync-indicator synced';
+    txt.textContent = 'Sincronizado';
+  }
+}
+
+// ── localStorage size check ──
+function checkStorageSize(){
+  let total = 0;
+  for(let k in localStorage){ if(localStorage.hasOwnProperty(k)) total += (localStorage[k]||'').length * 2; }
+  if(total > LS_SIZE_WARN) console.warn('⚠️ localStorage usage: ' + (total/1024/1024).toFixed(1) + 'MB');
+  return total;
+}
 
 // ── Month rotator state ──
 let summaryMonth = new Date().getMonth();   // 0-based
@@ -1011,50 +1114,26 @@ async function syncFromSheet(){
   btn.innerHTML = '🔄 Sincronizar'; btn.disabled = false;
 }
 
-// Push status update to Sheet
+// ── Push functions (now use sync queue instead of fire-and-forget no-cors) ──
 async function pushStatusToSheet(id, estado, fechaPagoReal, comprobante, pdfBase64, proveedor){
-  const url = getScriptUrl();
-  if(!url) return;
-  try {
-    const payload = { action: 'update_status', id, estado, fecha_pago_real: fechaPagoReal||'', comprobante: comprobante||'' };
-    if(pdfBase64){
-      payload.pdf_base64 = pdfBase64;
-      payload.proveedor = proveedor || '';
-    }
-    await fetch(url, {
-      method: 'POST',
-      headers: {'Content-Type':'text/plain'},
-      body: JSON.stringify(payload),
-      mode: 'no-cors'
-    });
-    if(pdfBase64) showToast('📎 PDF subido a Drive');
-  } catch(e){ console.log('Push error:', e); }
+  if(!getScriptUrl()) return;
+  const payload = { action: 'update_status', id, estado, fecha_pago_real: fechaPagoReal||'', comprobante: comprobante||'' };
+  if(pdfBase64){
+    payload.pdf_base64 = pdfBase64;
+    payload.proveedor = proveedor || '';
+  }
+  enqueueSync(payload);
+  if(pdfBase64) showToast('📎 PDF en cola de sincronización');
 }
 
 async function pushFacturaToSheet(id, fields){
-  const url = getScriptUrl();
-  if(!url) return;
-  try {
-    await fetch(url, {
-      method: 'POST',
-      headers: {'Content-Type':'text/plain'},
-      body: JSON.stringify({ action: 'update_factura', id, ...fields }),
-      mode: 'no-cors'
-    });
-  } catch(e){ console.log('Push factura error:', e); }
+  if(!getScriptUrl()) return;
+  enqueueSync({ action: 'update_factura', id, ...fields });
 }
 
 async function pushDateToSheet(id, fechaPago, estado){
-  const url = getScriptUrl();
-  if(!url) return;
-  try {
-    await fetch(url, {
-      method: 'POST',
-      headers: {'Content-Type':'text/plain'},
-      body: JSON.stringify({ action: 'update_date', id, fecha_pago: fechaPago, estado }),
-      mode: 'no-cors'
-    });
-  } catch(e){ console.log('Push error:', e); }
+  if(!getScriptUrl()) return;
+  enqueueSync({ action: 'update_date', id, fecha_pago: fechaPago, estado });
 }
 
 // ── Init ──
@@ -1068,10 +1147,17 @@ window.addEventListener('load', () => {
     document.getElementById('syncStatus').textContent = '✅ Conectado';
   }
   loadGastos();
+  loadSyncQueue();
   buildYearFilter();
   updateMonthLabel();
   applyFilters();
-  if(sUrl) setTimeout(() => syncFromSheet(), 500);
+  updateSyncIndicator();
+  checkStorageSize();
+  if(sUrl){
+    // Process any pending queue items first, then sync from sheet
+    setTimeout(() => { processSyncQueue(); }, 300);
+    setTimeout(() => syncFromSheet(), 800);
+  }
 });
 
 document.addEventListener('click', e => {

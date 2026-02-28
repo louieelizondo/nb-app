@@ -1507,9 +1507,28 @@ REGLAS CRÍTICAS para precios:
 Responde ÚNICAMENTE con JSON válido (sin texto antes ni después, sin markdown):
 {"proveedor":"nombre del proveedor","numero_factura":"folio o null","tipo_documento":"Factura/Remisión/Ticket/Recibo","fecha":"YYYY-MM-DD","total":número,"moneda":"MXN","items":[{"descripcion":"nombre exacto del producto","cantidad":número,"unidad":"unidad como viene en factura","precio_unitario":número,"precio_total":número,"precio_base":número,"unidad_base":"L/KG/PZA"}]}`;
   try{
-    const resp=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'x-api-key':key,'anthropic-version':'2023-06-01','content-type':'application/json','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:4096,messages:[{role:'user',content:[{type:'image',source:{type:'base64',media_type:'image/jpeg',data:currentBase64}},{type:'text',text:prompt}]}]})});
-    if(!resp.ok){const e=await resp.json();throw new Error(e.error?.message||resp.statusText);}
-    const data=await resp.json(), raw=data.content[0].text.trim();
+    let data = null;
+    const apiBody = JSON.stringify({model:'claude-sonnet-4-6',max_tokens:4096,messages:[{role:'user',content:[{type:'image',source:{type:'base64',media_type:'image/jpeg',data:currentBase64}},{type:'text',text:prompt}]}]});
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        const resp = await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'x-api-key':key,'anthropic-version':'2023-06-01','content-type':'application/json','anthropic-dangerous-direct-browser-access':'true'},body:apiBody});
+        if (resp.status === 429 || resp.status === 529 || resp.status >= 500) {
+          const wait = attempt * 3000;
+          btn.innerHTML = `⏳ Reintentando (${attempt}/3)...`;
+          await new Promise(r => setTimeout(r, wait));
+          continue;
+        }
+        if(!resp.ok){const e=await resp.json();throw new Error(e.error?.message||resp.statusText);}
+        data = await resp.json();
+        break;
+      } catch(retryErr) {
+        if (attempt === 3) throw retryErr;
+        btn.innerHTML = `⏳ Reintentando (${attempt}/3)...`;
+        await new Promise(r => setTimeout(r, attempt * 2000));
+      }
+    }
+    if (!data) throw new Error('No se pudo conectar después de 3 intentos');
+    const raw=data.content[0].text.trim();
     let parsed; try{const mx=raw.match(/```(?:json)?\n?([\s\S]*?)```/)||raw.match(/([\s\S]*)/);parsed=JSON.parse(mx?mx[1]:raw);}catch{throw new Error('Respuesta no válida.');}
     renderResults(parsed);
   }catch(e){showToast('❌ '+e.message,5000);}
@@ -1570,8 +1589,13 @@ function renderResults(parsed){
 // HISTORY + CSV
 // ══════════════════════════════════════════════
 function saveHistory(){
-  const h=JSON.parse(localStorage.getItem('nb_price_history')||'[]'),d=new Date().toISOString().slice(0,10);
+  let h=JSON.parse(localStorage.getItem('nb_price_history')||'[]');
+  const d=new Date().toISOString().slice(0,10);
   currentItems.forEach(it=>{if(!it._match||!it.precio_unitario)return;h.push({date:d,invoice_desc:it.descripcion,bd_name:it._match.n,price:it.precio_unitario,unit:it.unidad||'',provider:it._match.p||''});});
+  // Prune entries older than 90 days
+  const cutoff=new Date(); cutoff.setDate(cutoff.getDate()-90);
+  const cutStr=cutoff.toISOString().slice(0,10);
+  h=h.filter(r=>r.date>=cutStr);
   localStorage.setItem('nb_price_history',JSON.stringify(h)); renderHistory(); showToast('💾 Historial guardado');
 }
 function clearHistory(){if(!confirm('¿Borrar historial?'))return;localStorage.removeItem('nb_price_history');renderHistory();showToast('🗑️ Eliminado');}
@@ -1863,26 +1887,98 @@ function enviarGasto(){
   gastos.push(gasto);
   localStorage.setItem('nb_gastos', JSON.stringify(gastos));
 
-  // Also POST to Apps Script if configured
+  // Also POST to Apps Script if configured (with retry)
   const scriptUrl = getScriptUrl();
   if(scriptUrl){
-    // Send WITH foto — Apps Script saves it to Google Drive
     const payload = {...gasto, action: 'create'};
-    fetch(scriptUrl, {
-      method: 'POST',
-      headers: {'Content-Type':'text/plain'}, // Apps Script needs text/plain for CORS
-      body: JSON.stringify(payload),
-      mode: 'no-cors'
-    }).then(() => {
-      showToast(`✅ Registrado + enviado al Sheet · $${finalTotal.toFixed(2)} · ${forma}`, 4000);
-    }).catch(err => {
-      showToast(`⚠️ Guardado local pero error al enviar: ${err.message}`, 5000);
+    pushToSheetWithRetry(scriptUrl, payload, 3).then(ok => {
+      if(ok) showToast(`✅ Registrado + enviado al Sheet · $${finalTotal.toFixed(2)} · ${forma}`, 4000);
+      else showToast(`⚠️ Guardado local, Sheet pendiente (reintentará)`, 5000);
     });
   } else {
     showToast(`✅ Registrado · $${finalTotal.toFixed(2)} · ${forma} · Pago: ${fechaPago}`, 4000);
   }
   document.getElementById('gastoForma').value = '';
   document.getElementById('gastosPanel').style.display='none';
+}
+
+// ══════════════════════════════════════════════
+// RETRY + STORAGE MANAGEMENT
+// ══════════════════════════════════════════════
+async function pushToSheetWithRetry(url, payload, maxRetries) {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      const resp = await fetch(url, {
+        method: 'POST', headers: {'Content-Type':'text/plain'},
+        body: JSON.stringify(payload)
+      });
+      const data = await resp.json();
+      if (data.ok) return true;
+      console.log(`Sheet push attempt ${attempt} failed:`, data.error);
+    } catch(e) {
+      console.log(`Sheet push attempt ${attempt} error:`, e.message);
+    }
+    if (attempt < maxRetries) await new Promise(r => setTimeout(r, 2000 * attempt));
+  }
+  // Save to retry queue for later
+  const q = JSON.parse(localStorage.getItem('nb_captura_retry_queue') || '[]');
+  q.push({ payload, timestamp: Date.now() });
+  localStorage.setItem('nb_captura_retry_queue', JSON.stringify(q));
+  return false;
+}
+
+function processRetryQueue() {
+  const url = getScriptUrl();
+  if (!url) return;
+  const q = JSON.parse(localStorage.getItem('nb_captura_retry_queue') || '[]');
+  if (!q.length) return;
+  console.log(`🔄 Processing ${q.length} queued items...`);
+  const remaining = [];
+  (async () => {
+    for (const item of q) {
+      // Skip items older than 7 days
+      if (Date.now() - item.timestamp > 7 * 24 * 60 * 60 * 1000) continue;
+      try {
+        const resp = await fetch(url, {
+          method: 'POST', headers: {'Content-Type':'text/plain'},
+          body: JSON.stringify(item.payload)
+        });
+        const data = await resp.json();
+        if (!data.ok) remaining.push(item);
+        else console.log('✅ Retry succeeded for:', item.payload.id);
+      } catch(e) { remaining.push(item); }
+    }
+    localStorage.setItem('nb_captura_retry_queue', JSON.stringify(remaining));
+    if (remaining.length) console.log(`⚠️ ${remaining.length} items still queued`);
+  })();
+}
+
+function pruneLocalStorage() {
+  // Prune price history: keep only last 90 days
+  try {
+    const h = JSON.parse(localStorage.getItem('nb_price_history') || '[]');
+    const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - 90);
+    const cutStr = cutoff.toISOString().slice(0, 10);
+    const pruned = h.filter(r => r.date >= cutStr);
+    if (pruned.length < h.length) {
+      localStorage.setItem('nb_price_history', JSON.stringify(pruned));
+      console.log(`🧹 Price history pruned: ${h.length} → ${pruned.length} (removed ${h.length - pruned.length} entries older than 90 days)`);
+    }
+  } catch(e) { console.log('Prune error:', e); }
+
+  // Check total localStorage size
+  let totalSize = 0;
+  for (let i = 0; i < localStorage.length; i++) {
+    const k = localStorage.key(i);
+    totalSize += (k.length + (localStorage.getItem(k) || '').length) * 2; // UTF-16
+  }
+  const mb = (totalSize / 1024 / 1024).toFixed(2);
+  if (totalSize > 4 * 1024 * 1024) {
+    console.warn(`⚠️ localStorage at ${mb}MB — nearing limit!`);
+    showToast(`⚠️ Almacenamiento al ${mb}MB — considera limpiar historial`, 5000);
+  } else {
+    console.log(`💾 localStorage: ${mb}MB`);
+  }
 }
 
 // ══════════════════════════════════════════════
@@ -1895,6 +1991,8 @@ window.addEventListener('load',()=>{
   if(sUrl){document.getElementById('scriptUrlBar').classList.add('ok');document.getElementById('scriptUrlStatus').textContent='✅ Conectado';}
   loadCachedIngredients(); // also calls buildSuppliersFromDB inside
   renderMappings(); renderHistory();
+  pruneLocalStorage();
+  processRetryQueue();
 });
 </script>
 </body>
