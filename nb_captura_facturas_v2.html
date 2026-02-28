@@ -1821,7 +1821,7 @@ function enviarGasto(){
     d.setDate(d.getDate() + creditDays);
     fechaPago = d.toISOString().slice(0,10);
   }
-  // Create thumbnail of invoice photo (compressed, max 300px wide)
+  // Create thumbnail of invoice photo (compressed, max 800px wide)
   let fotoThumb = '';
   if(currentBase64){
     try {
@@ -1831,11 +1831,11 @@ function enviarGasto(){
       // Sync thumbnail via small canvas
       const tmpImg = document.getElementById('previewImg');
       if(tmpImg && tmpImg.naturalWidth){
-        const scale = Math.min(300 / tmpImg.naturalWidth, 1);
+        const scale = Math.min(800 / tmpImg.naturalWidth, 1);
         canvas.width = Math.round(tmpImg.naturalWidth * scale);
         canvas.height = Math.round(tmpImg.naturalHeight * scale);
         canvas.getContext('2d').drawImage(tmpImg, 0, 0, canvas.width, canvas.height);
-        fotoThumb = canvas.toDataURL('image/jpeg', 0.5).split(',')[1]; // base64 only
+        fotoThumb = canvas.toDataURL('image/jpeg', 0.75).split(',')[1]; // base64 only
       }
     } catch(ex) { console.log('Thumb error:', ex); }
   }
@@ -1851,7 +1851,7 @@ function enviarGasto(){
     monto_pagar  : finalTotal,
     forma_pago   : forma,
     categoria    : categoria,
-    estado       : 'Pendiente',
+    estado       : forma.toLowerCase().includes('transferencia') ? 'Pendiente' : 'Pagado',
     fecha_pago   : fechaPago,
     credit_days  : creditDays,
     comprobante  : '',

@@ -225,6 +225,7 @@ tbody tr.selected { background: #e3f2fd !important; outline: 2px solid #1565c0; 
       <button class="chip" onclick="setStatusFilter('Pendiente',this)">Pendientes</button>
       <button class="chip" onclick="setStatusFilter('Pagado',this)">Pagados</button>
       <button class="chip chip-vencido" onclick="setStatusFilter('Vencido',this)">Vencidos</button>
+      <button class="chip" onclick="setStatusFilter('sin_fecha',this)" style="border-color:#e65100;color:#e65100">📅 Sin fecha</button>
     </div>
     <select id="formaFilter" onchange="applyFilters()" style="min-width:140px">
       <option value="">Todas las formas</option>
@@ -279,6 +280,9 @@ tbody tr.selected { background: #e3f2fd !important; outline: 2px solid #1565c0; 
     <input type="date" id="payDate">
     <label>Comprobante (referencia o nota)</label>
     <input type="text" id="payRef" placeholder="Ej: SPEI #48291 Bancomer">
+    <label style="margin-top:8px">📎 Adjuntar PDF de comprobante</label>
+    <input type="file" id="payPdf" accept=".pdf,application/pdf" style="font-size:13px;padding:6px 0">
+    <div id="pdfUploadStatus" style="font-size:11px;color:#999;margin-top:2px"></div>
     <div class="modal-actions">
       <button class="btn btn-undo" onclick="closePayModal()">Cancelar</button>
       <button class="btn btn-pay" onclick="confirmPay()">Confirmar pago</button>
@@ -439,7 +443,13 @@ function applyFilters(){
   const year   = document.getElementById('yearFilter').value;
   const search = (document.getElementById('searchInput').value || '').toLowerCase().trim();
   filteredGastos = allGastos.filter(g => {
-    if(currentStatusFilter !== 'all' && g.estado !== currentStatusFilter) return false;
+    if(currentStatusFilter === 'sin_fecha'){
+      // Show only Transferencia invoices without a real payment date assigned
+      if(g.estado === 'Pagado') return false;
+      const isTransfer = (g.forma_pago||'').toLowerCase().includes('transferencia');
+      if(!isTransfer) return false;
+      if(g.fecha_pago && g.fecha_pago !== g.fecha_compra) return false; // has a real date
+    } else if(currentStatusFilter !== 'all' && g.estado !== currentStatusFilter) return false;
     if(forma && g.forma_pago !== forma) return false;
     if(year && !(g.fecha_compra||'').startsWith(year) && !(g.fecha_pago||'').startsWith(year)) return false;
     if(search){
@@ -478,9 +488,10 @@ function renderSummary(){
   const pend    = allGastos.filter(g => g.estado === 'Pendiente');
   const vencido = allGastos.filter(g => g.estado === 'Vencido');
   const pagado  = allGastos.filter(g => g.estado === 'Pagado');
+  const sinFecha = allGastos.filter(g => g.estado !== 'Pagado' && (g.forma_pago||'').toLowerCase().includes('transferencia') && (!g.fecha_pago || g.fecha_pago === g.fecha_compra));
   const totalPend = pend.reduce((s,g) => s + (g.monto_pagar||0), 0) + vencido.reduce((s,g) => s + (g.monto_pagar||0), 0);
   const totalPaid = pagado.reduce((s,g) => s + (g.monto_pagar||0), 0);
-  const upcoming = [...pend,...vencido].sort((a,b) => (a.fecha_pago||'').localeCompare(b.fecha_pago||''));
+  const upcoming = [...pend,...vencido].filter(g => g.fecha_pago && g.fecha_pago !== g.fecha_compra).sort((a,b) => (a.fecha_pago||'').localeCompare(b.fecha_pago||''));
   const next = upcoming[0];
   const nextLabel = next
     ? `<strong>${next.proveedor}</strong> &nbsp;·&nbsp; $${(next.monto_pagar||0).toLocaleString('es-MX',{minimumFractionDigits:2})} &nbsp;·&nbsp; ${formatDate(next.fecha_pago)} ${countdownLabel(next.fecha_pago)}`
@@ -502,6 +513,11 @@ function renderSummary(){
       <div class="sc-label">Vencidos</div>
       <div class="sc-value">${vencido.length}</div>
     </div>
+    ${sinFecha.length ? `<div class="summary-card" style="border-left:4px solid #e65100">
+      <div class="sc-icon">📅</div>
+      <div class="sc-label">Sin fecha</div>
+      <div class="sc-value" style="color:#e65100">${sinFecha.length}</div>
+    </div>` : ''}
     <div class="summary-card ok">
       <div class="sc-icon">✅</div>
       <div class="sc-label">Pagados (total)</div>
@@ -547,8 +563,14 @@ function renderTable(){
     const fpIcons = { transferencia:'🏦', tarjeta:'💳', efectivo:'💵', cheque:'📝' };
     const fpKey = Object.keys(fpIcons).find(k => g.forma_pago.toLowerCase().includes(k)) || 'cheque';
 
+    const isTransfer = (g.forma_pago||'').toLowerCase().includes('transferencia');
+    const hasRealDate = g.fecha_pago && g.fecha_pago !== g.fecha_compra;
+    const dateLabel = (!isPaid && isTransfer && !hasRealDate)
+      ? '<span style="color:#e65100;font-style:italic">Sin asignar</span>'
+      : formatDate(g.fecha_pago);
+
     const dateCell = !isPaid
-      ? `<span class="date-link" onclick="openDateModal('${g.id}')" title="Click para cambiar fecha">${formatDate(g.fecha_pago)}</span>${countdownLabel(g.fecha_pago)}`
+      ? `<span class="date-link" onclick="openDateModal('${g.id}')" title="Click para cambiar fecha">${dateLabel}</span>${hasRealDate ? countdownLabel(g.fecha_pago) : ''}`
       : `${formatDate(g.fecha_pago)}`;
 
     // Desktop actions: pay/undo + foto (NO delete button inline — delete is via selection)
@@ -560,7 +582,11 @@ function renderTable(){
       ? ` <button class="btn-foto" onclick="openFoto('${g.id}')">📷</button>`
       : '';
 
-    const compRef = g.comprobante ? `<div style="font-size:10px;color:#2e7d32;margin-top:3px">📎 ${g.comprobante}</div>` : '';
+    const compRef = g.comprobante
+      ? (g.comprobante.startsWith('http')
+        ? `<div style="font-size:10px;margin-top:3px"><a href="${g.comprobante}" target="_blank" style="color:#1565c0;text-decoration:none">📎 Ver comprobante PDF</a></div>`
+        : `<div style="font-size:10px;color:#2e7d32;margin-top:3px">📎 ${g.comprobante}</div>`)
+      : '';
 
     // Mobile card content
     const mobileCard = `<td class="mobile-card" onclick="mobileCardTap(event, '${g.id}')">
@@ -585,8 +611,8 @@ function renderTable(){
           </div>
           <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px">
             <div style="font-size:12px;color:#7a6b5d">
-              ${!isPaid?`<span class="date-link" onclick="event.stopPropagation();openDateModal('${g.id}')">${formatDate(g.fecha_pago)}</span>`:formatDate(g.fecha_pago)}
-              ${countdownLabel(g.fecha_pago)}
+              ${!isPaid?`<span class="date-link" onclick="event.stopPropagation();openDateModal('${g.id}')">${dateLabel}</span>`:formatDate(g.fecha_pago)}
+              ${hasRealDate ? countdownLabel(g.fecha_pago) : ''}
             </div>
             <div style="display:flex;gap:6px">
               ${!isPaid
@@ -640,18 +666,47 @@ function openPayModal(id){
     </div>`;
   document.getElementById('payDate').value = todayStr();
   document.getElementById('payRef').value = '';
+  document.getElementById('payPdf').value = '';
+  document.getElementById('pdfUploadStatus').textContent = '';
   document.getElementById('payModal').classList.add('open');
 }
 function closePayModal(){ document.getElementById('payModal').classList.remove('open'); editingId=null; }
 
-function confirmPay(){
+async function confirmPay(){
   const g = allGastos.find(x => x.id === editingId); if(!g) return;
   g.estado = 'Pagado';
   g.fecha_pago_real = document.getElementById('payDate').value || todayStr();
   g.comprobante = document.getElementById('payRef').value.trim();
+
+  // Check for PDF file
+  const pdfInput = document.getElementById('payPdf');
+  const pdfFile = pdfInput.files[0];
+  let pdfBase64 = '';
+
+  if(pdfFile){
+    document.getElementById('pdfUploadStatus').textContent = '⏳ Subiendo PDF…';
+    try {
+      pdfBase64 = await fileToBase64(pdfFile);
+    } catch(e){
+      document.getElementById('pdfUploadStatus').textContent = '❌ Error leyendo PDF';
+      console.log('PDF read error:', e);
+    }
+  }
+
   saveGastos(); closePayModal(); clearSelection(); applyFilters();
-  pushStatusToSheet(g.id, 'Pagado', g.fecha_pago_real, g.comprobante);
   showToast('Pagado: ' + g.proveedor + ' · $' + (g.monto_pagar||0).toFixed(2));
+
+  // Push to Sheet (and upload PDF if present)
+  await pushStatusToSheet(g.id, 'Pagado', g.fecha_pago_real, g.comprobante, pdfBase64, g.proveedor);
+}
+
+function fileToBase64(file){
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result.split(',')[1]); // strip data:... prefix
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
 }
 
 function undoPay(id){
@@ -772,7 +827,9 @@ async function syncFromSheet(){
       monto_pagar  : parseFloat(g.Monto_Pagar || g.monto_pagar || 0),
       forma_pago   : g.Forma_Pago || g.forma_pago || '',
       categoria    : g.Categoria || g.categoria || '',
-      estado       : g.Estado || g.estado || 'Pendiente',
+      estado       : (g.Forma_Pago||g.forma_pago||'').toLowerCase().includes('transferencia')
+        ? (g.Estado || g.estado || 'Pendiente')  // Transferencia: use stored or default Pendiente
+        : 'Pagado',                               // Everything else: always Pagado, no manual pay step
       fecha_pago   : g.Fecha_Pago || g.fecha_pago || '',
       credit_days  : parseInt(g.Credit_Days || g.credit_days || 0),
       comprobante  : g.Comprobante || g.comprobante || '',
@@ -798,16 +855,22 @@ async function syncFromSheet(){
 }
 
 // Push status update to Sheet
-async function pushStatusToSheet(id, estado, fechaPagoReal, comprobante){
+async function pushStatusToSheet(id, estado, fechaPagoReal, comprobante, pdfBase64, proveedor){
   const url = getScriptUrl();
   if(!url) return;
   try {
+    const payload = { action: 'update_status', id, estado, fecha_pago_real: fechaPagoReal||'', comprobante: comprobante||'' };
+    if(pdfBase64){
+      payload.pdf_base64 = pdfBase64;
+      payload.proveedor = proveedor || '';
+    }
     await fetch(url, {
       method: 'POST',
       headers: {'Content-Type':'text/plain'},
-      body: JSON.stringify({ action: 'update_status', id, estado, fecha_pago_real: fechaPagoReal||'', comprobante: comprobante||'' }),
+      body: JSON.stringify(payload),
       mode: 'no-cors'
     });
+    if(pdfBase64) showToast('📎 PDF subido a Drive');
   } catch(e){ console.log('Push error:', e); }
 }
 
