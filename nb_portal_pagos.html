@@ -549,7 +549,7 @@ function renderSummary(){
   const mm = String(summaryMonth+1).padStart(2,'0');
   const prefix = `${summaryYear}-${mm}`;
   function inMonth(g){
-    const d = g.fecha_pago || g.fecha_compra || '';
+    const d = g.fecha_compra || '';
     return d.startsWith(prefix);
   }
   const monthGastos = allGastos.filter(inMonth);
