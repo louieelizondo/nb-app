@@ -16,6 +16,14 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; b
 .topbar-right { margin-left: auto; font-size: 12px; opacity: .7; text-align: right; }
 .container { max-width: 1200px; margin: 0 auto; padding: 24px 24px 100px; }
 
+/* MONTH ROTATOR */
+.month-rotator { display:flex; align-items:center; justify-content:center; gap:16px; margin-bottom:18px; }
+.month-rotator .mr-btn { background:white; border:2px solid #e0d8cf; border-radius:12px; width:40px; height:40px; display:flex; align-items:center; justify-content:center; cursor:pointer; font-size:18px; color:#7a6b5d; transition:all .15s; font-weight:700; }
+.month-rotator .mr-btn:hover { background:#f5f0eb; border-color:#2e6b2e; color:#2e6b2e; }
+.month-rotator .mr-label { font-size:18px; font-weight:800; color:#2d2319; min-width:200px; text-align:center; text-transform:capitalize; }
+.month-rotator .mr-today { font-size:12px; font-weight:600; color:#2e6b2e; cursor:pointer; padding:4px 12px; border-radius:8px; border:1.5px solid #2e6b2e; background:white; transition:all .15s; }
+.month-rotator .mr-today:hover { background:#e8f5e9; }
+
 /* SUMMARY CARDS */
 .summary-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 22px; }
 .summary-card { background: white; border-radius: 16px; padding: 20px 22px; box-shadow: 0 2px 12px rgba(0,0,0,.05); border-left: 4px solid #ddd; transition: transform .15s, box-shadow .15s; }
@@ -163,6 +171,11 @@ tbody tr.editing { background:#fffde7 !important; }
   .logo { width: 38px; height: 38px; font-size: 14px; }
   .container { padding: 14px 12px 110px; }
 
+  /* Month rotator mobile */
+  .month-rotator { gap:10px; margin-bottom:12px; }
+  .month-rotator .mr-label { font-size:15px; min-width:160px; }
+  .month-rotator .mr-btn { width:34px; height:34px; font-size:15px; }
+
   /* Summary: 2 cols */
   .summary-row { grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px; }
   .summary-card { padding: 14px 16px; border-radius: 12px; }
@@ -234,6 +247,12 @@ tbody tr.editing { background:#fffde7 !important; }
     <span id="syncStatus" style="font-size:12px;color:#999">Sin conexión — usando datos locales</span>
   </div>
 
+  <div class="month-rotator">
+    <button class="mr-btn" onclick="shiftMonth(-1)">◀</button>
+    <span class="mr-label" id="mrLabel"></span>
+    <button class="mr-btn" onclick="shiftMonth(1)">▶</button>
+    <button class="mr-today" onclick="goToday()">Hoy</button>
+  </div>
   <div class="summary-row" id="summaryRow"></div>
 
   <div class="filters">
@@ -342,6 +361,29 @@ let currentStatusFilter = 'all';
 let editingId = null;
 let selectedIds = new Set();
 const LS_KEY = 'nb_gastos';
+
+// ── Month rotator state ──
+let summaryMonth = new Date().getMonth();   // 0-based
+let summaryYear  = new Date().getFullYear();
+const MONTH_NAMES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+
+function updateMonthLabel(){
+  document.getElementById('mrLabel').textContent = `${MONTH_NAMES[summaryMonth]} ${summaryYear}`;
+}
+function shiftMonth(dir){
+  summaryMonth += dir;
+  if(summaryMonth > 11){ summaryMonth = 0; summaryYear++; }
+  if(summaryMonth < 0){ summaryMonth = 11; summaryYear--; }
+  updateMonthLabel();
+  renderSummary();
+}
+function goToday(){
+  const now = new Date();
+  summaryMonth = now.getMonth();
+  summaryYear = now.getFullYear();
+  updateMonthLabel();
+  renderSummary();
+}
 
 // ── Date helpers ──
 function todayStr(){ return new Date().toISOString().slice(0,10); }
@@ -503,13 +545,24 @@ function buildYearFilter(){
 
 // ── Render ──
 function renderSummary(){
-  const pend    = allGastos.filter(g => g.estado === 'Pendiente');
-  const vencido = allGastos.filter(g => g.estado === 'Vencido');
-  const pagado  = allGastos.filter(g => g.estado === 'Pagado');
-  const sinFecha = allGastos.filter(g => g.estado !== 'Pagado' && (g.forma_pago||'').toLowerCase().includes('transferencia') && (!g.fecha_pago || g.fecha_pago === g.fecha_compra));
+  // Filter by selected month — use fecha_pago primarily, fall back to fecha_compra
+  const mm = String(summaryMonth+1).padStart(2,'0');
+  const prefix = `${summaryYear}-${mm}`;
+  function inMonth(g){
+    const d = g.fecha_pago || g.fecha_compra || '';
+    return d.startsWith(prefix);
+  }
+  const monthGastos = allGastos.filter(inMonth);
+
+  const pend    = monthGastos.filter(g => g.estado === 'Pendiente');
+  const vencido = monthGastos.filter(g => g.estado === 'Vencido');
+  const pagado  = monthGastos.filter(g => g.estado === 'Pagado');
+  const sinFecha = monthGastos.filter(g => g.estado !== 'Pagado' && (g.forma_pago||'').toLowerCase().includes('transferencia') && (!g.fecha_pago || g.fecha_pago === g.fecha_compra));
   const totalPend = pend.reduce((s,g) => s + (g.monto_pagar||0), 0) + vencido.reduce((s,g) => s + (g.monto_pagar||0), 0);
   const totalPaid = pagado.reduce((s,g) => s + (g.monto_pagar||0), 0);
-  const upcoming = [...pend,...vencido].filter(g => g.fecha_pago && g.fecha_pago !== g.fecha_compra).sort((a,b) => (a.fecha_pago||'').localeCompare(b.fecha_pago||''));
+  // Próximo pago — global (not filtered by month)
+  const allPendVenc = allGastos.filter(g => g.estado === 'Pendiente' || g.estado === 'Vencido');
+  const upcoming = allPendVenc.filter(g => g.fecha_pago && g.fecha_pago !== g.fecha_compra).sort((a,b) => (a.fecha_pago||'').localeCompare(b.fecha_pago||''));
   const next = upcoming[0];
   const nextLabel = next
     ? `<strong>${next.proveedor}</strong> &nbsp;·&nbsp; $${(next.monto_pagar||0).toLocaleString('es-MX',{minimumFractionDigits:2})} &nbsp;·&nbsp; ${formatDate(next.fecha_pago)} ${countdownLabel(next.fecha_pago)}`
@@ -538,7 +591,7 @@ function renderSummary(){
     </div>` : ''}
     <div class="summary-card ok">
       <div class="sc-icon">✅</div>
-      <div class="sc-label">Pagados (total)</div>
+      <div class="sc-label">Pagados (mes)</div>
       <div class="sc-value">$${totalPaid.toLocaleString('es-MX',{minimumFractionDigits:0})}</div>
     </div>
     <div class="summary-card next">
@@ -1016,6 +1069,7 @@ window.addEventListener('load', () => {
   }
   loadGastos();
   buildYearFilter();
+  updateMonthLabel();
   applyFilters();
   if(sUrl) setTimeout(() => syncFromSheet(), 500);
 });
