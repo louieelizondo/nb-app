@@ -64,6 +64,10 @@ body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif
 .item-name { font-size:14px; font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .item-meta { font-size:11px; color:var(--gray); margin-top:1px; }
 .item-meta .unit-badge { background:var(--blue-bg); color:var(--blue); padding:1px 5px; border-radius:4px; font-size:10px; }
+.item-meta .grupo-badge { background:#f3e5f5; color:#7b1fa2; padding:1px 5px; border-radius:4px; font-size:10px; }
+.item-meta .tag-badge { background:#fff3e0; color:#e65100; padding:1px 5px; border-radius:4px; font-size:10px; }
+.item-meta .season-badge { background:#e8f5e9; color:#2e7d32; padding:1px 5px; border-radius:4px; font-size:10px; }
+.item-meta .pres-badge { background:#e0f2f1; color:#00695c; padding:1px 5px; border-radius:4px; font-size:10px; font-style:italic; }
 
 /* Stepper */
 .stepper { display:flex; align-items:center; gap:0; flex-shrink:0; }
@@ -226,10 +230,92 @@ body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif
   </div>
 </div>
 
+<!-- View 5: Product Management -->
+<div class="view" id="viewProducts">
+  <div style="padding:12px;max-width:500px;margin:0 auto">
+    <div style="display:flex;gap:8px;margin-bottom:12px">
+      <input type="text" id="productSearch" placeholder="Buscar producto..." oninput="renderProductList()" style="flex:1;padding:10px;border:1px solid var(--gray-border);border-radius:8px;font-size:14px">
+      <button onclick="openAddProductModal()" style="background:var(--green);color:white;border:none;padding:10px 16px;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;white-space:nowrap">+ Nuevo</button>
+    </div>
+    <div style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap" id="productFilters">
+      <button class="chip active" onclick="setProductFilter('all',this)" style="font-size:11px;padding:4px 10px;border:1px solid var(--gray-border);border-radius:16px;background:var(--green);color:white;cursor:pointer">Todos</button>
+      <button class="chip" onclick="setProductFilter('active',this)" style="font-size:11px;padding:4px 10px;border:1px solid var(--gray-border);border-radius:16px;background:white;cursor:pointer">Activos</button>
+      <button class="chip" onclick="setProductFilter('inactive',this)" style="font-size:11px;padding:4px 10px;border:1px solid var(--gray-border);border-radius:16px;background:white;cursor:pointer">Inactivos</button>
+    </div>
+    <div id="productListContent"></div>
+    <div style="text-align:center;padding:12px">
+      <button onclick="seedProductsToSheet()" id="seedBtn" style="background:var(--orange);color:white;border:none;padding:10px 20px;border-radius:8px;font-size:13px;cursor:pointer;display:none">⬆️ Subir productos al Sheet</button>
+    </div>
+  </div>
+</div>
+
+<!-- Add/Edit Product Modal -->
+<div class="modal-overlay" id="addProductModal" onclick="if(event.target===this)closeAddProductModal()">
+  <div class="modal" style="max-height:90vh;overflow-y:auto">
+    <h2 id="addProductTitle">➕ Nuevo Producto</h2>
+    <input type="hidden" id="editProductId">
+    <label>Nombre del producto *</label>
+    <input type="text" id="apName" placeholder="Ej: Aderezo mango habanero botella" style="width:100%;padding:10px;border:1px solid var(--gray-border);border-radius:8px;font-size:14px;margin-bottom:8px">
+    <label>Categoría *</label>
+    <select id="apCategoria" style="width:100%;padding:10px;border:1px solid var(--gray-border);border-radius:8px;font-size:14px;margin-bottom:8px">
+      <option value="Insumos / Clubs">Insumos / Clubs</option>
+      <option value="Envases y Limpieza">Envases y Limpieza</option>
+      <option value="Mercado Abastos + Carnes">Mercado Abastos + Carnes</option>
+    </select>
+    <label>Ubicación</label>
+    <select id="apUbicacion" style="width:100%;padding:10px;border:1px solid var(--gray-border);border-radius:8px;font-size:14px;margin-bottom:8px">
+      <option value="Cocina">🍳 Cocina</option>
+      <option value="Almacén">📦 Almacén</option>
+      <option value="Cuarto Frio Materia Prima">🧊 Cuarto Frio MP</option>
+      <option value="Cuarto Frio Ventas">🧊 Cuarto Frio Ventas</option>
+      <option value="Congelador (Himalaya)">❄️ Congelador Himalaya</option>
+      <option value="Congelador (ataúd)">❄️ Congelador ataúd</option>
+      <option value="Producción">🏭 Producción</option>
+      <option value="Tienda">🏪 Tienda</option>
+      <option value="Comedor">🍽️ Comedor</option>
+      <option value="Oficina">🗂️ Oficina</option>
+      <option value="Proveedores">🚚 Proveedores</option>
+      <option value="Granja">🌾 Granja</option>
+      <option value="Casa 1">🏠 Casa 1</option>
+    </select>
+    <div style="display:flex;gap:8px">
+      <div style="flex:1"><label>Tienda/Proveedor</label><input type="text" id="apTienda" placeholder="COSTCO" style="width:100%;padding:10px;border:1px solid var(--gray-border);border-radius:8px;font-size:14px;margin-bottom:8px"></div>
+      <div style="flex:1"><label>Unidad</label><input type="text" id="apUnidad" placeholder="Kg, Piezas, Caja" style="width:100%;padding:10px;border:1px solid var(--gray-border);border-radius:8px;font-size:14px;margin-bottom:8px"></div>
+    </div>
+    <div style="display:flex;gap:8px">
+      <div style="flex:1"><label>Mínimo</label><input type="number" id="apMin" value="0" step="0.5" style="width:100%;padding:10px;border:1px solid var(--gray-border);border-radius:8px;font-size:14px;margin-bottom:8px"></div>
+      <div style="flex:1"><label>Máximo</label><input type="number" id="apMax" value="0" step="0.5" style="width:100%;padding:10px;border:1px solid var(--gray-border);border-radius:8px;font-size:14px;margin-bottom:8px"></div>
+    </div>
+    <label>Forma de pedido</label>
+    <select id="apForma" style="width:100%;padding:10px;border:1px solid var(--gray-border);border-radius:8px;font-size:14px;margin-bottom:8px">
+      <option value="Ir a tienda">🏪 Ir a tienda</option>
+      <option value="Pedido domicilio">📦 Pedido domicilio</option>
+    </select>
+    <label>Temporada</label>
+    <select id="apTemporada" style="width:100%;padding:10px;border:1px solid var(--gray-border);border-radius:8px;font-size:14px;margin-bottom:8px">
+      <option value="Siempre">Siempre</option>
+      <option value="Primavera">Primavera</option>
+      <option value="Verano">Verano</option>
+      <option value="Otoño">Otoño</option>
+      <option value="Invierno">Invierno</option>
+    </select>
+    <label>Tags (separados por coma)</label>
+    <input type="text" id="apTags" placeholder="Navidad, Cuaresma, Nuevo" style="width:100%;padding:10px;border:1px solid var(--gray-border);border-radius:8px;font-size:14px;margin-bottom:8px">
+    <div style="display:flex;gap:8px">
+      <div style="flex:1"><label>Grupo (variantes)</label><input type="text" id="apGrupo" placeholder="aderezo-mango-hab" style="width:100%;padding:10px;border:1px solid var(--gray-border);border-radius:8px;font-size:14px;margin-bottom:8px"></div>
+      <div style="flex:1"><label>Presentación</label><input type="text" id="apPresentacion" placeholder="Galón, Caja 12×397g" style="width:100%;padding:10px;border:1px solid var(--gray-border);border-radius:8px;font-size:14px;margin-bottom:8px"></div>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:8px">
+      <button onclick="closeAddProductModal()" style="flex:1;padding:12px;border:1px solid var(--gray-border);border-radius:8px;font-size:14px;background:white;cursor:pointer">Cancelar</button>
+      <button onclick="saveProduct()" style="flex:1;padding:12px;border:none;border-radius:8px;font-size:14px;background:var(--green);color:white;font-weight:600;cursor:pointer">Guardar</button>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script>
-// ============ PRODUCT DATA ============
+// ============ PRODUCT DATA (legacy — used for seeding) ============
 </script>
 <script id="productData">
 </script>
@@ -297,8 +383,9 @@ function saveState() {
 
 // ============ ROUTES VIEW ============
 function renderRoutes() {
+  const activeProducts = getActiveProducts();
   const cats = {};
-  PRODUCTS.forEach((p, i) => {
+  activeProducts.forEach((p, i) => {
     if (!cats[p.c]) cats[p.c] = { count: 0, locations: new Set() };
     cats[p.c].count++;
     cats[p.c].locations.add(p.l);
@@ -336,6 +423,14 @@ function renderRoutes() {
       </div>
       <div class="count" style="font-size:16px">📋</div>
     </div>
+    <div class="route-card" onclick="showProducts()" style="border:1px dashed var(--gray-border)">
+      <div class="icon" style="background:#fce4ec">⚙️</div>
+      <div class="info">
+        <h3>Productos</h3>
+        <p>Agregar, editar, activar/desactivar</p>
+      </div>
+      <div class="count" style="font-size:14px;color:var(--gray)">${PRODUCTS.filter(p=>p.active!==false).length}</div>
+    </div>
     <div class="route-card cat-recibir" onclick="showRecibir()">
       <div class="icon">📦</div>
       <div class="info">
@@ -364,10 +459,12 @@ function selectCategory(cat) {
 }
 
 function renderSections() {
-  // Group products by location
+  // Group active, in-season products by location
   const locMap = {};
   PRODUCTS.forEach((p, i) => {
     if (p.c !== currentCategory) return;
+    if (p.active === false) return;
+    if (!isProductInSeason(p)) return;
     if (!locMap[p.l]) locMap[p.l] = [];
     locMap[p.l].push({ ...p, idx: i });
   });
@@ -423,6 +520,9 @@ function renderSections() {
                 ${item.s ? '<span>'+item.s+'</span>' : ''}
                 ${item.u ? ' <span class="unit-badge">'+item.u+'</span>' : ''}
                 ${item.max > 0 ? ' <span>Máx: '+item.max+'</span>' : ''}
+                ${item.presentacion ? ' <span class="pres-badge">'+item.presentacion+'</span>' : ''}
+                ${item.grupo ? ' <span class="grupo-badge">🔗 '+getGrupoLabel(item.grupo, item.n)+'</span>' : ''}
+                ${item.tags ? ' '+item.tags.split(',').map(t=>'<span class="tag-badge">'+t.trim()+'</span>').join(' ') : ''}
               </div>
             </div>
             <div class="stepper">
@@ -712,7 +812,7 @@ const PRODUCTS = [
 {n:"Harina El Globo (costal 25kg)",c:"Insumos / Clubs",l:"Producción",s:"ABARROTES INSTITUCIONALES",u:"",f:"Ir a tienda",inv:0,max:0},
 {n:"Frijol Pinto",c:"Insumos / Clubs",l:"Cocina",s:"Empacados Chihuahua",u:"Costal",f:"Ir a tienda",inv:0,max:0},
 {n:"Aderez búfalo (1 gal)",c:"Insumos / Clubs",l:"Tienda",s:"ABARROTES INSTITUCIONALES",u:"",f:"Pedido domicilio",inv:0,max:0},
-{n:"Aderezo mango habanero (1 gal)",c:"Insumos / Clubs",l:"Tienda",s:"ABARROTES INSTITUCIONALES",u:"",f:"Pedido domicilio",inv:0,max:0},
+{n:"Aderezo mango habanero (1 gal)",c:"Insumos / Clubs",l:"Tienda",s:"ABARROTES INSTITUCIONALES",u:"Galón",f:"Pedido domicilio",inv:0,max:0,grupo:"aderezo-mango-hab",presentacion:"Galón (para empaques 2oz)"},
 {n:"Catsup (display)",c:"Insumos / Clubs",l:"Tienda",s:"ABARROTES INSTITUCIONALES",u:"",f:"Pedido domicilio",inv:0,max:0},
 {n:"Condimix 14kg",c:"Insumos / Clubs",l:"Cocina",s:"ABARROTES INSTITUCIONALES",u:"",f:"Pedido domicilio",inv:1,max:0},
 {n:"Empanizador kellogs (8kg)",c:"Insumos / Clubs",l:"Producción",s:"ABARROTES INSTITUCIONALES",u:"",f:"Pedido domicilio",inv:0,max:0},
@@ -859,7 +959,7 @@ const PRODUCTS = [
 {n:"escoba roja",c:"Envases y Limpieza",l:"Almacén",s:"Key Química",u:"",f:"Ir a tienda",inv:0,max:0},
 {n:"Papel toalla",c:"Envases y Limpieza",l:"Sin ubicación",s:"Ricasa limpieza",u:"",f:"Ir a tienda",inv:0,max:0},
 {n:"guantes latex negro chicos",c:"Insumos / Clubs",l:"Almacén",s:"ABARROTES INSTITUCIONALES",u:"",f:"Ir a tienda",inv:0,max:0},
-{n:"Aderezo mango habanero (display caja 12 pzs)",c:"Insumos / Clubs",l:"Cuarto Frio Ventas",s:"ABARROTES INSTITUCIONALES",u:"",f:"Pedido domicilio",inv:0,max:0},
+{n:"Aderezo mango habanero (display caja 12 pzs)",c:"Insumos / Clubs",l:"Cuarto Frio Ventas",s:"ABARROTES INSTITUCIONALES",u:"Caja",f:"Pedido domicilio",inv:0,max:0,grupo:"aderezo-mango-hab",presentacion:"Caja 12×397g botella"},
 {n:"Aderezo bufalo (display caja 12 pzs)",c:"Insumos / Clubs",l:"Cuarto Frio Ventas",s:"ABARROTES INSTITUCIONALES",u:"",f:"Ir a tienda",inv:0,max:0},
 {n:"Espinaca",c:"Insumos / Clubs",l:"Cuarto Frio Materia Prima",s:"SAM'S CLUB",u:"",f:"Ir a tienda",inv:0,max:0},
 {n:"Rollo de magitel",c:"Envases y Limpieza",l:"Producción",s:"Moda Telas",u:"",f:"Ir a tienda",inv:1,max:0},
@@ -1207,6 +1307,289 @@ function timeAgo(iso) {
   return `hace ${days}d`;
 }
 
+// ============ PRODUCT MANAGEMENT ============
+const PRODUCTS_CACHE_KEY = 'nb_inventario_products';
+const PRODUCTS_CACHE_TS = 'nb_inventario_products_ts';
+let productFilter = 'all';
+
+function showProducts() {
+  showView('viewProducts');
+  document.getElementById('headerSub').textContent = 'Gestionar Productos';
+  document.getElementById('backBtn').style.display = 'block';
+  renderProductList();
+  // Show seed button if products haven't been synced to Sheet yet
+  const synced = localStorage.getItem('nb_products_synced');
+  document.getElementById('seedBtn').style.display = synced ? 'none' : 'block';
+}
+
+function setProductFilter(filter, btn) {
+  productFilter = filter;
+  document.querySelectorAll('#productFilters .chip').forEach(c => {
+    c.style.background = 'white'; c.style.color = 'var(--dark)';
+  });
+  btn.style.background = 'var(--green)'; btn.style.color = 'white';
+  renderProductList();
+}
+
+function renderProductList() {
+  const search = (document.getElementById('productSearch').value || '').toLowerCase().trim();
+  let list = PRODUCTS.map((p, i) => ({ ...p, idx: i }));
+
+  if (productFilter === 'active') list = list.filter(p => p.active !== false);
+  if (productFilter === 'inactive') list = list.filter(p => p.active === false);
+  if (search) list = list.filter(p => p.n.toLowerCase().includes(search) || (p.s||'').toLowerCase().includes(search) || (p.tags||'').toLowerCase().includes(search));
+
+  // Group by category
+  const grouped = {};
+  list.forEach(p => {
+    if (!grouped[p.c]) grouped[p.c] = [];
+    grouped[p.c].push(p);
+  });
+
+  let html = `<div style="font-size:12px;color:var(--gray);margin-bottom:8px">${list.length} productos</div>`;
+
+  Object.keys(grouped).sort().forEach(cat => {
+    html += `<div style="font-size:13px;font-weight:600;color:var(--green);padding:8px 0 4px;border-bottom:1px solid var(--gray-border)">${cat} (${grouped[cat].length})</div>`;
+    grouped[cat].forEach(p => {
+      const isActive = p.active !== false;
+      const tags = [
+        p.temporada && p.temporada !== 'Siempre' ? `<span style="background:#e8f5e9;color:#2e7d32;padding:1px 5px;border-radius:4px;font-size:10px">${p.temporada}</span>` : '',
+        p.tags ? p.tags.split(',').map(t => `<span style="background:#e3f2fd;color:#1565c0;padding:1px 5px;border-radius:4px;font-size:10px">${t.trim()}</span>`).join(' ') : '',
+        p.grupo ? `<span style="background:#fce4ec;color:#c62828;padding:1px 5px;border-radius:4px;font-size:10px">🔗 ${p.grupo}</span>` : '',
+        p.presentacion ? `<span style="background:#fff3e0;color:#e65100;padding:1px 5px;border-radius:4px;font-size:10px">${p.presentacion}</span>` : ''
+      ].filter(Boolean).join(' ');
+
+      html += `
+        <div style="display:flex;align-items:center;gap:8px;padding:8px 4px;border-bottom:1px solid #f5f5f5;${!isActive?'opacity:.5':''}">
+          <button onclick="toggleProductActive(${p.idx})" style="background:none;border:none;font-size:20px;cursor:pointer;padding:0;width:28px">${isActive ? '✅' : '⬜'}</button>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${p.n}</div>
+            <div style="font-size:11px;color:var(--gray)">${p.l} · ${p.s||'—'} ${p.u?'· '+p.u:''}</div>
+            ${tags ? `<div style="margin-top:2px;display:flex;gap:3px;flex-wrap:wrap">${tags}</div>` : ''}
+          </div>
+          <button onclick="editProduct(${p.idx})" style="background:none;border:none;font-size:16px;cursor:pointer;padding:4px">✏️</button>
+        </div>`;
+    });
+  });
+
+  document.getElementById('productListContent').innerHTML = html;
+}
+
+function toggleProductActive(idx) {
+  PRODUCTS[idx].active = PRODUCTS[idx].active === false ? true : false;
+  saveProductsToCache();
+  renderProductList();
+  // Push to Sheet if connected
+  const url = getScriptUrl();
+  const p = PRODUCTS[idx];
+  if (url && p.id) {
+    fetch(url, { method:'POST', headers:{'Content-Type':'text/plain'},
+      body: JSON.stringify({ action:'toggle_product', id: p.id, active: p.active !== false }),
+      mode:'no-cors'
+    }).catch(e => console.log('Toggle push error:', e));
+  }
+  toast(PRODUCTS[idx].active !== false ? '✅ Activado' : '⬜ Desactivado');
+}
+
+function openAddProductModal(prefill) {
+  document.getElementById('addProductTitle').textContent = prefill ? '✏️ Editar Producto' : '➕ Nuevo Producto';
+  document.getElementById('editProductId').value = prefill ? (prefill.idx || '') : '';
+  document.getElementById('apName').value = prefill ? prefill.n : '';
+  document.getElementById('apCategoria').value = prefill ? prefill.c : 'Insumos / Clubs';
+  document.getElementById('apUbicacion').value = prefill ? prefill.l : 'Cocina';
+  document.getElementById('apTienda').value = prefill ? (prefill.s||'') : '';
+  document.getElementById('apUnidad').value = prefill ? (prefill.u||'') : '';
+  document.getElementById('apMin').value = prefill ? (prefill.inv||0) : 0;
+  document.getElementById('apMax').value = prefill ? (prefill.max||0) : 0;
+  document.getElementById('apForma').value = prefill ? (prefill.f||'Ir a tienda') : 'Ir a tienda';
+  document.getElementById('apTemporada').value = prefill ? (prefill.temporada||'Siempre') : 'Siempre';
+  document.getElementById('apTags').value = prefill ? (prefill.tags||'') : '';
+  document.getElementById('apGrupo').value = prefill ? (prefill.grupo||'') : '';
+  document.getElementById('apPresentacion').value = prefill ? (prefill.presentacion||'') : '';
+  document.getElementById('addProductModal').classList.add('open');
+}
+function closeAddProductModal() { document.getElementById('addProductModal').classList.remove('open'); }
+
+function editProduct(idx) {
+  openAddProductModal({ ...PRODUCTS[idx], idx });
+}
+
+function saveProduct() {
+  const name = document.getElementById('apName').value.trim();
+  if (!name) { toast('Nombre requerido'); return; }
+
+  const editIdx = document.getElementById('editProductId').value;
+  const productData = {
+    n: name,
+    c: document.getElementById('apCategoria').value,
+    l: document.getElementById('apUbicacion').value,
+    s: document.getElementById('apTienda').value.trim(),
+    u: document.getElementById('apUnidad').value.trim(),
+    inv: parseFloat(document.getElementById('apMin').value) || 0,
+    max: parseFloat(document.getElementById('apMax').value) || 0,
+    f: document.getElementById('apForma').value,
+    temporada: document.getElementById('apTemporada').value,
+    tags: document.getElementById('apTags').value.trim(),
+    grupo: document.getElementById('apGrupo').value.trim(),
+    presentacion: document.getElementById('apPresentacion').value.trim(),
+    active: true
+  };
+
+  if (editIdx !== '') {
+    // Update existing
+    const idx = parseInt(editIdx);
+    const oldId = PRODUCTS[idx].id;
+    Object.assign(PRODUCTS[idx], productData);
+    if (oldId) PRODUCTS[idx].id = oldId;
+    toast('✏️ ' + name + ' actualizado');
+  } else {
+    // Add new
+    productData.id = 'P' + Date.now();
+    PRODUCTS.push(productData);
+    toast('✅ ' + name + ' agregado');
+  }
+
+  saveProductsToCache();
+  closeAddProductModal();
+  renderProductList();
+
+  // Push to Sheet
+  pushProductToSheet(editIdx !== '' ? PRODUCTS[parseInt(editIdx)] : productData, editIdx !== '');
+}
+
+function saveProductsToCache() {
+  localStorage.setItem(PRODUCTS_CACHE_KEY, JSON.stringify(PRODUCTS));
+  localStorage.setItem(PRODUCTS_CACHE_TS, new Date().toISOString());
+}
+
+function getScriptUrl() {
+  return localStorage.getItem('nb_script_url') || '';
+}
+
+async function pushProductToSheet(p, isUpdate) {
+  const url = getScriptUrl();
+  if (!url) return;
+  try {
+    if (isUpdate && p.id) {
+      await fetch(url, { method:'POST', headers:{'Content-Type':'text/plain'},
+        body: JSON.stringify({ action:'update_product', id: p.id, fields: {
+          Producto: p.n, Categoria: p.c, Ubicacion: p.l, Tienda: p.s, Unidad: p.u,
+          Forma_Pedido: p.f, Inventario_Min: p.inv, Inventario_Max: p.max,
+          Temporada: p.temporada||'Siempre', Tags: p.tags||'', Grupo: p.grupo||'', Presentacion: p.presentacion||''
+        }}), mode:'no-cors' });
+    } else {
+      await fetch(url, { method:'POST', headers:{'Content-Type':'text/plain'},
+        body: JSON.stringify({ action:'add_product', product: {
+          ID: p.id, Producto: p.n, Categoria: p.c, Ubicacion: p.l, Tienda: p.s, Unidad: p.u,
+          Forma_Pedido: p.f, Inventario_Min: p.inv, Inventario_Max: p.max, Activo: true,
+          Temporada: p.temporada||'Siempre', Tags: p.tags||'', Grupo: p.grupo||'', Presentacion: p.presentacion||''
+        }}), mode:'no-cors' });
+    }
+  } catch(e) { console.log('Product push error:', e); }
+}
+
+async function seedProductsToSheet() {
+  const url = getScriptUrl();
+  if (!url) { toast('Configura el Script URL primero'); return; }
+  const btn = document.getElementById('seedBtn');
+  btn.textContent = '⏳ Subiendo...'; btn.disabled = true;
+  let sent = 0;
+  for (const p of PRODUCTS) {
+    if (!p.id) p.id = 'P' + Date.now() + '_' + sent;
+    try {
+      await fetch(url, { method:'POST', headers:{'Content-Type':'text/plain'},
+        body: JSON.stringify({ action:'add_product', product: {
+          ID: p.id, Producto: p.n, Categoria: p.c, Ubicacion: p.l, Tienda: p.s, Unidad: p.u,
+          Forma_Pedido: p.f, Inventario_Min: p.inv, Inventario_Max: p.max, Activo: p.active !== false,
+          Temporada: p.temporada||'Siempre', Tags: p.tags||'', Grupo: p.grupo||'', Presentacion: p.presentacion||''
+        }}), mode:'no-cors' });
+      sent++;
+    } catch(e) { console.log('Seed error:', e); }
+  }
+  localStorage.setItem('nb_products_synced', 'true');
+  saveProductsToCache();
+  btn.textContent = `✅ ${sent} productos subidos`; btn.disabled = false;
+  setTimeout(() => { btn.style.display = 'none'; }, 3000);
+  toast(`✅ ${sent} productos subidos al Sheet`);
+}
+
+async function loadProductsFromSheet() {
+  const url = getScriptUrl();
+  if (!url) return false;
+  try {
+    const resp = await fetch(url + '?action=list_products');
+    const data = await resp.json();
+    if (data.products && data.products.length > 0) {
+      // Map Sheet format to app format
+      PRODUCTS.length = 0; // clear
+      data.products.forEach(p => {
+        PRODUCTS.push({
+          id: p.ID,
+          n: p.Producto,
+          c: p.Categoria,
+          l: p.Ubicacion,
+          s: p.Tienda,
+          u: p.Unidad,
+          f: p.Forma_Pedido,
+          inv: p.Inventario_Min,
+          max: p.Inventario_Max,
+          active: p.Activo,
+          temporada: p.Temporada || 'Siempre',
+          tags: p.Tags || '',
+          grupo: p.Grupo || '',
+          presentacion: p.Presentacion || ''
+        });
+      });
+      saveProductsToCache();
+      return true;
+    }
+  } catch(e) { console.log('Load products error:', e); }
+  return false;
+}
+
+// On app init, try loading from cache first, then fetch from Sheet in background
+function loadProductsFromCache() {
+  try {
+    const cached = localStorage.getItem(PRODUCTS_CACHE_KEY);
+    if (cached) {
+      const parsed = JSON.parse(cached);
+      if (parsed.length > 0) {
+        PRODUCTS.length = 0;
+        parsed.forEach(p => PRODUCTS.push(p));
+        return true;
+      }
+    }
+  } catch(e) {}
+  return false;
+}
+
+// ============ SEASON FILTERING ============
+function getCurrentSeason() {
+  const month = new Date().getMonth() + 1;
+  if (month >= 3 && month <= 5) return 'Primavera';
+  if (month >= 6 && month <= 8) return 'Verano';
+  if (month >= 9 && month <= 11) return 'Otoño';
+  return 'Invierno';
+}
+
+function isProductInSeason(p) {
+  if (!p.temporada || p.temporada === 'Siempre') return true;
+  return p.temporada === getCurrentSeason();
+}
+
+function getActiveProducts() {
+  return PRODUCTS.filter(p => p.active !== false && isProductInSeason(p));
+}
+
+function getGrupoLabel(grupo, currentName) {
+  if (!grupo) return '';
+  const siblings = PRODUCTS.filter(p => p.grupo === grupo && p.n !== currentName && p.active !== false);
+  if (siblings.length === 0) return grupo;
+  return siblings.length === 1
+    ? siblings[0].presentacion || siblings[0].n.substring(0, 25)
+    : siblings.length + ' variantes';
+}
+
 // ============ NAVIGATION (updated) ============
 function showView(viewId) {
   document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
@@ -1216,7 +1599,12 @@ function showView(viewId) {
 
 // Initialize the app
 loadOrders();
+loadProductsFromCache(); // Load cached products (overrides hardcoded if available)
 init();
+// Try refreshing from Sheet in background (non-blocking)
+loadProductsFromSheet().then(loaded => {
+  if (loaded) { console.log('Products refreshed from Sheet'); renderRoutes(); }
+});
 </script>
 </body>
 </html>
