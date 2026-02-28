@@ -78,7 +78,8 @@ function doPost(e) {
       case 'create':        return jsonResp(createFactura(body));
       case 'update_status': return jsonResp(updateStatus(body));
       case 'update_date':   return jsonResp(updateDate(body));
-      case 'delete':        return jsonResp(deleteFactura(body));
+      case 'delete':           return jsonResp(deleteFactura(body));
+      case 'update_factura':   return jsonResp(updateFactura(body));
       case 'update_prices':    return jsonResp(updatePrices(body));
       case 'add_product':      return jsonResp(addProduct(body));
       case 'toggle_product':   return jsonResp(toggleProduct(body));
@@ -235,6 +236,34 @@ function deleteFactura(body) {
       sheet.deleteRow(i + 1);
       log('DELETE', id);
       return { ok: true, message: 'Deleted' };
+    }
+  }
+  throw new Error('Not found: ' + id);
+}
+
+function updateFactura(body) {
+  const { id } = body;
+  if (!id) throw new Error('Missing id');
+  const sheet = getOrCreateTab(FACTURAS_TAB, FACTURAS_HEADERS);
+  const data  = sheet.getDataRange().getValues();
+
+  // Fields that can be updated via inline edit
+  const editableFields = [
+    'Proveedor', 'Folio', 'Tipo_Documento', 'Fecha_Compra',
+    'Monto_Factura', 'Ajustes', 'Monto_Pagar',
+    'Forma_Pago', 'Categoria', 'Credit_Days'
+  ];
+
+  for (let i = 1; i < data.length; i++) {
+    if (String(data[i][0]) === String(id)) {
+      editableFields.forEach(field => {
+        if (body[field] !== undefined) {
+          const col = FACTURAS_HEADERS.indexOf(field) + 1;
+          if (col > 0) sheet.getRange(i + 1, col).setValue(body[field]);
+        }
+      });
+      log('UPDATE_FACTURA', id + ' | fields: ' + Object.keys(body).filter(k => editableFields.includes(k)).join(','));
+      return { ok: true, message: 'Factura updated' };
     }
   }
   throw new Error('Not found: ' + id);
