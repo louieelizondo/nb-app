@@ -153,6 +153,36 @@ body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif
 
 /* Modal actions fix */
 .modal-actions { display:flex; gap:8px; }
+
+/* Pedir V2: Filter bar */
+.pedir-filters { padding:8px 12px; display:flex; gap:6px; overflow-x:auto; -webkit-overflow-scrolling:touch; max-width:500px; margin:0 auto; }
+.pedir-filters::-webkit-scrollbar { display:none; }
+.pedir-chip { font-size:11px; padding:5px 12px; border:1px solid var(--gray-border); border-radius:16px; background:white; cursor:pointer; white-space:nowrap; flex-shrink:0; transition:all .15s; }
+.pedir-chip.active { background:var(--green); color:white; border-color:var(--green); }
+.pedir-chip.urgent { border-color:var(--red); color:var(--red); }
+.pedir-chip.urgent.active { background:var(--red); color:white; }
+
+/* Pedir V2: Fulfillment toggle */
+.fulfill-toggle { display:inline-flex; border:1px solid var(--gray-border); border-radius:8px; overflow:hidden; font-size:11px; }
+.fulfill-toggle button { padding:4px 10px; border:none; background:white; cursor:pointer; white-space:nowrap; transition:all .15s; }
+.fulfill-toggle button.active { background:var(--green); color:white; font-weight:600; }
+
+/* Pedir V2: Item checkboxes */
+.pedir-item { display:flex; align-items:center; gap:6px; padding:4px 0; transition:opacity .15s; }
+.pedir-item.excluded { opacity:.4; }
+.pedir-item.excluded .item-text { text-decoration:line-through; }
+.pedir-item input[type="checkbox"] { width:18px; height:18px; accent-color:var(--green); flex-shrink:0; cursor:pointer; }
+.pedir-item .item-text { flex:1; font-size:13px; }
+.pedir-item .item-qty { font-weight:600; color:var(--orange); font-size:13px; white-space:nowrap; }
+
+/* Pedir V2: Select all toggle */
+.select-all-row { display:flex; justify-content:space-between; align-items:center; padding:4px 0; margin-bottom:4px; border-bottom:1px dashed var(--gray-border); }
+.select-all-row span { font-size:12px; color:var(--gray); }
+.select-all-row button { font-size:11px; color:var(--blue); background:none; border:none; cursor:pointer; text-decoration:underline; }
+
+/* Supplier site button */
+.btn-site { background:var(--gray-bg); color:var(--dark); border:1px solid var(--gray-border) !important; }
+.btn-site:active { background:var(--gray-border); }
 </style>
 </head>
 <body>
@@ -197,6 +227,7 @@ body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif
 
 <!-- View 3: Pedir (Ordering) -->
 <div class="view" id="viewPedir">
+  <div class="pedir-filters" id="pedirFilters"></div>
   <div class="section-list" id="pedirList"></div>
 </div>
 
@@ -237,10 +268,28 @@ body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif
       <input type="text" id="productSearch" placeholder="Buscar producto..." oninput="renderProductList()" style="flex:1;padding:10px;border:1px solid var(--gray-border);border-radius:8px;font-size:14px">
       <button onclick="openAddProductModal()" style="background:var(--green);color:white;border:none;padding:10px 16px;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;white-space:nowrap">+ Nuevo</button>
     </div>
-    <div style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap" id="productFilters">
-      <button class="chip active" onclick="setProductFilter('all',this)" style="font-size:11px;padding:4px 10px;border:1px solid var(--gray-border);border-radius:16px;background:var(--green);color:white;cursor:pointer">Todos</button>
-      <button class="chip" onclick="setProductFilter('active',this)" style="font-size:11px;padding:4px 10px;border:1px solid var(--gray-border);border-radius:16px;background:white;cursor:pointer">Activos</button>
-      <button class="chip" onclick="setProductFilter('inactive',this)" style="font-size:11px;padding:4px 10px;border:1px solid var(--gray-border);border-radius:16px;background:white;cursor:pointer">Inactivos</button>
+    <div style="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap" id="productFilters">
+      <button class="pedir-chip active" onclick="setProductFilter('all',this)">Todos</button>
+      <button class="pedir-chip" onclick="setProductFilter('active',this)">Activos</button>
+      <button class="pedir-chip" onclick="setProductFilter('inactive',this)">Inactivos</button>
+    </div>
+    <div style="display:flex;gap:6px;margin-bottom:8px;overflow-x:auto" id="productSeasonFilters">
+      <button class="pedir-chip" onclick="setProductSeasonFilter('',this)">Cualquier temporada</button>
+      <button class="pedir-chip" onclick="setProductSeasonFilter('Siempre',this)">Siempre</button>
+      <button class="pedir-chip" onclick="setProductSeasonFilter('Primavera',this)">🌸 Primavera</button>
+      <button class="pedir-chip" onclick="setProductSeasonFilter('Verano',this)">☀️ Verano</button>
+      <button class="pedir-chip" onclick="setProductSeasonFilter('Otoño',this)">🍂 Otoño</button>
+      <button class="pedir-chip" onclick="setProductSeasonFilter('Invierno',this)">❄️ Invierno</button>
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:12px">
+      <select id="productSupplierFilter" onchange="renderProductList()" style="flex:1;padding:8px;border:1px solid var(--gray-border);border-radius:8px;font-size:12px">
+        <option value="">Todos los proveedores</option>
+      </select>
+      <select id="productFormaFilter" onchange="renderProductList()" style="flex:1;padding:8px;border:1px solid var(--gray-border);border-radius:8px;font-size:12px">
+        <option value="">Cualquier forma</option>
+        <option value="Ir a tienda">🏪 Ir a tienda</option>
+        <option value="Pedido domicilio">📦 Domicilio</option>
+      </select>
     </div>
     <div id="productListContent"></div>
     <div style="text-align:center;padding:12px">
@@ -494,7 +543,7 @@ function renderSections() {
   }
 
   locKeys.forEach(loc => {
-    const items = locMap[loc];
+    const items = locMap[loc].sort((a, b) => a.n.localeCompare(b.n, 'es'));
     const sectionKey = currentCategory + '|' + loc;
     const isDone = doneSections[sectionKey];
     const icon = LOC_ICONS[loc] || LOC_ICONS[loc.split(',')[0].trim()] || '📍';
@@ -812,7 +861,7 @@ const PRODUCTS = [
 {n:"Harina El Globo (costal 25kg)",c:"Insumos / Clubs",l:"Producción",s:"ABARROTES INSTITUCIONALES",u:"",f:"Ir a tienda",inv:0,max:0},
 {n:"Frijol Pinto",c:"Insumos / Clubs",l:"Cocina",s:"Empacados Chihuahua",u:"Costal",f:"Ir a tienda",inv:0,max:0},
 {n:"Aderez búfalo (1 gal)",c:"Insumos / Clubs",l:"Tienda",s:"ABARROTES INSTITUCIONALES",u:"",f:"Pedido domicilio",inv:0,max:0},
-{n:"Aderezo mango habanero (1 gal)",c:"Insumos / Clubs",l:"Tienda",s:"ABARROTES INSTITUCIONALES",u:"Galón",f:"Pedido domicilio",inv:0,max:0,grupo:"aderezo-mango-hab",presentacion:"Galón (para empaques 2oz)"},
+{n:"Aderezo mango habanero (1 gal)",c:"Insumos / Clubs",l:"Tienda",s:"ABARROTES INSTITUCIONALES",u:"Galón",f:"Pedido domicilio",inv:0,max:0},
 {n:"Catsup (display)",c:"Insumos / Clubs",l:"Tienda",s:"ABARROTES INSTITUCIONALES",u:"",f:"Pedido domicilio",inv:0,max:0},
 {n:"Condimix 14kg",c:"Insumos / Clubs",l:"Cocina",s:"ABARROTES INSTITUCIONALES",u:"",f:"Pedido domicilio",inv:1,max:0},
 {n:"Empanizador kellogs (8kg)",c:"Insumos / Clubs",l:"Producción",s:"ABARROTES INSTITUCIONALES",u:"",f:"Pedido domicilio",inv:0,max:0},
@@ -959,7 +1008,7 @@ const PRODUCTS = [
 {n:"escoba roja",c:"Envases y Limpieza",l:"Almacén",s:"Key Química",u:"",f:"Ir a tienda",inv:0,max:0},
 {n:"Papel toalla",c:"Envases y Limpieza",l:"Sin ubicación",s:"Ricasa limpieza",u:"",f:"Ir a tienda",inv:0,max:0},
 {n:"guantes latex negro chicos",c:"Insumos / Clubs",l:"Almacén",s:"ABARROTES INSTITUCIONALES",u:"",f:"Ir a tienda",inv:0,max:0},
-{n:"Aderezo mango habanero (display caja 12 pzs)",c:"Insumos / Clubs",l:"Cuarto Frio Ventas",s:"ABARROTES INSTITUCIONALES",u:"Caja",f:"Pedido domicilio",inv:0,max:0,grupo:"aderezo-mango-hab",presentacion:"Caja 12×397g botella"},
+{n:"Aderezo mango habanero (display caja 12 pzs)",c:"Insumos / Clubs",l:"Cuarto Frio Ventas",s:"ABARROTES INSTITUCIONALES",u:"Caja",f:"Pedido domicilio",inv:0,max:0},
 {n:"Aderezo bufalo (display caja 12 pzs)",c:"Insumos / Clubs",l:"Cuarto Frio Ventas",s:"ABARROTES INSTITUCIONALES",u:"",f:"Ir a tienda",inv:0,max:0},
 {n:"Espinaca",c:"Insumos / Clubs",l:"Cuarto Frio Materia Prima",s:"SAM'S CLUB",u:"",f:"Ir a tienda",inv:0,max:0},
 {n:"Rollo de magitel",c:"Envases y Limpieza",l:"Producción",s:"Moda Telas",u:"",f:"Ir a tienda",inv:1,max:0},
@@ -1028,40 +1077,87 @@ function saveOrders() {
   localStorage.setItem(RECEIVERS_KEY, JSON.stringify(receivers));
 }
 
-// ============ PEDIR (ORDERING) VIEW ============
+// ============ PEDIR (ORDERING) VIEW V2 ============
+const SUPPLIER_URLS = {
+  "SAM'S CLUB": "https://www.sams.com.mx",
+  "COSTCO": "https://www.costco.com.mx",
+  "WALMART": "https://www.walmart.com.mx",
+  "MERCADOLIBRE": "https://www.mercadolibre.com.mx",
+  "CITY CLUB": "https://www.cityclub.com.mx",
+  "SORIANA": "https://www.soriana.com",
+  "ALSUPER": "https://www.alsuper.com"
+};
+
+let pedirFilter = 'all'; // all, urgent, category name
+let pedirExcluded = {}; // { productIdx: true } — in-memory, resets each time
+let pedirModeOverrides = {}; // { supplier: 'Ir a tienda' | 'Pedido domicilio' }
+
+// Load mode overrides from localStorage
+try { pedirModeOverrides = JSON.parse(localStorage.getItem('nb_pedir_modes') || '{}'); } catch(e) {}
+
+function savePedirModes() {
+  localStorage.setItem('nb_pedir_modes', JSON.stringify(pedirModeOverrides));
+}
+
 function showPedir() {
+  pedirExcluded = {}; // Reset exclusions on each open
   showView('viewPedir');
   document.getElementById('headerSub').textContent = 'Ordenar productos';
   document.getElementById('backBtn').style.display = 'block';
+  renderPedirFilters();
   renderPedir();
 }
 
-function renderPedir() {
-  // Group products that need ordering (count < inv or below threshold)
-  const needsOrder = [];
-  PRODUCTS.forEach((p, i) => {
-    const current = counts[i] || 0;
-    const needed = (p.max > 0 && current < p.max) ? p.max - current : (current < p.inv ? p.inv - current : 0);
-    if (needed > 0) {
-      needsOrder.push({ ...p, idx: i, current, needed: Math.round(needed * 10) / 10 });
-    }
-  });
+function renderPedirFilters() {
+  const chips = [
+    { id: 'all', label: 'Todos', cls: '' },
+    { id: 'urgent', label: '🔴 Urgentes (0)', cls: 'urgent' },
+    { id: 'Insumos / Clubs', label: '🛒 Insumos', cls: '' },
+    { id: 'Envases y Limpieza', label: '📦 Envases', cls: '' },
+    { id: 'Mercado Abastos + Carnes', label: '🥩 Mercado', cls: '' }
+  ];
+  document.getElementById('pedirFilters').innerHTML = chips.map(c =>
+    `<button class="pedir-chip ${c.cls} ${pedirFilter === c.id ? 'active' : ''}" onclick="setPedirFilter('${c.id}',this)">${c.label}</button>`
+  ).join('');
+}
 
-  // Also check shopping list items (items counted as 0 when inv > 0)
-  PRODUCTS.forEach((p, i) => {
-    if (needsOrder.find(x => x.idx === i)) return;
-    const current = counts[i] || 0;
-    if (current === 0 && p.inv > 0) {
-      needsOrder.push({ ...p, idx: i, current: 0, needed: p.inv });
+function setPedirFilter(filter, btn) {
+  pedirFilter = filter;
+  document.querySelectorAll('.pedir-chip').forEach(c => c.classList.remove('active'));
+  btn.classList.add('active');
+  renderPedir();
+}
+
+function getNeedsOrder() {
+  const needsOrder = [];
+  const activeProducts = getActiveProducts();
+  activeProducts.forEach(p => {
+    const origIdx = PRODUCTS.indexOf(p);
+    const current = counts[origIdx] || 0;
+    const needed = (p.max > 0 && current < p.max) ? p.max - current : (current < p.inv ? p.inv - current : 0);
+    if (needed > 0 || (current === 0 && p.inv > 0)) {
+      needsOrder.push({ ...p, idx: origIdx, current, needed: Math.round((needed || p.inv) * 10) / 10, isUrgent: current === 0 });
     }
   });
+  return needsOrder;
+}
+
+function renderPedir() {
+  let needsOrder = getNeedsOrder();
+
+  // Apply filter
+  if (pedirFilter === 'urgent') {
+    needsOrder = needsOrder.filter(p => p.isUrgent);
+  } else if (pedirFilter !== 'all') {
+    needsOrder = needsOrder.filter(p => p.c === pedirFilter);
+  }
 
   if (needsOrder.length === 0) {
     document.getElementById('pedirList').innerHTML = `
       <div style="text-align:center;padding:40px 20px;color:var(--gray)">
-        <div style="font-size:48px;margin-bottom:12px">✅</div>
-        <h3 style="color:var(--green)">Todo surtido</h3>
-        <p>No hay productos pendientes de ordenar</p>
+        <div style="font-size:48px;margin-bottom:12px">${pedirFilter === 'all' ? '✅' : '🔍'}</div>
+        <h3 style="color:var(--green)">${pedirFilter === 'all' ? 'Todo surtido' : 'Sin resultados'}</h3>
+        <p>${pedirFilter === 'all' ? 'No hay productos pendientes de ordenar' : 'No hay productos en este filtro'}</p>
       </div>`;
     return;
   }
@@ -1074,47 +1170,84 @@ function renderPedir() {
     bySupplier[s].push(p);
   });
 
-  let html = `<div style="padding:8px 4px;font-size:13px;color:var(--gray);text-align:center">${needsOrder.length} productos por ordenar · ${Object.keys(bySupplier).length} proveedores</div>`;
+  // Count selected
+  const totalSelected = needsOrder.filter(p => !pedirExcluded[p.idx]).length;
+  let html = `<div style="padding:8px 4px;font-size:13px;color:var(--gray);text-align:center">${totalSelected} de ${needsOrder.length} seleccionados · ${Object.keys(bySupplier).length} proveedores</div>`;
 
   Object.keys(bySupplier).sort().forEach(supplier => {
     const items = bySupplier[supplier];
+    const selectedItems = items.filter(p => !pedirExcluded[p.idx]);
     const existingOrder = orders.find(o => o.supplier === supplier && o.status === 'ordered');
     const orderBadge = existingOrder ? '<span class="status-badge status-ordered">📦 Ordenado</span>' : '';
 
-    // Determine primary fulfillment mode from items
-    const modes = {};
-    items.forEach(p => { modes[p.f || 'Ir a tienda'] = (modes[p.f || 'Ir a tienda'] || 0) + 1; });
-    const primaryMode = Object.keys(modes).sort((a,b) => modes[b] - modes[a])[0];
+    // Determine fulfillment mode (override or auto-detect from items)
+    let currentMode = pedirModeOverrides[supplier];
+    if (!currentMode) {
+      const modes = {};
+      items.forEach(p => { modes[p.f || 'Ir a tienda'] = (modes[p.f || 'Ir a tienda'] || 0) + 1; });
+      currentMode = Object.keys(modes).sort((a,b) => modes[b] - modes[a])[0];
+    }
+    const isDelivery = currentMode === 'Pedido domicilio';
+    const supplierEsc = supplier.replace(/'/g, "\\'");
 
-    const itemList = items.map(p =>
-      `<div style="display:flex;justify-content:space-between;padding:2px 0"><span>${p.n}</span><span style="font-weight:600;color:var(--orange)">${p.needed} ${p.u||''}</span></div>`
-    ).join('');
+    // Fulfillment toggle
+    const fulfillToggle = `
+      <div class="fulfill-toggle">
+        <button class="${!isDelivery ? 'active' : ''}" onclick="setPedirMode('${supplierEsc}','Ir a tienda')">🏪 Recoger</button>
+        <button class="${isDelivery ? 'active' : ''}" onclick="setPedirMode('${supplierEsc}','Pedido domicilio')">📦 Domicilio</button>
+      </div>`;
 
-    // Action buttons based on fulfillment mode
+    // Select all / none toggle
+    const allSelected = items.every(p => !pedirExcluded[p.idx]);
+    const selectAllRow = `
+      <div class="select-all-row">
+        <span>${selectedItems.length} de ${items.length} seleccionados</span>
+        <button onclick="toggleAllSupplier('${supplierEsc}', ${allSelected ? 'false' : 'true'})">${allSelected ? 'Quitar todos' : 'Seleccionar todos'}</button>
+      </div>`;
+
+    // Item list with checkboxes
+    const itemList = items.map(p => {
+      const excluded = pedirExcluded[p.idx];
+      return `
+        <div class="pedir-item ${excluded ? 'excluded' : ''}">
+          <input type="checkbox" ${excluded ? '' : 'checked'} onchange="togglePedirItem(${p.idx})">
+          <span class="item-text">${p.n}${p.isUrgent ? ' <span style="color:var(--red);font-size:10px">● agotado</span>' : ''}</span>
+          <span class="item-qty">${p.needed} ${p.u||''}</span>
+        </div>`;
+    }).join('');
+
+    // Action buttons
     let actions = '';
-    if (primaryMode === 'Pedido domicilio') {
-      if (existingOrder) {
-        actions = `<button class="btn-receive" onclick="markOrderReceiving('${supplier.replace(/'/g,"\\'")}')">📦 Recibir</button>`;
-      } else {
-        actions = `<button class="btn-pedido" onclick="placeOrder('${supplier.replace(/'/g,"\\'")}')">📦 Marcar como Ordenado</button>`;
-      }
-    } else if (primaryMode === 'Ir a tienda') {
-      actions = `<button class="btn-ir" onclick="copySupplierList('${supplier.replace(/'/g,"\\'")}')">📋 Copiar lista</button>`;
+    const siteUrl = SUPPLIER_URLS[supplier];
+
+    if (existingOrder) {
+      actions += `<button class="btn-receive" onclick="markOrderReceiving('${supplierEsc}')">📦 Recibir</button>`;
+    } else if (isDelivery) {
+      actions += `<button class="btn-pedido" onclick="placeOrder('${supplierEsc}')">📦 Ordenado</button>`;
+    } else {
+      actions += `<button class="btn-ir" onclick="copySupplierList('${supplierEsc}')">📋 Copiar</button>`;
     }
 
-    // WhatsApp button for suppliers that have it
-    const waItems = items.map(p => `• ${p.n}: ${p.needed} ${p.u||'unid'}`).join('\n');
+    if (siteUrl) {
+      actions += ` <button class="btn-site" onclick="window.open('${siteUrl}','_blank')">🌐 Sitio</button>`;
+    }
+
+    // WhatsApp — only for selected items
+    const waItems = selectedItems.map(p => `• ${p.n}: ${p.needed} ${p.u||'unid'}`).join('\n');
     const waMsg = encodeURIComponent(`Hola, pedido de Natural Balance:\n\n${waItems}\n\nGracias!`);
-    actions += ` <button class="btn-whatsapp" onclick="window.open('https://wa.me/?text=${waMsg}','_blank')">💬 WhatsApp</button>`;
+    actions += ` <button class="btn-whatsapp" onclick="window.open('https://wa.me/?text=${waMsg}','_blank')">💬 WA</button>`;
 
     html += `
       <div class="order-card">
-        <div style="display:flex;justify-content:space-between;align-items:center">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px">
           <div class="supplier">${supplier}</div>
-          ${orderBadge}
+          <div style="display:flex;gap:6px;align-items:center">${orderBadge} ${fulfillToggle}</div>
         </div>
-        <div class="order-meta">${items.length} productos · ${primaryMode}</div>
-        <div class="order-items" style="margin:8px 0">${itemList}</div>
+        <div class="order-meta" style="margin-top:4px">${items.length} productos · ${currentMode}</div>
+        <div class="order-items" style="margin:8px 0">
+          ${selectAllRow}
+          ${itemList}
+        </div>
         <div class="order-actions">${actions}</div>
       </div>`;
   });
@@ -1122,22 +1255,42 @@ function renderPedir() {
   document.getElementById('pedirList').innerHTML = html;
 }
 
-function placeOrder(supplier) {
-  const items = [];
-  PRODUCTS.forEach((p, i) => {
-    if ((p.s || '') !== supplier) return;
-    const current = counts[i] || 0;
-    const needed = (p.max > 0 && current < p.max) ? p.max - current : (current < p.inv ? p.inv - current : 0);
-    if (needed > 0 || (current === 0 && p.inv > 0)) {
-      items.push({ name: p.n, qty: needed || p.inv, unit: p.u || '' });
+function togglePedirItem(idx) {
+  if (pedirExcluded[idx]) {
+    delete pedirExcluded[idx];
+  } else {
+    pedirExcluded[idx] = true;
+  }
+  renderPedir();
+}
+
+function toggleAllSupplier(supplier, selectAll) {
+  const items = getNeedsOrder().filter(p => (p.s || 'Sin tienda') === supplier);
+  items.forEach(p => {
+    if (selectAll) {
+      delete pedirExcluded[p.idx];
+    } else {
+      pedirExcluded[p.idx] = true;
     }
   });
+  renderPedir();
+}
+
+function setPedirMode(supplier, mode) {
+  pedirModeOverrides[supplier] = mode;
+  savePedirModes();
+  renderPedir();
+}
+
+function placeOrder(supplier) {
+  const selected = getNeedsOrder().filter(p => (p.s || 'Sin tienda') === supplier && !pedirExcluded[p.idx]);
+  if (selected.length === 0) { toast('Selecciona al menos un producto'); return; }
 
   orders.push({
     id: 'ORD' + Date.now(),
     supplier,
-    items,
-    mode: 'Pedido domicilio',
+    items: selected.map(p => ({ name: p.n, qty: p.needed, unit: p.u || '' })),
+    mode: pedirModeOverrides[supplier] || 'Pedido domicilio',
     status: 'ordered',
     ordered_at: new Date().toISOString()
   });
@@ -1147,16 +1300,9 @@ function placeOrder(supplier) {
 }
 
 function copySupplierList(supplier) {
-  const items = [];
-  PRODUCTS.forEach((p, i) => {
-    if ((p.s || '') !== supplier) return;
-    const current = counts[i] || 0;
-    const needed = (p.max > 0 && current < p.max) ? p.max - current : (current < p.inv ? p.inv - current : 0);
-    if (needed > 0 || (current === 0 && p.inv > 0)) {
-      items.push(`• ${p.n}: ${needed || p.inv} ${p.u || 'unid'}`);
-    }
-  });
-  const text = `${supplier}\n${items.join('\n')}`;
+  const selected = getNeedsOrder().filter(p => (p.s || 'Sin tienda') === supplier && !pedirExcluded[p.idx]);
+  if (selected.length === 0) { toast('Selecciona al menos un producto'); return; }
+  const text = `${supplier}\n${selected.map(p => `• ${p.n}: ${p.needed} ${p.u || 'unid'}`).join('\n')}`;
   navigator.clipboard.writeText(text).then(() => toast('📋 Lista copiada'));
 }
 
@@ -1311,32 +1457,52 @@ function timeAgo(iso) {
 const PRODUCTS_CACHE_KEY = 'nb_inventario_products';
 const PRODUCTS_CACHE_TS = 'nb_inventario_products_ts';
 let productFilter = 'all';
+let productSeasonFilter = '';
 
 function showProducts() {
   showView('viewProducts');
   document.getElementById('headerSub').textContent = 'Gestionar Productos';
   document.getElementById('backBtn').style.display = 'block';
+  populateSupplierDropdown();
   renderProductList();
   // Show seed button if products haven't been synced to Sheet yet
   const synced = localStorage.getItem('nb_products_synced');
   document.getElementById('seedBtn').style.display = synced ? 'none' : 'block';
 }
 
+function populateSupplierDropdown() {
+  const suppliers = [...new Set(PRODUCTS.map(p => p.s).filter(Boolean))].sort();
+  const sel = document.getElementById('productSupplierFilter');
+  const current = sel.value;
+  sel.innerHTML = '<option value="">Todos los proveedores</option>' + suppliers.map(s => `<option value="${s}">${s}</option>`).join('');
+  sel.value = current;
+}
+
+function setProductSeasonFilter(season, btn) {
+  productSeasonFilter = season;
+  document.querySelectorAll('#productSeasonFilters .pedir-chip').forEach(c => c.classList.remove('active'));
+  btn.classList.add('active');
+  renderProductList();
+}
+
 function setProductFilter(filter, btn) {
   productFilter = filter;
-  document.querySelectorAll('#productFilters .chip').forEach(c => {
-    c.style.background = 'white'; c.style.color = 'var(--dark)';
-  });
-  btn.style.background = 'var(--green)'; btn.style.color = 'white';
+  document.querySelectorAll('#productFilters .pedir-chip').forEach(c => c.classList.remove('active'));
+  btn.classList.add('active');
   renderProductList();
 }
 
 function renderProductList() {
   const search = (document.getElementById('productSearch').value || '').toLowerCase().trim();
+  const supplierFilter = (document.getElementById('productSupplierFilter') || {}).value || '';
+  const formaFilter = (document.getElementById('productFormaFilter') || {}).value || '';
   let list = PRODUCTS.map((p, i) => ({ ...p, idx: i }));
 
   if (productFilter === 'active') list = list.filter(p => p.active !== false);
   if (productFilter === 'inactive') list = list.filter(p => p.active === false);
+  if (productSeasonFilter) list = list.filter(p => (p.temporada || 'Siempre') === productSeasonFilter);
+  if (supplierFilter) list = list.filter(p => p.s === supplierFilter);
+  if (formaFilter) list = list.filter(p => (p.f || 'Ir a tienda') === formaFilter);
   if (search) list = list.filter(p => p.n.toLowerCase().includes(search) || (p.s||'').toLowerCase().includes(search) || (p.tags||'').toLowerCase().includes(search));
 
   // Group by category

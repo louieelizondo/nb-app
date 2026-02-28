@@ -16,6 +16,12 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; b
 .topbar-right { margin-left: auto; font-size: 12px; opacity: .7; text-align: right; }
 .container { max-width: 1200px; margin: 0 auto; padding: 24px 24px 100px; }
 
+/* MONTH BAR */
+.month-bar { display:flex; align-items:center; justify-content:center; gap:16px; margin-bottom:18px; }
+.month-bar button { background:white; border:2px solid #e0d8cf; border-radius:50%; width:40px; height:40px; cursor:pointer; font-size:18px; font-weight:700; color:#2d2319; transition:all .15s; display:flex;align-items:center;justify-content:center; }
+.month-bar button:hover { border-color:#2e6b2e; background:#f1f8f1; }
+.month-bar span { font-size:18px; font-weight:800; min-width:200px; text-align:center; color:#2d2319; }
+
 /* SUMMARY CARDS */
 .summary-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 22px; }
 .summary-card { background: white; border-radius: 16px; padding: 20px 22px; box-shadow: 0 2px 12px rgba(0,0,0,.05); border-left: 4px solid #ddd; transition: transform .15s, box-shadow .15s; }
@@ -29,7 +35,9 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; b
 .summary-card.ok { border-left-color: #43a047; background: linear-gradient(135deg, #fff 80%, #e8f5e9 100%); }
 .summary-card.ok .sc-value { color: #2e7d32; }
 .summary-card.next { border-left-color: #5c6bc0; grid-column: 1 / -1; }
-.summary-card.next .sc-value { font-size: 16px; font-weight: 700; }
+.summary-card.next .sc-value { font-size: 14px; font-weight: 700; }
+.summary-card.cat-mercancias { border-left-color: #1565c0; }
+.summary-card.cat-gastos { border-left-color: #6d4c3f; }
 
 /* FILTERS */
 .filters { background: white; border-radius: 16px; padding: 16px 22px; margin-bottom: 18px; display: flex; gap: 12px; flex-wrap: wrap; align-items: center; box-shadow: 0 2px 12px rgba(0,0,0,.05); }
@@ -38,6 +46,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; b
 .chip.active { background: linear-gradient(135deg, #3a7c3a, #2e6b2e); color: white; border-color: transparent; box-shadow: 0 2px 8px rgba(46,107,46,.3); }
 .chip:hover:not(.active) { background: #f5f0eb; border-color: #c4b8a8; }
 .chip.chip-vencido.active { background: linear-gradient(135deg, #e53935, #c62828); box-shadow: 0 2px 8px rgba(198,40,40,.3); }
+.chip.chip-factura { border-color:#ffcc80; color:#e65100; }
+.chip.chip-factura.active { background:linear-gradient(135deg,#ff9800,#e65100); color:white; border-color:transparent; }
 .filters select, .filters input { padding: 8px 14px; border: 2px solid #e0d8cf; border-radius: 10px; font-size: 13px; background: white; color: #2d2319; transition: border-color .2s; }
 .filters select:focus, .filters input:focus { border-color: #2e6b2e; outline: none; box-shadow: 0 0 0 3px rgba(46,107,46,.1); }
 
@@ -48,7 +58,7 @@ thead th { background: linear-gradient(135deg, #3a7c3a, #2e6b2e); color: white; 
 thead th:first-child { border-radius: 16px 0 0 0; }
 thead th:last-child { border-radius: 0 16px 0 0; }
 tbody td { padding: 12px 16px; border-bottom: 1px solid #f2ede7; vertical-align: middle; }
-tbody tr { transition: background .15s; }
+tbody tr { transition: background .15s; cursor:pointer; }
 tbody tr:hover { background: #faf7f3; }
 tbody tr:last-child td { border-bottom: none; }
 tbody tr.overdue { background: linear-gradient(90deg, #fff5f5, #fff); }
@@ -57,6 +67,7 @@ tbody tr.today { background: linear-gradient(90deg, #fffde7, #fff); }
 tbody tr.paid { background: linear-gradient(90deg, #f1f8f1, #fff); }
 tbody tr.paid td { color: #888; }
 tbody tr.selected { background: #e3f2fd !important; outline: 2px solid #1565c0; outline-offset: -2px; }
+tbody tr.editing { background:#fffde7 !important; }
 
 /* SELECTION CHECKBOX */
 .row-check { width: 18px; height: 18px; cursor: pointer; accent-color: #2e6b2e; }
@@ -67,6 +78,9 @@ tbody tr.selected { background: #e3f2fd !important; outline: 2px solid #1565c0; 
 .badge-paid { background: linear-gradient(135deg, #e8f5e9, #c8e6c9); color: #2e7d32; }
 .badge-over { background: linear-gradient(135deg, #ffebee, #ffcdd2); color: #c62828; animation: glow 2s infinite; }
 @keyframes glow { 0%,100%{box-shadow:0 0 0 rgba(198,40,40,0)} 50%{box-shadow:0 0 12px rgba(198,40,40,.25)} }
+.badge-facturado { background:#e8f5e9; color:#2e7d32; font-size:10px; padding:3px 8px; }
+.btn-facturar { background:#fff3e0; color:#e65100; border:1px solid #ffcc80; border-radius:8px; padding:4px 10px; font-size:10px; font-weight:700; cursor:pointer; transition:all .15s; text-decoration:none; display:inline-flex;align-items:center;gap:3px; }
+.btn-facturar:hover { background:#ffe0b2; }
 
 /* FORMA DE PAGO */
 .fp-chip { display: inline-flex; align-items: center; gap: 3px; padding: 3px 10px; border-radius: 12px; font-size: 11px; font-weight: 600; }
@@ -86,8 +100,21 @@ tbody tr.selected { background: #e3f2fd !important; outline: 2px solid #1565c0; 
 .btn-brown:hover { transform: translateY(-1px); }
 .btn-foto { background: #e3f2fd; color: #1565c0; border: 1.5px solid #90caf9; padding: 5px 10px; font-size: 11px; border-radius: 8px; cursor: pointer; font-weight: 600; transition: all .15s; }
 .btn-foto:hover { background: #bbdefb; }
+.btn-save { background:linear-gradient(135deg,#43a047,#2e7d32); color:white; }
+.btn-cancel { background:#f5f0eb; color:#7a6b5d; }
 
-/* FLOATING ACTION BAR (selection mode) */
+/* EDIT ROW */
+.edit-row { background:#fffde7; border:1px solid #fff9c4; border-radius:0 0 16px 16px; padding:18px 20px; margin-top:-1px; }
+.edit-grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+.edit-field label { font-size:11px; font-weight:700; color:#666; text-transform:uppercase; display:block; margin-bottom:4px; letter-spacing:.3px; }
+.edit-field input, .edit-field select { width:100%; padding:8px 12px; border:1.5px solid #e0d8cf; border-radius:8px; font-size:13px; transition:border-color .2s; }
+.edit-field input:focus, .edit-field select:focus { border-color:#2e6b2e; outline:none; box-shadow:0 0 0 3px rgba(46,107,46,.1); }
+.edit-field input[readonly] { background:#f5f0eb; color:#7a6b5d; }
+.edit-actions { display:flex; gap:8px; justify-content:flex-end; margin-top:14px; align-items:center; }
+.edit-facturado { display:flex; align-items:center; gap:8px; margin-right:auto; font-size:13px; font-weight:600; color:#555; }
+.edit-facturado input { width:18px; height:18px; accent-color:#2e7d32; }
+
+/* FLOATING ACTION BAR */
 .action-bar { position: fixed; bottom: 0; left: 0; right: 0; background: white; border-top: 2px solid #e0d8cf; padding: 14px 24px; display: flex; align-items: center; gap: 12px; z-index: 8000; box-shadow: 0 -4px 20px rgba(0,0,0,.1); transform: translateY(100%); transition: transform .25s ease; }
 .action-bar.visible { transform: translateY(0); }
 .action-bar .ab-count { font-size: 14px; font-weight: 800; color: #2e6b2e; }
@@ -142,33 +169,27 @@ tbody tr.selected { background: #e3f2fd !important; outline: 2px solid #1565c0; 
 .sync-spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid #ccc; border-top-color: #2e6b2e; border-radius: 50%; animation: spin .8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
-/* ════════════════════════════════════
-   MOBILE — Card layout for table
-   ════════════════════════════════════ */
+/* ═══ MOBILE ═══ */
 @media (max-width: 768px) {
   .topbar { padding: 14px 16px; gap: 12px; }
   .topbar h1 { font-size: 17px; }
   .logo { width: 38px; height: 38px; font-size: 14px; }
   .container { padding: 14px 12px 110px; }
-
-  /* Summary: 2 cols */
+  .month-bar { gap:10px; margin-bottom:14px; }
+  .month-bar button { width:36px; height:36px; font-size:16px; }
+  .month-bar span { font-size:15px; min-width:160px; }
   .summary-row { grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px; }
   .summary-card { padding: 14px 16px; border-radius: 12px; }
   .summary-card .sc-value { font-size: 22px; }
   .summary-card.next { grid-column: 1 / -1; }
   .summary-card.next .sc-value { font-size: 14px; }
-
-  /* Filters */
   .filters { padding: 12px 14px; gap: 8px; border-radius: 12px; }
   .chip { padding: 6px 12px; font-size: 12px; }
   .filters select, .filters input { font-size: 12px; padding: 7px 10px; min-width: 0 !important; flex: 1; }
-
-  /* Config bar */
   .config-bar { padding: 10px 14px; gap: 8px; flex-direction: column; align-items: stretch; }
   .config-bar input { min-width: 0; font-size: 11px; }
   .config-bar .btn { align-self: flex-start; }
-
-  /* TABLE → CARD LAYOUT */
+  .edit-grid { grid-template-columns:1fr; }
   .tbl-wrap { overflow-x: unset; background: transparent; box-shadow: none; border-radius: 0; }
   table { display: block; }
   thead { display: none; }
@@ -180,17 +201,11 @@ tbody tr.selected { background: #e3f2fd !important; outline: 2px solid #1565c0; 
   tbody tr.paid td { color: inherit; }
   tbody tr.selected { border-left-color: #1565c0 !important; outline: 2px solid #1565c0; }
   tbody td { display: none; padding: 0; border-bottom: none; }
-
-  /* Only show the mobile card cell */
   tbody td.mobile-card { display: block; padding: 14px 16px 12px; }
-
-  /* Action bar mobile adjustments */
   .action-bar { padding: 12px 16px; gap: 8px; flex-wrap: wrap; }
   .btn-action-pay { padding: 10px 20px; font-size: 13px; }
   .btn-action-del { padding: 8px 14px; font-size: 12px; }
 }
-
-/* Desktop: hide mobile card cell */
 @media (min-width: 769px) {
   td.mobile-card { display: none; }
 }
@@ -217,6 +232,13 @@ tbody tr.selected { background: #e3f2fd !important; outline: 2px solid #1565c0; 
     <span id="syncStatus" style="font-size:12px;color:#999">Sin conexión — usando datos locales</span>
   </div>
 
+  <!-- MONTH BAR -->
+  <div class="month-bar">
+    <button onclick="changeMonth(-1)">◀</button>
+    <span id="monthLabel"></span>
+    <button onclick="changeMonth(1)">▶</button>
+  </div>
+
   <div class="summary-row" id="summaryRow"></div>
 
   <div class="filters">
@@ -226,6 +248,7 @@ tbody tr.selected { background: #e3f2fd !important; outline: 2px solid #1565c0; 
       <button class="chip" onclick="setStatusFilter('Pagado',this)">Pagados</button>
       <button class="chip chip-vencido" onclick="setStatusFilter('Vencido',this)">Vencidos</button>
       <button class="chip" onclick="setStatusFilter('sin_fecha',this)" style="border-color:#e65100;color:#e65100">📅 Sin fecha</button>
+      <button class="chip chip-factura" onclick="setStatusFilter('sin_facturar',this)">🧾 Sin facturar</button>
     </div>
     <select id="formaFilter" onchange="applyFilters()" style="min-width:140px">
       <option value="">Todas las formas</option>
@@ -322,14 +345,39 @@ let allGastos = [];
 let filteredGastos = [];
 let currentStatusFilter = 'all';
 let editingId = null;
+let editingRowId = null; // for inline edit
 let selectedIds = new Set();
 const LS_KEY = 'nb_gastos';
+
+// Month selector state
+let summaryMonth = new Date().toISOString().slice(0,7); // "2026-02"
+
+// Billing portal URLs
+const BILLING_PORTALS = {
+  "SAM'S CLUB":  { url: "https://facturacion.walmartmexico.com.mx/", label: "Portal Sam's/Walmart" },
+  "WALMART":     { url: "https://facturacion.walmartmexico.com.mx/", label: "Portal Sam's/Walmart" },
+  "COSTCO":      { url: "https://www3.costco.com.mx/facturacion", label: "Portal Costco" },
+  "MERCADOLIBRE":{ url: "https://www.mercadolibre.com.mx/mis-compras", label: "Mis compras ML" },
+  "CITY CLUB":   { url: "https://www.cityclub.com.mx/facturacion-electronica.html", label: "Portal City Club" },
+  "SORIANA":     { url: "https://www.soriana.com/facturacion-login", label: "Portal Soriana" }
+};
+
+function getBillingPortal(proveedor) {
+  if (!proveedor) return null;
+  const upper = proveedor.toUpperCase();
+  for (const [key, val] of Object.entries(BILLING_PORTALS)) {
+    if (upper.includes(key) || key.includes(upper)) return val;
+  }
+  return null;
+}
 
 // ── Date helpers ──
 function todayStr(){ return new Date().toISOString().slice(0,10); }
 function formatDate(d){
   if(!d) return '—';
-  const [y,m,dd] = d.split('-');
+  const parts = String(d).split('-');
+  if(parts.length<3) return d;
+  const [y,m,dd] = parts;
   const months = ['','Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
   return `${parseInt(dd)} ${months[parseInt(m)]} ${y}`;
 }
@@ -347,6 +395,21 @@ function countdownLabel(dateStr){
   if(d <= 3) return `<div class="countdown soon">En ${d} día${d>1?'s':''}</div>`;
   if(d <= 7) return `<div class="countdown ok">En ${d} días</div>`;
   return '';
+}
+function monthName(ym){
+  const [y,m] = ym.split('-');
+  const names = ['','Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+  return `${names[parseInt(m)]} ${y}`;
+}
+function fmtMoney(n){ return '$'+n.toLocaleString('es-MX',{minimumFractionDigits:0,maximumFractionDigits:0}); }
+
+// ── Month selector ──
+function changeMonth(delta){
+  const [y,m] = summaryMonth.split('-').map(Number);
+  const d = new Date(y, m - 1 + delta, 1);
+  summaryMonth = d.toISOString().slice(0,7);
+  document.getElementById('monthLabel').textContent = monthName(summaryMonth);
+  renderSummary();
 }
 
 // ── Data ──
@@ -369,7 +432,6 @@ function toggleSelectAll(checked){
   if(checked) filteredGastos.forEach(g => selectedIds.add(g.id));
   else selectedIds.clear();
   updateSelectionUI();
-  // Update all visible checkboxes
   document.querySelectorAll('.row-check-item').forEach(cb => cb.checked = checked);
 }
 function clearSelection(){
@@ -384,13 +446,11 @@ function updateSelectionUI(){
   if(n > 0){
     bar.classList.add('visible');
     document.getElementById('abCount').textContent = n + ' seleccionado' + (n>1?'s':'');
-    // Hide pay button if any selected is already paid
     const anyPaid = [...selectedIds].some(id => { const g = allGastos.find(x=>x.id===id); return g && g.estado === 'Pagado'; });
     document.getElementById('abPayBtn').style.display = anyPaid ? 'none' : '';
   } else {
     bar.classList.remove('visible');
   }
-  // Highlight selected rows
   document.querySelectorAll('tbody tr').forEach(tr => {
     const id = tr.dataset.id;
     tr.classList.toggle('selected', id && selectedIds.has(id));
@@ -406,7 +466,6 @@ function paySelected(){
   if(ids.length === 1){
     openPayModal(ids[0]);
   } else {
-    // Bulk pay — open a confirm
     const total = ids.reduce((s,id) => { const g = allGastos.find(x=>x.id===id); return s + (g?g.monto_pagar||0:0); }, 0);
     if(!confirm(`¿Marcar ${ids.length} facturas como pagadas?\nTotal: $${total.toLocaleString('es-MX',{minimumFractionDigits:2})}`)) return;
     const today = todayStr();
@@ -444,11 +503,13 @@ function applyFilters(){
   const search = (document.getElementById('searchInput').value || '').toLowerCase().trim();
   filteredGastos = allGastos.filter(g => {
     if(currentStatusFilter === 'sin_fecha'){
-      // Show only Transferencia invoices without a real payment date assigned
       if(g.estado === 'Pagado') return false;
       const isTransfer = (g.forma_pago||'').toLowerCase().includes('transferencia');
       if(!isTransfer) return false;
-      if(g.fecha_pago && g.fecha_pago !== g.fecha_compra) return false; // has a real date
+      if(g.fecha_pago && g.fecha_pago !== g.fecha_compra) return false;
+    } else if(currentStatusFilter === 'sin_facturar'){
+      if(g.facturado === 'Sí') return false;
+      if(!getBillingPortal(g.proveedor)) return false;
     } else if(currentStatusFilter !== 'all' && g.estado !== currentStatusFilter) return false;
     if(forma && g.forma_pago !== forma) return false;
     if(year && !(g.fecha_compra||'').startsWith(year) && !(g.fecha_pago||'').startsWith(year)) return false;
@@ -483,16 +544,31 @@ function buildYearFilter(){
     [...years].sort().reverse().map(y => `<option value="${y}" ${y===thisYear?'selected':''}>${y}</option>`).join('');
 }
 
-// ── Render ──
+// ── Render Summary (monthly) ──
 function renderSummary(){
-  const pend    = allGastos.filter(g => g.estado === 'Pendiente');
-  const vencido = allGastos.filter(g => g.estado === 'Vencido');
-  const pagado  = allGastos.filter(g => g.estado === 'Pagado');
-  const sinFecha = allGastos.filter(g => g.estado !== 'Pagado' && (g.forma_pago||'').toLowerCase().includes('transferencia') && (!g.fecha_pago || g.fecha_pago === g.fecha_compra));
-  const totalPend = pend.reduce((s,g) => s + (g.monto_pagar||0), 0) + vencido.reduce((s,g) => s + (g.monto_pagar||0), 0);
+  const monthGastos = allGastos.filter(g => (g.fecha_compra||'').startsWith(summaryMonth));
+  const pend    = monthGastos.filter(g => g.estado === 'Pendiente');
+  const vencido = monthGastos.filter(g => g.estado === 'Vencido');
+  const pagado  = monthGastos.filter(g => g.estado === 'Pagado');
+
+  const totalMonth = monthGastos.reduce((s,g) => s + (g.monto_pagar||0), 0);
+  const totalMerc = monthGastos.filter(g => (g.categoria||'').toLowerCase().includes('adquisición') || (g.categoria||'').toLowerCase().includes('mercancías')).reduce((s,g) => s + (g.monto_pagar||0), 0);
+  const totalGastos = monthGastos.filter(g => (g.categoria||'').toLowerCase().includes('gastos generales')).reduce((s,g) => s + (g.monto_pagar||0), 0);
   const totalPaid = pagado.reduce((s,g) => s + (g.monto_pagar||0), 0);
-  const upcoming = [...pend,...vencido].filter(g => g.fecha_pago && g.fecha_pago !== g.fecha_compra).sort((a,b) => (a.fecha_pago||'').localeCompare(b.fecha_pago||''));
-  const next = upcoming[0];
+
+  // Top 3 suppliers by spend
+  const supMap = {};
+  monthGastos.forEach(g => {
+    const p = g.proveedor || g.proveedor_raw || 'Otro';
+    supMap[p] = (supMap[p]||0) + (g.monto_pagar||0);
+  });
+  const topSups = Object.entries(supMap).sort((a,b) => b[1]-a[1]).slice(0,3);
+  const topLabel = topSups.length ? topSups.map(([name,amt]) => `<strong>${name}</strong>: ${fmtMoney(amt)}`).join(' &nbsp;·&nbsp; ') : '<span style="color:#ccc">Sin datos</span>';
+
+  // Next payment (global, not filtered by month)
+  const allPend = allGastos.filter(g => g.estado !== 'Pagado' && g.fecha_pago && g.fecha_pago !== g.fecha_compra);
+  allPend.sort((a,b) => (a.fecha_pago||'').localeCompare(b.fecha_pago||''));
+  const next = allPend[0];
   const nextLabel = next
     ? `<strong>${next.proveedor}</strong> &nbsp;·&nbsp; $${(next.monto_pagar||0).toLocaleString('es-MX',{minimumFractionDigits:2})} &nbsp;·&nbsp; ${formatDate(next.fecha_pago)} ${countdownLabel(next.fecha_pago)}`
     : '<span style="color:#ccc">Sin pagos pendientes</span>';
@@ -500,28 +576,38 @@ function renderSummary(){
   document.getElementById('summaryRow').innerHTML = `
     <div class="summary-card ${vencido.length?'urgent':'pending'}">
       <div class="sc-icon">💰</div>
-      <div class="sc-label">Por pagar</div>
-      <div class="sc-value">$${totalPend.toLocaleString('es-MX',{minimumFractionDigits:0})}</div>
+      <div class="sc-label">Total del mes</div>
+      <div class="sc-value">${fmtMoney(totalMonth)}</div>
     </div>
-    <div class="summary-card pending">
+    <div class="summary-card cat-mercancias">
+      <div class="sc-icon">📦</div>
+      <div class="sc-label">Adquisición mercancías</div>
+      <div class="sc-value">${fmtMoney(totalMerc)}</div>
+    </div>
+    <div class="summary-card cat-gastos">
+      <div class="sc-icon">🏢</div>
+      <div class="sc-label">Gastos generales</div>
+      <div class="sc-value">${fmtMoney(totalGastos)}</div>
+    </div>
+    <div class="summary-card ${pend.length+vencido.length>0?'pending':''}">
       <div class="sc-icon">📋</div>
       <div class="sc-label">Pendientes</div>
       <div class="sc-value">${pend.length + vencido.length}</div>
+    </div>
+    <div class="summary-card ok">
+      <div class="sc-icon">✅</div>
+      <div class="sc-label">Pagados</div>
+      <div class="sc-value">${fmtMoney(totalPaid)}</div>
     </div>
     <div class="summary-card ${vencido.length?'urgent':''}">
       <div class="sc-icon">${vencido.length ? '⚠️' : '✓'}</div>
       <div class="sc-label">Vencidos</div>
       <div class="sc-value">${vencido.length}</div>
     </div>
-    ${sinFecha.length ? `<div class="summary-card" style="border-left:4px solid #e65100">
-      <div class="sc-icon">📅</div>
-      <div class="sc-label">Sin fecha</div>
-      <div class="sc-value" style="color:#e65100">${sinFecha.length}</div>
-    </div>` : ''}
-    <div class="summary-card ok">
-      <div class="sc-icon">✅</div>
-      <div class="sc-label">Pagados (total)</div>
-      <div class="sc-value">$${totalPaid.toLocaleString('es-MX',{minimumFractionDigits:0})}</div>
+    <div class="summary-card next" style="border-left-color:#7b1fa2">
+      <div class="sc-icon" style="display:inline">📊</div>
+      <span class="sc-label" style="display:inline;margin-right:8px">Top proveedores:</span>
+      <span class="sc-value">${topLabel}</span>
     </div>
     <div class="summary-card next">
       <div class="sc-icon" style="display:inline">📅</div>
@@ -548,6 +634,7 @@ function renderTable(){
     const isPaid    = g.estado === 'Pagado';
     const rowCls    = isOverdue ? 'overdue' : isToday ? 'today' : isPaid ? 'paid' : '';
     const isChecked = selectedIds.has(g.id);
+    const isEditing = editingRowId === g.id;
 
     const estadoBadge = isOverdue
       ? '<span class="badge badge-over">VENCIDO</span>'
@@ -570,26 +657,68 @@ function renderTable(){
       : formatDate(g.fecha_pago);
 
     const dateCell = !isPaid
-      ? `<span class="date-link" onclick="openDateModal('${g.id}')" title="Click para cambiar fecha">${dateLabel}</span>${hasRealDate ? countdownLabel(g.fecha_pago) : ''}`
+      ? `<span class="date-link" onclick="event.stopPropagation();openDateModal('${g.id}')" title="Click para cambiar fecha">${dateLabel}</span>${hasRealDate ? countdownLabel(g.fecha_pago) : ''}`
       : `${formatDate(g.fecha_pago)}`;
 
-    // Desktop actions: pay/undo + foto (NO delete button inline — delete is via selection)
     const actions = !isPaid
-      ? `<button class="btn btn-pay" onclick="openPayModal('${g.id}')">💰 Pagar</button>`
-      : `<button class="btn btn-undo" onclick="undoPay('${g.id}')">↩ Deshacer</button>`;
+      ? `<button class="btn btn-pay" onclick="event.stopPropagation();openPayModal('${g.id}')">💰 Pagar</button>`
+      : `<button class="btn btn-undo" onclick="event.stopPropagation();undoPay('${g.id}')">↩ Deshacer</button>`;
 
     const fotoBtn = hasFoto(g)
-      ? ` <button class="btn-foto" onclick="openFoto('${g.id}')">📷</button>`
+      ? ` <button class="btn-foto" onclick="event.stopPropagation();openFoto('${g.id}')">📷</button>`
       : '';
+
+    // Facturado indicator
+    const portal = getBillingPortal(g.proveedor);
+    const factBadge = g.facturado === 'Sí'
+      ? ' <span class="badge badge-facturado">✅ Facturado</span>'
+      : portal
+        ? ` <a href="${portal.url}" target="_blank" class="btn-facturar" onclick="event.stopPropagation()">🧾 Facturar</a>`
+        : '';
 
     const compRef = g.comprobante
       ? (g.comprobante.startsWith('http')
-        ? `<div style="font-size:10px;margin-top:3px"><a href="${g.comprobante}" target="_blank" style="color:#1565c0;text-decoration:none">📎 Ver comprobante PDF</a></div>`
+        ? `<div style="font-size:10px;margin-top:3px"><a href="${g.comprobante}" target="_blank" style="color:#1565c0;text-decoration:none" onclick="event.stopPropagation()">📎 Ver comprobante PDF</a></div>`
         : `<div style="font-size:10px;color:#2e7d32;margin-top:3px">📎 ${g.comprobante}</div>`)
       : '';
 
-    // Mobile card content
-    const mobileCard = `<td class="mobile-card" onclick="mobileCardTap(event, '${g.id}')">
+    // Edit row (inline expand)
+    const editHtml = isEditing ? `<tr class="edit-row-tr"><td colspan="10" class="edit-row-cell" style="padding:0">
+      <div class="edit-row">
+        <div class="edit-grid">
+          <div class="edit-field"><label>Proveedor</label><input type="text" id="ed_prov" value="${(g.proveedor||'').replace(/"/g,'&quot;')}"></div>
+          <div class="edit-field"><label>Folio</label><input type="text" id="ed_folio" value="${(g.folio||'').replace(/"/g,'&quot;')}"></div>
+          <div class="edit-field"><label>Fecha compra</label><input type="date" id="ed_fecha" value="${g.fecha_compra||''}"></div>
+          <div class="edit-field"><label>Monto factura</label><input type="number" id="ed_monto" step="0.01" value="${g.monto_factura||g.monto_pagar||0}" oninput="recalcEdit()"></div>
+          <div class="edit-field"><label>Ajustes (descuento)</label><input type="number" id="ed_ajustes" step="0.01" value="${g.ajustes||0}" oninput="recalcEdit()"></div>
+          <div class="edit-field"><label>Monto a pagar</label><input type="text" id="ed_pagar" value="${(g.monto_pagar||0).toFixed(2)}" readonly></div>
+          <div class="edit-field"><label>Forma de pago</label>
+            <select id="ed_forma">
+              <option value="Transferencia" ${g.forma_pago==='Transferencia'?'selected':''}>Transferencia</option>
+              <option value="Tarjeta crédito" ${g.forma_pago==='Tarjeta crédito'?'selected':''}>Tarjeta crédito</option>
+              <option value="Tarjeta débito" ${g.forma_pago==='Tarjeta débito'?'selected':''}>Tarjeta débito</option>
+              <option value="Efectivo" ${g.forma_pago==='Efectivo'?'selected':''}>Efectivo</option>
+              <option value="Cheque" ${g.forma_pago==='Cheque'?'selected':''}>Cheque</option>
+            </select>
+          </div>
+          <div class="edit-field"><label>Categoría</label>
+            <select id="ed_cat">
+              <option value="Adquisición de mercancías" ${(g.categoria||'').includes('mercancías')?'selected':''}>Adquisición de mercancías</option>
+              <option value="Gastos generales" ${(g.categoria||'').includes('generales')?'selected':''}>Gastos generales</option>
+            </select>
+          </div>
+        </div>
+        <div class="edit-actions">
+          <label class="edit-facturado"><input type="checkbox" id="ed_facturado" ${g.facturado==='Sí'?'checked':''}> Facturado</label>
+          ${hasFoto(g)?`<button class="btn btn-foto" onclick="openFoto('${g.id}')" style="margin-right:4px">📷 Ver foto</button>`:''}
+          <button class="btn btn-cancel" onclick="closeEditRow()">Cancelar</button>
+          <button class="btn btn-save" onclick="saveEditRow('${g.id}')">💾 Guardar</button>
+        </div>
+      </div>
+    </td></tr>` : '';
+
+    // Mobile card
+    const mobileCard = `<td class="mobile-card" onclick="toggleEditRow('${g.id}')">
       <div style="display:flex;align-items:flex-start;gap:12px">
         <input type="checkbox" class="row-check row-check-item" ${isChecked?'checked':''} onchange="event.stopPropagation();toggleSelect('${g.id}',this.checked)" style="margin-top:3px">
         <div style="flex:1;min-width:0">
@@ -607,6 +736,7 @@ function renderTable(){
           <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
             ${estadoBadge}
             <span class="fp-chip ${fpClass}" style="font-size:10px">${fpIcons[fpKey]} ${g.forma_pago}</span>
+            ${factBadge}
             ${hasFoto(g)?`<button class="btn-foto" onclick="event.stopPropagation();openFoto('${g.id}')" style="font-size:10px;padding:3px 6px">📷</button>`:''}
           </div>
           <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px">
@@ -625,8 +755,8 @@ function renderTable(){
       </div>
     </td>`;
 
-    return `<tr class="${rowCls} ${isChecked?'selected':''}" data-id="${g.id}">
-      <td style="text-align:center"><input type="checkbox" class="row-check row-check-item" ${isChecked?'checked':''} onchange="toggleSelect('${g.id}',this.checked)"></td>
+    return `<tr class="${rowCls} ${isChecked?'selected':''} ${isEditing?'editing':''}" data-id="${g.id}" onclick="toggleEditRow('${g.id}')">
+      <td style="text-align:center" onclick="event.stopPropagation()"><input type="checkbox" class="row-check row-check-item" ${isChecked?'checked':''} onchange="toggleSelect('${g.id}',this.checked)"></td>
       <td><strong>${dateCell}</strong></td>
       <td>
         <strong>${g.proveedor||g.proveedor_raw||'—'}</strong>
@@ -640,19 +770,69 @@ function renderTable(){
       </td>
       <td><span class="fp-chip ${fpClass}">${fpIcons[fpKey]} ${g.forma_pago}</span></td>
       <td style="font-size:11px;color:#7a6b5d">${g.categoria||'—'}</td>
-      <td>${estadoBadge}${compRef}</td>
-      <td style="white-space:nowrap">${actions}${fotoBtn}</td>
+      <td>${estadoBadge}${factBadge}${compRef}</td>
+      <td style="white-space:nowrap" onclick="event.stopPropagation()">${actions}${fotoBtn}</td>
       ${mobileCard}
-    </tr>`;
+    </tr>${editHtml}`;
   }).join('');
 }
 
-// Mobile card tap = toggle selection
-function mobileCardTap(event, id){
-  // Don't toggle if user tapped a button/link
-  if(event.target.closest('button, a, .date-link, input')) return;
-  const cb = event.currentTarget.querySelector('.row-check-item');
-  if(cb){ cb.checked = !cb.checked; toggleSelect(id, cb.checked); }
+// ── Inline Edit ──
+function toggleEditRow(id){
+  if(editingRowId === id){ closeEditRow(); return; }
+  editingRowId = id;
+  renderTable();
+}
+function closeEditRow(){
+  editingRowId = null;
+  renderTable();
+}
+function recalcEdit(){
+  const monto = parseFloat(document.getElementById('ed_monto').value)||0;
+  const ajustes = parseFloat(document.getElementById('ed_ajustes').value)||0;
+  document.getElementById('ed_pagar').value = (monto - ajustes).toFixed(2);
+}
+function saveEditRow(id){
+  const g = allGastos.find(x=>x.id===id); if(!g) return;
+  const newProv = document.getElementById('ed_prov').value.trim();
+  const newFolio = document.getElementById('ed_folio').value.trim();
+  const newFecha = document.getElementById('ed_fecha').value;
+  const newMonto = parseFloat(document.getElementById('ed_monto').value)||0;
+  const newAjustes = parseFloat(document.getElementById('ed_ajustes').value)||0;
+  const newPagar = newMonto - newAjustes;
+  const newForma = document.getElementById('ed_forma').value;
+  const newCat = document.getElementById('ed_cat').value;
+  const newFact = document.getElementById('ed_facturado').checked ? 'Sí' : '';
+
+  g.proveedor = newProv;
+  g.folio = newFolio;
+  g.fecha_compra = newFecha;
+  g.monto_factura = newMonto;
+  g.ajustes = newAjustes;
+  g.monto_pagar = newPagar;
+  g.forma_pago = newForma;
+  g.categoria = newCat;
+  g.facturado = newFact;
+
+  // Re-apply status logic
+  if(!newForma.toLowerCase().includes('transferencia')){
+    g.estado = 'Pagado';
+  } else if(g.estado === 'Pagado' && newForma.toLowerCase().includes('transferencia')){
+    g.estado = g.fecha_pago && g.fecha_pago < todayStr() ? 'Vencido' : 'Pendiente';
+  }
+
+  saveGastos();
+  editingRowId = null;
+  applyFilters();
+  showToast('Actualizado: ' + newProv);
+
+  // Push to Sheet
+  pushFacturaToSheet(id, {
+    Proveedor: newProv, Folio: newFolio, Fecha_Compra: newFecha,
+    Monto_Factura: newMonto, Ajustes: newAjustes, Monto_Pagar: newPagar,
+    Forma_Pago: newForma, Categoria: newCat, Facturado: newFact,
+    Estado: g.estado
+  });
 }
 
 // ── Modals ──
@@ -677,33 +857,24 @@ async function confirmPay(){
   g.estado = 'Pagado';
   g.fecha_pago_real = document.getElementById('payDate').value || todayStr();
   g.comprobante = document.getElementById('payRef').value.trim();
-
-  // Check for PDF file
   const pdfInput = document.getElementById('payPdf');
   const pdfFile = pdfInput.files[0];
   let pdfBase64 = '';
-
   if(pdfFile){
     document.getElementById('pdfUploadStatus').textContent = '⏳ Subiendo PDF…';
-    try {
-      pdfBase64 = await fileToBase64(pdfFile);
-    } catch(e){
+    try { pdfBase64 = await fileToBase64(pdfFile); } catch(e){
       document.getElementById('pdfUploadStatus').textContent = '❌ Error leyendo PDF';
-      console.log('PDF read error:', e);
     }
   }
-
   saveGastos(); closePayModal(); clearSelection(); applyFilters();
   showToast('Pagado: ' + g.proveedor + ' · $' + (g.monto_pagar||0).toFixed(2));
-
-  // Push to Sheet (and upload PDF if present)
   await pushStatusToSheet(g.id, 'Pagado', g.fecha_pago_real, g.comprobante, pdfBase64, g.proveedor);
 }
 
 function fileToBase64(file){
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
-    reader.onload = () => resolve(reader.result.split(',')[1]); // strip data:... prefix
+    reader.onload = () => resolve(reader.result.split(',')[1]);
     reader.onerror = reject;
     reader.readAsDataURL(file);
   });
@@ -749,7 +920,6 @@ function hasFoto(g){
 function openFoto(id){
   const g = allGastos.find(x => x.id === id);
   if(!g) return;
-  // Priority: Drive URL (from Sheet) → localStorage base64
   const driveUrl = g.foto_url || g.Foto_URL || '';
   const localB64 = g.foto || '';
   if(!driveUrl && !localB64) return;
@@ -759,7 +929,7 @@ function openFoto(id){
 }
 function closeFotoModal(){ document.getElementById('fotoModal').classList.remove('open'); }
 
-// ── Delete (single — kept for backward compat but now uses selection) ──
+// ── Delete ──
 function deleteGasto(id){
   if(!confirm('¿Eliminar este registro de pago?')) return;
   allGastos = allGastos.filter(g => g.id !== id);
@@ -828,16 +998,16 @@ async function syncFromSheet(){
       forma_pago   : g.Forma_Pago || g.forma_pago || '',
       categoria    : g.Categoria || g.categoria || '',
       estado       : (g.Forma_Pago||g.forma_pago||'').toLowerCase().includes('transferencia')
-        ? (g.Estado || g.estado || 'Pendiente')  // Transferencia: use stored or default Pendiente
-        : 'Pagado',                               // Everything else: always Pagado, no manual pay step
+        ? (g.Estado || g.estado || 'Pendiente')
+        : 'Pagado',
       fecha_pago   : g.Fecha_Pago || g.fecha_pago || '',
       credit_days  : parseInt(g.Credit_Days || g.credit_days || 0),
       comprobante  : g.Comprobante || g.comprobante || '',
       created_at   : g.Created_At || g.created_at || '',
-      foto_url     : g.Foto_URL || g.foto_url || ''
+      foto_url     : g.Foto_URL || g.foto_url || '',
+      facturado    : g.Facturado || g.facturado || ''
     }));
 
-    // Preserve local base64 photos for entries that also exist in Sheet
     const localMap = {};
     allGastos.forEach(g => { if(g.foto) localMap[g.id] = g.foto; });
     merged.forEach(g => { if(!g.foto_url && localMap[g.id]) g.foto = localMap[g.id]; });
@@ -854,22 +1024,14 @@ async function syncFromSheet(){
   btn.innerHTML = '🔄 Sincronizar'; btn.disabled = false;
 }
 
-// Push status update to Sheet
+// Push updates to Sheet
 async function pushStatusToSheet(id, estado, fechaPagoReal, comprobante, pdfBase64, proveedor){
   const url = getScriptUrl();
   if(!url) return;
   try {
     const payload = { action: 'update_status', id, estado, fecha_pago_real: fechaPagoReal||'', comprobante: comprobante||'' };
-    if(pdfBase64){
-      payload.pdf_base64 = pdfBase64;
-      payload.proveedor = proveedor || '';
-    }
-    await fetch(url, {
-      method: 'POST',
-      headers: {'Content-Type':'text/plain'},
-      body: JSON.stringify(payload),
-      mode: 'no-cors'
-    });
+    if(pdfBase64){ payload.pdf_base64 = pdfBase64; payload.proveedor = proveedor || ''; }
+    await fetch(url, { method:'POST', headers:{'Content-Type':'text/plain'}, body:JSON.stringify(payload), mode:'no-cors' });
     if(pdfBase64) showToast('📎 PDF subido a Drive');
   } catch(e){ console.log('Push error:', e); }
 }
@@ -878,12 +1040,15 @@ async function pushDateToSheet(id, fechaPago, estado){
   const url = getScriptUrl();
   if(!url) return;
   try {
-    await fetch(url, {
-      method: 'POST',
-      headers: {'Content-Type':'text/plain'},
-      body: JSON.stringify({ action: 'update_date', id, fecha_pago: fechaPago, estado }),
-      mode: 'no-cors'
-    });
+    await fetch(url, { method:'POST', headers:{'Content-Type':'text/plain'}, body:JSON.stringify({ action:'update_date', id, fecha_pago:fechaPago, estado }), mode:'no-cors' });
+  } catch(e){ console.log('Push error:', e); }
+}
+
+async function pushFacturaToSheet(id, fields){
+  const url = getScriptUrl();
+  if(!url) return;
+  try {
+    await fetch(url, { method:'POST', headers:{'Content-Type':'text/plain'}, body:JSON.stringify({ action:'update_factura', id, fields }), mode:'no-cors' });
   } catch(e){ console.log('Push error:', e); }
 }
 
@@ -892,6 +1057,7 @@ window.addEventListener('load', () => {
   const now = new Date();
   const opts = { weekday:'long', year:'numeric', month:'long', day:'numeric' };
   document.getElementById('topbarDate').innerHTML = now.toLocaleDateString('es-MX', opts);
+  document.getElementById('monthLabel').textContent = monthName(summaryMonth);
   const sUrl = getScriptUrl();
   if(sUrl){
     document.getElementById('configBar').classList.add('ok');
