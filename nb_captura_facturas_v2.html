@@ -327,6 +327,7 @@ tr:last-child td { border-bottom: none; }
     </div>
     <div class="sync-detail" id="syncDetail">
       <span>📦 Ingredientes: <strong id="ingCount">0</strong></span>
+      <span>🏪 Proveedores: <strong id="provCount">0</strong></span>
       <span>🕐 Último sync: <strong id="syncTime">Nunca</strong></span>
       <span id="syncStatusText" style="color:#777">Sin configurar — usando base de datos local</span>
     </div>
@@ -629,11 +630,14 @@ let ssHighlighted = -1;
 
 // Supplier state
 let SUPPLIERS_DB       = [];  // array of name strings
+let PROVEEDORES_DB     = {};  // { normalizedName: { name, creditDays, formaPago, email, catGasto } }
 let currentSupplier    = '';  // extracted from invoice
 let currentSupMatch    = null; // { name, matchType } or null
 let supCallback        = null;
 const SUPPLIER_MAP_KEY   = 'nb_supplier_mappings';
 const SUPPLIER_EXTRA_KEY = 'nb_supplier_extras';
+const PROVEEDORES_CACHE_KEY = 'nb_proveedores_cache';
+const PROVEEDORES_CACHE_TS  = 'nb_proveedores_ts';
 
 const FORMATS = {
   narrow: { w: '38%', h: '75%', label: 'Recibo delgado' },
@@ -815,8 +819,10 @@ async function syncIngredients(auto=false) {
       btn.disabled = false;
       if (ok) {
         updateIngUI(INGREDIENTS_DB.length, Date.now());
-        updateSyncUI('synced', '✅ Sincronizado — ' + INGREDIENTS_DB.length + ' ingredientes');
-        if (!auto) showToast('✅ Sincronizado: ' + INGREDIENTS_DB.length + ' ingredientes');
+        const pc = Object.keys(PROVEEDORES_DB).length;
+        const provLabel = pc > 0 ? ' · ' + pc + ' proveedores' : '';
+        updateSyncUI('synced', '✅ Sincronizado — ' + INGREDIENTS_DB.length + ' ingredientes' + provLabel);
+        if (!auto) showToast('✅ Sincronizado: ' + INGREDIENTS_DB.length + ' ingredientes' + provLabel);
       } else {
         updateSyncUI('error', '❌ ' + (msg || 'Error desconocido'));
         if (!auto) showToast('❌ ' + (msg || 'Error'), 5000);
@@ -840,6 +846,13 @@ async function syncIngredients(auto=false) {
         localStorage.setItem(CACHE_KEY, JSON.stringify(parsed));
         localStorage.setItem(CACHE_TS_KEY, String(Date.now()));
         buildSuppliersFromDB();
+        // Also sync PROVEEDORES tab (runs after finish so UI isn't blocked)
+        syncProveedores(sheetId, auto).then(() => {
+          buildSuppliersFromDB();
+          updateIngUI(INGREDIENTS_DB.length, Date.now());
+          const pc = Object.keys(PROVEEDORES_DB).length;
+          if (pc > 0) updateSyncUI('synced', '✅ ' + INGREDIENTS_DB.length + ' ingredientes · ' + pc + ' proveedores');
+        });
         finish(true);
       } catch(e) { finish(false, e.message); }
     };
@@ -850,8 +863,108 @@ async function syncIngredients(auto=false) {
   });
 }
 
+// ══════════════════════════════════════════════
+// PROVEEDORES TAB SYNC
+// ══════════════════════════════════════════════
+function parseProveedoresGviz(t) {
+  if (!t || !t.rows) return {};
+  const db = {};
+  // Cols: 0=Proveedor, 1=ContactoVentas, 2=ContactoPagos, 3=TelCompras, 4=TelPagos,
+  // 5=Email, 6=FormaPago, 7=DíasCrédito, 8=Banco, 9=CLABE, 10=Cuenta,
+  // 11=RazónSocial, 12=VíaPedido, 13=LigaFacturación, 14=Facturas2026, 15=CatGasto, 16=Fuente
+  for (const row of t.rows) {
+    if (!row.c) continue;
+    const getV = (i) => {
+      if(!row.c[i]) return null;
+      return row.c[i].v != null ? row.c[i].v : (row.c[i].f || null);
+    };
+    const name = getV(0) != null ? String(getV(0)).trim() : '';
+    if (!name) continue;
+    const rawDays = getV(7);
+    const creditDays = typeof rawDays === 'number' ? rawDays : parseInt(String(rawDays||'').replace(/[^0-9]/g,'')) || 0;
+    const formaPago = getV(6) ? String(getV(6)).trim() : '';
+    const email = getV(5) ? String(getV(5)).trim() : '';
+    const catGasto = getV(15) ? String(getV(15)).trim() : '';
+    db[normalize(name)] = { name, creditDays, formaPago, email, catGasto };
+  }
+  return db;
+}
+
+async function syncProveedores(sheetId, auto=false) {
+  return new Promise((resolve) => {
+    const cbName = 'nb_prov_' + Date.now();
+    const sheetName = encodeURIComponent('PROVEEDORES');
+    const src = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:json;responseHandler:${cbName}&sheet=${sheetName}&headers=1`;
+    const script = document.createElement('script');
+    script.src = src;
+    let done = false;
+
+    const finish = (ok) => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      try { document.head.removeChild(script); } catch {}
+      delete window[cbName];
+      resolve(ok);
+    };
+
+    const timer = setTimeout(() => finish(false), 10000);
+
+    window[cbName] = (resp) => {
+      try {
+        if (!resp || resp.status !== 'ok') throw new Error();
+        const parsed = parseProveedoresGviz(resp.table);
+        const count = Object.keys(parsed).length;
+        if (count >= 1) {
+          PROVEEDORES_DB = parsed;
+          localStorage.setItem(PROVEEDORES_CACHE_KEY, JSON.stringify(parsed));
+          localStorage.setItem(PROVEEDORES_CACHE_TS, String(Date.now()));
+          if (!auto) showToast('✅ ' + count + ' proveedores sincronizados');
+        }
+        finish(true);
+      } catch { finish(false); }
+    };
+
+    script.onerror = () => finish(false);
+    document.head.appendChild(script);
+  });
+}
+
+function loadCachedProveedores() {
+  const cached = localStorage.getItem(PROVEEDORES_CACHE_KEY);
+  if (cached) {
+    try { PROVEEDORES_DB = JSON.parse(cached); } catch {}
+  }
+}
+
+// Look up supplier info from PROVEEDORES_DB
+function getProveedorInfo(supplierName) {
+  if (!supplierName) return null;
+  const n = normalize(supplierName);
+  // Direct lookup
+  if (PROVEEDORES_DB[n]) return PROVEEDORES_DB[n];
+  // Partial match: check if any proveedores key is contained in the name or vice versa
+  for (const [k, v] of Object.entries(PROVEEDORES_DB)) {
+    if (k.length > 3 && (k.includes(n) || n.includes(k))) return v;
+  }
+  // Word overlap match
+  const words = n.split(/\s+/).filter(w => w.length > 2);
+  if (words.length) {
+    let best = null, bestScore = 0;
+    for (const [k, v] of Object.entries(PROVEEDORES_DB)) {
+      const kw = k.split(/\s+/).filter(w => w.length > 2);
+      const overlap = words.filter(w => kw.includes(w)).length;
+      const score = overlap / Math.max(words.length, kw.length || 1);
+      if (score > bestScore) { bestScore = score; best = v; }
+    }
+    if (bestScore >= 0.5) return best;
+  }
+  return null;
+}
+
 function updateIngUI(count, ts) {
   document.getElementById('ingCount').textContent = count;
+  document.getElementById('provCount').textContent = Object.keys(PROVEEDORES_DB).length;
   document.getElementById('syncTime').textContent = ts ? timeAgo(ts) : 'Nunca';
 }
 
@@ -860,13 +973,17 @@ function loadCachedIngredients() {
   const ts     = parseInt(localStorage.getItem(CACHE_TS_KEY) || '0');
   const savedUrl = localStorage.getItem(SHEET_URL_KEY) || '';
   if (savedUrl) document.getElementById('sheetUrlInput').value = savedUrl;
+  // Always load cached proveedores first
+  loadCachedProveedores();
   if (cached && ts) {
     try {
       INGREDIENTS_DB = JSON.parse(cached);
+      buildSuppliersFromDB();
       updateIngUI(INGREDIENTS_DB.length, ts);
       const age = Date.now() - ts;
       if (age < CACHE_MAX_AGE) {
-        updateSyncUI('synced', '✅ ' + INGREDIENTS_DB.length + ' ingredientes · ' + timeAgo(ts));
+        const provCount = Object.keys(PROVEEDORES_DB).length;
+        updateSyncUI('synced', '✅ ' + INGREDIENTS_DB.length + ' ingredientes · ' + provCount + ' proveedores · ' + timeAgo(ts));
         return; // fresh cache, no need to re-fetch
       }
     } catch {}
@@ -1112,7 +1229,13 @@ function getExtraSuppliers(){ try{return JSON.parse(localStorage.getItem(SUPPLIE
 
 function buildSuppliersFromDB(){
   const seen=new Set(), list=[];
-  // Extract from ingredients DB
+  // 1. PROVEEDORES tab canonical names (highest priority — these are clean, authoritative)
+  for(const entry of Object.values(PROVEEDORES_DB)){
+    const k=normalize(entry.name);
+    if(!k||k.length<2) continue;
+    if(!seen.has(k)){seen.add(k);list.push(entry.name);}
+  }
+  // 2. Extract from ingredients DB (only add if not already from PROVEEDORES)
   for(const ing of INGREDIENTS_DB){
     if(!ing.p) continue;
     for(const p of ing.p.split(/[,;\/]/)){
@@ -1120,11 +1243,11 @@ function buildSuppliersFromDB(){
       const k=normalize(n); if(!seen.has(k)){seen.add(k);list.push(n);}
     }
   }
-  // Add saved extras
+  // 3. Add saved extras
   for(const e of getExtraSuppliers()){
     const k=normalize(e); if(!seen.has(k)){seen.add(k);list.push(e);}
   }
-  // Add from supplier mappings (the "nb side")
+  // 4. Add from supplier mappings (the "nb side")
   const maps=getSupplierMappings();
   for(const v of Object.values(maps)){
     const k=normalize(v); if(!seen.has(k)){seen.add(k);list.push(v);}
@@ -1157,8 +1280,13 @@ function renderProveedores(){
   if(!SUPPLIERS_DB.length){el.innerHTML='<p class="mapping-empty">Sin proveedores. Sincroniza tu Sheet o agrega manualmente.</p>';return;}
   const extras=new Set(getExtraSuppliers().map(e=>normalize(e)));
   el.innerHTML=SUPPLIERS_DB.map(s=>{
-    const isExtra=extras.has(normalize(s));
-    return `<div class="prov-row"><span class="prov-name">${s}</span><span class="prov-src">${isExtra?'Manual':'Sheet'}</span>${isExtra?`<button class="btn btn-red btn-xs" onclick="deleteSupplier('${s.replace(/'/g,"\\'")}')">✕</button>`:''}</div>`;
+    const n=normalize(s);
+    const isExtra=extras.has(n);
+    const isProv=!!PROVEEDORES_DB[n];
+    const info=PROVEEDORES_DB[n];
+    const srcLabel=isExtra?'Manual':(isProv?'Proveedores':'Materia Prima');
+    const creditBadge=info&&info.creditDays?` <span style="font-size:10px;background:#e3f2fd;color:#1565c0;padding:1px 6px;border-radius:8px">${info.creditDays}d</span>`:'';
+    return `<div class="prov-row"><span class="prov-name">${s}${creditBadge}</span><span class="prov-src">${srcLabel}</span>${isExtra?`<button class="btn btn-red btn-xs" onclick="deleteSupplier('${s.replace(/'/g,"\\'")}')">✕</button>`:''}</div>`;
   }).join('');
 }
 
@@ -1610,6 +1738,28 @@ document.addEventListener('click', e=>{
 // ══════════════════════════════════════════════
 // GASTOS / PAYMENTS PORTAL
 // ══════════════════════════════════════════════
+function getSupplierCreditDays(supplierName) {
+  // 1. Check PROVEEDORES_DB for authoritative credit days
+  const info = getProveedorInfo(supplierName);
+  if (info && info.creditDays > 0) return info.creditDays;
+  // 2. Fallback: extract from raw supplier name e.g. "(7 días)"
+  const creditMatch = (supplierName||'').match(/(\d+)\s*d[ií]as?/i);
+  return creditMatch ? parseInt(creditMatch[1]) : 0;
+}
+
+function getSupplierFormaPago(supplierName) {
+  const info = getProveedorInfo(supplierName);
+  if (!info || !info.formaPago) return '';
+  const fp = info.formaPago.toLowerCase();
+  // Map PROVEEDORES values to dropdown options
+  if (fp.includes('transferencia')) return 'Transferencia';
+  if (fp.includes('tarjeta') && fp.includes('créd')) return 'Tarjeta crédito';
+  if (fp.includes('tarjeta') && fp.includes('déb')) return 'Tarjeta débito';
+  if (fp.includes('efectivo')) return 'Efectivo';
+  if (fp.includes('cheque')) return 'Cheque';
+  return '';
+}
+
 function updateGastosPanel(){
   const panel = document.getElementById('gastosPanel');
   if(!currentItems.length || !lastParsed){ panel.style.display='none'; return; }
@@ -1617,9 +1767,8 @@ function updateGastosPanel(){
   const adjTotal   = getAdjTotal();
   const finalTotal = Math.max(0, currentInvoiceTotal - adjTotal);
   const sup = currentSupMatch ? currentSupMatch.name : (currentSupplier||'—');
-  // Extract credit days from raw supplier name e.g. "(7 días)"
-  const creditMatch = (currentSupplier||'').match(/(\d+)\s*d[ií]as?/i);
-  const creditDays  = creditMatch ? parseInt(creditMatch[1]) : 0;
+  // Smart credit days lookup: PROVEEDORES_DB first, then regex fallback
+  const creditDays = getSupplierCreditDays(sup);
   const fechaCompra = lastParsed.fecha || new Date().toISOString().slice(0,10);
   let fechaPagoEst = fechaCompra;
   if(creditDays > 0){
@@ -1628,6 +1777,24 @@ function updateGastosPanel(){
     fechaPagoEst = d.toISOString().slice(0,10);
   }
   const creditLabel = creditDays > 0 ? `⏳ Crédito ${creditDays} días (pago ~${fechaPagoEst})` : '⚡ Pago inmediato';
+  // Auto-populate forma de pago if available
+  const autoForma = getSupplierFormaPago(sup);
+  const formaSelect = document.getElementById('gastoForma');
+  if (autoForma && !formaSelect.value) {
+    formaSelect.value = autoForma;
+  }
+  // Auto-populate categoría if available from PROVEEDORES
+  const provInfo = getProveedorInfo(sup);
+  if (provInfo && provInfo.catGasto) {
+    const catSelect = document.getElementById('gastoCategoria');
+    // Try matching the catGasto to an option
+    for (const opt of catSelect.options) {
+      if (normalize(opt.value) === normalize(provInfo.catGasto) || opt.value === provInfo.catGasto) {
+        catSelect.value = opt.value;
+        break;
+      }
+    }
+  }
   document.getElementById('gastosSummary').innerHTML = `
     <div class="gsm-item"><span class="gsm-label">Proveedor</span><span class="gsm-value">${sup}</span></div>
     <div class="gsm-item"><span class="gsm-label">Folio</span><span class="gsm-value">${lastParsed.numero_factura||'—'}</span></div>
@@ -1646,8 +1813,7 @@ function enviarGasto(){
   const adjTotal   = getAdjTotal();
   const finalTotal = Math.max(0, currentInvoiceTotal - adjTotal);
   const sup        = currentSupMatch ? currentSupMatch.name : (currentSupplier||'');
-  const creditMatch = (currentSupplier||'').match(/(\d+)\s*d[ií]as?/i);
-  const creditDays  = creditMatch ? parseInt(creditMatch[1]) : 0;
+  const creditDays = getSupplierCreditDays(sup);
   const fechaCompra = lastParsed.fecha || new Date().toISOString().slice(0,10);
   let fechaPago = fechaCompra;
   if(creditDays > 0){

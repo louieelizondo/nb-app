@@ -14,7 +14,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; b
 .topbar h1 { font-size: 20px; font-weight: 800; letter-spacing: -.3px; }
 .topbar-sub { font-size: 12px; opacity: .75; margin-top: 1px; }
 .topbar-right { margin-left: auto; font-size: 12px; opacity: .7; text-align: right; }
-.container { max-width: 1200px; margin: 0 auto; padding: 24px 24px 60px; }
+.container { max-width: 1200px; margin: 0 auto; padding: 24px 24px 100px; }
 
 /* SUMMARY CARDS */
 .summary-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 22px; }
@@ -41,7 +41,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; b
 .filters select, .filters input { padding: 8px 14px; border: 2px solid #e0d8cf; border-radius: 10px; font-size: 13px; background: white; color: #2d2319; transition: border-color .2s; }
 .filters select:focus, .filters input:focus { border-color: #2e6b2e; outline: none; box-shadow: 0 0 0 3px rgba(46,107,46,.1); }
 
-/* TABLE */
+/* TABLE — DESKTOP */
 .tbl-wrap { overflow-x: auto; background: white; border-radius: 16px; box-shadow: 0 2px 16px rgba(0,0,0,.06); }
 table { width: 100%; border-collapse: collapse; font-size: 13px; }
 thead th { background: linear-gradient(135deg, #3a7c3a, #2e6b2e); color: white; padding: 13px 16px; text-align: left; font-size: 11px; font-weight: 700; letter-spacing: .5px; text-transform: uppercase; white-space: nowrap; position: sticky; top: 0; }
@@ -56,6 +56,10 @@ tbody tr.overdue:hover { background: #ffebee; }
 tbody tr.today { background: linear-gradient(90deg, #fffde7, #fff); }
 tbody tr.paid { background: linear-gradient(90deg, #f1f8f1, #fff); }
 tbody tr.paid td { color: #888; }
+tbody tr.selected { background: #e3f2fd !important; outline: 2px solid #1565c0; outline-offset: -2px; }
+
+/* SELECTION CHECKBOX */
+.row-check { width: 18px; height: 18px; cursor: pointer; accent-color: #2e6b2e; }
 
 /* BADGES */
 .badge { display: inline-flex; align-items: center; gap: 4px; padding: 4px 12px; border-radius: 20px; font-size: 11px; font-weight: 700; white-space: nowrap; letter-spacing: .3px; }
@@ -82,6 +86,17 @@ tbody tr.paid td { color: #888; }
 .btn-brown:hover { transform: translateY(-1px); }
 .btn-foto { background: #e3f2fd; color: #1565c0; border: 1.5px solid #90caf9; padding: 5px 10px; font-size: 11px; border-radius: 8px; cursor: pointer; font-weight: 600; transition: all .15s; }
 .btn-foto:hover { background: #bbdefb; }
+
+/* FLOATING ACTION BAR (selection mode) */
+.action-bar { position: fixed; bottom: 0; left: 0; right: 0; background: white; border-top: 2px solid #e0d8cf; padding: 14px 24px; display: flex; align-items: center; gap: 12px; z-index: 8000; box-shadow: 0 -4px 20px rgba(0,0,0,.1); transform: translateY(100%); transition: transform .25s ease; }
+.action-bar.visible { transform: translateY(0); }
+.action-bar .ab-count { font-size: 14px; font-weight: 800; color: #2e6b2e; }
+.action-bar .ab-spacer { flex: 1; }
+.btn-action-pay { background: linear-gradient(135deg, #43a047, #2e7d32); color: white; padding: 12px 28px; border: none; border-radius: 12px; font-size: 14px; font-weight: 800; cursor: pointer; box-shadow: 0 3px 10px rgba(46,125,50,.3); transition: all .15s; }
+.btn-action-pay:hover { transform: translateY(-1px); box-shadow: 0 5px 16px rgba(46,125,50,.4); }
+.btn-action-del { background: none; color: #c62828; border: 2px solid #ef9a9a; padding: 10px 20px; border-radius: 12px; font-size: 13px; font-weight: 700; cursor: pointer; transition: all .15s; }
+.btn-action-del:hover { background: #ffebee; }
+.btn-action-cancel { background: #f5f0eb; color: #7a6b5d; border: none; padding: 10px 20px; border-radius: 12px; font-size: 13px; font-weight: 600; cursor: pointer; }
 
 /* MODAL */
 .modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,.5); backdrop-filter: blur(4px); z-index: 9000; display: none; align-items: center; justify-content: center; }
@@ -127,11 +142,57 @@ tbody tr.paid td { color: #888; }
 .sync-spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid #ccc; border-top-color: #2e6b2e; border-radius: 50%; animation: spin .8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
-/* RESPONSIVE */
+/* ════════════════════════════════════
+   MOBILE — Card layout for table
+   ════════════════════════════════════ */
 @media (max-width: 768px) {
-  .summary-row { grid-template-columns: 1fr 1fr; }
+  .topbar { padding: 14px 16px; gap: 12px; }
+  .topbar h1 { font-size: 17px; }
+  .logo { width: 38px; height: 38px; font-size: 14px; }
+  .container { padding: 14px 12px 110px; }
+
+  /* Summary: 2 cols */
+  .summary-row { grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px; }
+  .summary-card { padding: 14px 16px; border-radius: 12px; }
+  .summary-card .sc-value { font-size: 22px; }
   .summary-card.next { grid-column: 1 / -1; }
-  .container { padding: 16px; }
+  .summary-card.next .sc-value { font-size: 14px; }
+
+  /* Filters */
+  .filters { padding: 12px 14px; gap: 8px; border-radius: 12px; }
+  .chip { padding: 6px 12px; font-size: 12px; }
+  .filters select, .filters input { font-size: 12px; padding: 7px 10px; min-width: 0 !important; flex: 1; }
+
+  /* Config bar */
+  .config-bar { padding: 10px 14px; gap: 8px; flex-direction: column; align-items: stretch; }
+  .config-bar input { min-width: 0; font-size: 11px; }
+  .config-bar .btn { align-self: flex-start; }
+
+  /* TABLE → CARD LAYOUT */
+  .tbl-wrap { overflow-x: unset; background: transparent; box-shadow: none; border-radius: 0; }
+  table { display: block; }
+  thead { display: none; }
+  tbody { display: flex; flex-direction: column; gap: 12px; }
+  tbody tr { display: block; background: white; border-radius: 16px; padding: 0; box-shadow: 0 2px 12px rgba(0,0,0,.06); overflow: hidden; position: relative; border-left: 4px solid #e0d8cf; }
+  tbody tr.overdue { border-left-color: #e53935; background: linear-gradient(135deg, #fff 85%, #ffebee 100%); }
+  tbody tr.today { border-left-color: #ff9800; background: linear-gradient(135deg, #fff 85%, #fff8e1 100%); }
+  tbody tr.paid { border-left-color: #43a047; background: linear-gradient(135deg, #fff 85%, #e8f5e9 100%); }
+  tbody tr.paid td { color: inherit; }
+  tbody tr.selected { border-left-color: #1565c0 !important; outline: 2px solid #1565c0; }
+  tbody td { display: none; padding: 0; border-bottom: none; }
+
+  /* Only show the mobile card cell */
+  tbody td.mobile-card { display: block; padding: 14px 16px 12px; }
+
+  /* Action bar mobile adjustments */
+  .action-bar { padding: 12px 16px; gap: 8px; flex-wrap: wrap; }
+  .btn-action-pay { padding: 10px 20px; font-size: 13px; }
+  .btn-action-del { padding: 8px 14px; font-size: 12px; }
+}
+
+/* Desktop: hide mobile card cell */
+@media (min-width: 769px) {
+  td.mobile-card { display: none; }
 }
 </style>
 </head>
@@ -180,6 +241,7 @@ tbody tr.paid td { color: #888; }
   <div class="tbl-wrap">
     <table>
       <thead><tr>
+        <th style="width:36px"><input type="checkbox" class="row-check" id="selectAll" onchange="toggleSelectAll(this.checked)" title="Seleccionar todos"></th>
         <th>Fecha Pago</th>
         <th>Proveedor</th>
         <th>Folio</th>
@@ -197,6 +259,15 @@ tbody tr.paid td { color: #888; }
       <p class="sub">Las facturas aparecerán aquí cuando se envíen desde la app de captura</p>
     </div>
   </div>
+</div>
+
+<!-- FLOATING ACTION BAR -->
+<div class="action-bar" id="actionBar">
+  <span class="ab-count" id="abCount">0 seleccionados</span>
+  <span class="ab-spacer"></span>
+  <button class="btn-action-cancel" onclick="clearSelection()">Cancelar</button>
+  <button class="btn-action-del" onclick="deleteSelected()">🗑 Eliminar</button>
+  <button class="btn-action-pay" id="abPayBtn" onclick="paySelected()">💰 Pagar seleccionados</button>
 </div>
 
 <!-- PAY MODAL -->
@@ -247,6 +318,7 @@ let allGastos = [];
 let filteredGastos = [];
 let currentStatusFilter = 'all';
 let editingId = null;
+let selectedIds = new Set();
 const LS_KEY = 'nb_gastos';
 
 // ── Date helpers ──
@@ -284,6 +356,76 @@ function loadGastos(){
 }
 function saveGastos(){ localStorage.setItem(LS_KEY, JSON.stringify(allGastos)); }
 
+// ── Selection ──
+function toggleSelect(id, checked){
+  if(checked) selectedIds.add(id); else selectedIds.delete(id);
+  updateSelectionUI();
+}
+function toggleSelectAll(checked){
+  if(checked) filteredGastos.forEach(g => selectedIds.add(g.id));
+  else selectedIds.clear();
+  updateSelectionUI();
+  // Update all visible checkboxes
+  document.querySelectorAll('.row-check-item').forEach(cb => cb.checked = checked);
+}
+function clearSelection(){
+  selectedIds.clear();
+  updateSelectionUI();
+  document.querySelectorAll('.row-check-item').forEach(cb => cb.checked = false);
+  const sa = document.getElementById('selectAll'); if(sa) sa.checked = false;
+}
+function updateSelectionUI(){
+  const bar = document.getElementById('actionBar');
+  const n = selectedIds.size;
+  if(n > 0){
+    bar.classList.add('visible');
+    document.getElementById('abCount').textContent = n + ' seleccionado' + (n>1?'s':'');
+    // Hide pay button if any selected is already paid
+    const anyPaid = [...selectedIds].some(id => { const g = allGastos.find(x=>x.id===id); return g && g.estado === 'Pagado'; });
+    document.getElementById('abPayBtn').style.display = anyPaid ? 'none' : '';
+  } else {
+    bar.classList.remove('visible');
+  }
+  // Highlight selected rows
+  document.querySelectorAll('tbody tr').forEach(tr => {
+    const id = tr.dataset.id;
+    tr.classList.toggle('selected', id && selectedIds.has(id));
+  });
+}
+
+function paySelected(){
+  const ids = [...selectedIds].filter(id => {
+    const g = allGastos.find(x=>x.id===id);
+    return g && g.estado !== 'Pagado';
+  });
+  if(!ids.length){ showToast('Nada que pagar'); return; }
+  if(ids.length === 1){
+    openPayModal(ids[0]);
+  } else {
+    // Bulk pay — open a confirm
+    const total = ids.reduce((s,id) => { const g = allGastos.find(x=>x.id===id); return s + (g?g.monto_pagar||0:0); }, 0);
+    if(!confirm(`¿Marcar ${ids.length} facturas como pagadas?\nTotal: $${total.toLocaleString('es-MX',{minimumFractionDigits:2})}`)) return;
+    const today = todayStr();
+    ids.forEach(id => {
+      const g = allGastos.find(x=>x.id===id); if(!g) return;
+      g.estado = 'Pagado';
+      g.fecha_pago_real = today;
+      pushStatusToSheet(g.id, 'Pagado', today, '');
+    });
+    saveGastos(); clearSelection(); applyFilters();
+    showToast(`${ids.length} facturas marcadas como pagadas`);
+  }
+}
+
+function deleteSelected(){
+  const n = selectedIds.size;
+  if(!n) return;
+  if(!confirm(`¿Eliminar ${n} registro${n>1?'s':''}? Esta acción no se puede deshacer.`)) return;
+  allGastos = allGastos.filter(g => !selectedIds.has(g.id));
+  saveGastos(); clearSelection(); applyFilters();
+  showToast(`${n} registro${n>1?'s':''} eliminado${n>1?'s':''}`);
+}
+
 // ── Filters ──
 function setStatusFilter(status, btn){
   currentStatusFilter = status;
@@ -315,6 +457,7 @@ function applyFilters(){
   });
   renderTable();
   renderSummary();
+  updateSelectionUI();
 }
 
 function buildYearFilter(){
@@ -388,6 +531,7 @@ function renderTable(){
     const isToday   = g.estado !== 'Pagado' && g.fecha_pago === today;
     const isPaid    = g.estado === 'Pagado';
     const rowCls    = isOverdue ? 'overdue' : isToday ? 'today' : isPaid ? 'paid' : '';
+    const isChecked = selectedIds.has(g.id);
 
     const estadoBadge = isOverdue
       ? '<span class="badge badge-over">VENCIDO</span>'
@@ -407,6 +551,7 @@ function renderTable(){
       ? `<span class="date-link" onclick="openDateModal('${g.id}')" title="Click para cambiar fecha">${formatDate(g.fecha_pago)}</span>${countdownLabel(g.fecha_pago)}`
       : `${formatDate(g.fecha_pago)}`;
 
+    // Desktop actions: pay/undo + foto (NO delete button inline — delete is via selection)
     const actions = !isPaid
       ? `<button class="btn btn-pay" onclick="openPayModal('${g.id}')">💰 Pagar</button>`
       : `<button class="btn btn-undo" onclick="undoPay('${g.id}')">↩ Deshacer</button>`;
@@ -417,7 +562,45 @@ function renderTable(){
 
     const compRef = g.comprobante ? `<div style="font-size:10px;color:#2e7d32;margin-top:3px">📎 ${g.comprobante}</div>` : '';
 
-    return `<tr class="${rowCls}">
+    // Mobile card content
+    const mobileCard = `<td class="mobile-card" onclick="mobileCardTap(event, '${g.id}')">
+      <div style="display:flex;align-items:flex-start;gap:12px">
+        <input type="checkbox" class="row-check row-check-item" ${isChecked?'checked':''} onchange="event.stopPropagation();toggleSelect('${g.id}',this.checked)" style="margin-top:3px">
+        <div style="flex:1;min-width:0">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:6px">
+            <div>
+              <strong style="font-size:15px">${g.proveedor||g.proveedor_raw||'—'}</strong>
+              ${g.credit_days?`<span style="font-size:10px;color:#999;margin-left:6px">⏳ ${g.credit_days}d</span>`:''}
+              <div style="font-size:11px;color:#aaa;margin-top:1px">${g.tipo_documento||''} ${g.folio?'#'+g.folio:''}</div>
+            </div>
+            <div style="text-align:right">
+              <strong style="font-size:17px;color:#2d2319">$${(g.monto_pagar||0).toLocaleString('es-MX',{minimumFractionDigits:2})}</strong>
+              ${g.ajustes?`<div style="font-size:10px;color:#c62828">−$${g.ajustes.toFixed(2)}</div>`:''}
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            ${estadoBadge}
+            <span class="fp-chip ${fpClass}" style="font-size:10px">${fpIcons[fpKey]} ${g.forma_pago}</span>
+            ${g.foto?`<button class="btn-foto" onclick="event.stopPropagation();openFoto('${g.id}')" style="font-size:10px;padding:3px 6px">📷</button>`:''}
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px">
+            <div style="font-size:12px;color:#7a6b5d">
+              ${!isPaid?`<span class="date-link" onclick="event.stopPropagation();openDateModal('${g.id}')">${formatDate(g.fecha_pago)}</span>`:formatDate(g.fecha_pago)}
+              ${countdownLabel(g.fecha_pago)}
+            </div>
+            <div style="display:flex;gap:6px">
+              ${!isPaid
+                ?`<button class="btn btn-pay" onclick="event.stopPropagation();openPayModal('${g.id}')" style="padding:6px 12px;font-size:11px">💰 Pagar</button>`
+                :`<button class="btn btn-undo" onclick="event.stopPropagation();undoPay('${g.id}')" style="padding:6px 12px;font-size:11px">↩</button>`}
+            </div>
+          </div>
+          ${compRef}
+        </div>
+      </div>
+    </td>`;
+
+    return `<tr class="${rowCls} ${isChecked?'selected':''}" data-id="${g.id}">
+      <td style="text-align:center"><input type="checkbox" class="row-check row-check-item" ${isChecked?'checked':''} onchange="toggleSelect('${g.id}',this.checked)"></td>
       <td><strong>${dateCell}</strong></td>
       <td>
         <strong>${g.proveedor||g.proveedor_raw||'—'}</strong>
@@ -432,9 +615,18 @@ function renderTable(){
       <td><span class="fp-chip ${fpClass}">${fpIcons[fpKey]} ${g.forma_pago}</span></td>
       <td style="font-size:11px;color:#7a6b5d">${g.categoria||'—'}</td>
       <td>${estadoBadge}${compRef}</td>
-      <td style="white-space:nowrap">${actions}${fotoBtn} <button class="btn-del" onclick="deleteGasto('${g.id}')" title="Eliminar">🗑</button></td>
+      <td style="white-space:nowrap">${actions}${fotoBtn}</td>
+      ${mobileCard}
     </tr>`;
   }).join('');
+}
+
+// Mobile card tap = toggle selection
+function mobileCardTap(event, id){
+  // Don't toggle if user tapped a button/link
+  if(event.target.closest('button, a, .date-link, input')) return;
+  const cb = event.currentTarget.querySelector('.row-check-item');
+  if(cb){ cb.checked = !cb.checked; toggleSelect(id, cb.checked); }
 }
 
 // ── Modals ──
@@ -457,7 +649,7 @@ function confirmPay(){
   g.estado = 'Pagado';
   g.fecha_pago_real = document.getElementById('payDate').value || todayStr();
   g.comprobante = document.getElementById('payRef').value.trim();
-  saveGastos(); closePayModal(); applyFilters();
+  saveGastos(); closePayModal(); clearSelection(); applyFilters();
   pushStatusToSheet(g.id, 'Pagado', g.fecha_pago_real, g.comprobante);
   showToast('Pagado: ' + g.proveedor + ' · $' + (g.monto_pagar||0).toFixed(2));
 }
@@ -505,11 +697,11 @@ function openFoto(id){
 }
 function closeFotoModal(){ document.getElementById('fotoModal').classList.remove('open'); }
 
-// ── Delete ──
+// ── Delete (single — kept for backward compat but now uses selection) ──
 function deleteGasto(id){
   if(!confirm('¿Eliminar este registro de pago?')) return;
   allGastos = allGastos.filter(g => g.id !== id);
-  saveGastos(); applyFilters();
+  saveGastos(); clearSelection(); applyFilters();
   showToast('Eliminado');
 }
 
@@ -532,7 +724,7 @@ function saveScriptUrl(){
   document.getElementById('configBar').classList.add('ok');
   document.getElementById('syncStatus').textContent = '✅ Conectado';
   showToast('Script URL guardada');
-  syncFromSheet(); // auto-sync after saving
+  syncFromSheet();
 }
 function getScriptUrl(){ return localStorage.getItem('nb_script_url')||''; }
 
@@ -558,12 +750,9 @@ async function syncFromSheet(){
       return;
     }
 
-    // Merge: Sheet is source of truth for records that exist there.
-    // Keep local-only records (those not yet pushed to Sheet)
     const sheetIds = new Set(sheetGastos.map(g => g.ID || g.id));
     const localOnly = allGastos.filter(g => !sheetIds.has(g.id));
 
-    // Convert Sheet records to our format
     const merged = sheetGastos.map(g => ({
       id           : g.ID || g.id || '',
       folio        : g.Folio || g.folio || '',
@@ -583,7 +772,6 @@ async function syncFromSheet(){
       created_at   : g.Created_At || g.created_at || ''
     }));
 
-    // Combine: sheet records + local-only records
     allGastos = [...merged, ...localOnly];
     saveGastos();
     applyFilters();
@@ -600,7 +788,7 @@ async function syncFromSheet(){
 // Push status update to Sheet
 async function pushStatusToSheet(id, estado, fechaPagoReal, comprobante){
   const url = getScriptUrl();
-  if(!url) return; // no script = local only
+  if(!url) return;
   try {
     await fetch(url, {
       method: 'POST',
@@ -626,11 +814,9 @@ async function pushDateToSheet(id, fechaPago, estado){
 
 // ── Init ──
 window.addEventListener('load', () => {
-  // Show today's date in topbar
   const now = new Date();
   const opts = { weekday:'long', year:'numeric', month:'long', day:'numeric' };
   document.getElementById('topbarDate').innerHTML = now.toLocaleDateString('es-MX', opts);
-  // Load script URL status
   const sUrl = getScriptUrl();
   if(sUrl){
     document.getElementById('configBar').classList.add('ok');
@@ -639,7 +825,6 @@ window.addEventListener('load', () => {
   loadGastos();
   buildYearFilter();
   applyFilters();
-  // Auto-sync if script URL is configured
   if(sUrl) setTimeout(() => syncFromSheet(), 500);
 });
 
