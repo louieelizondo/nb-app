@@ -247,7 +247,7 @@ tbody tr.editing { background:#fffde7 !important; }
     <h1>Portal de Pagos</h1>
     <div class="topbar-sub">Natural Balance · Seguimiento de facturas</div>
   </div>
-  <div class="topbar-right" id="topbarDate"></div>
+  <div class="topbar-right"><span id="topbarDate"></span><div id="nbUserBadge" style="margin-top:4px"></div></div>
 </div>
 
 <div class="container">
@@ -368,6 +368,7 @@ tbody tr.editing { background:#fffde7 !important; }
 
 <div class="toast" id="toast"></div>
 
+<script src="nb_auth.js"></script>
 <script>
 let allGastos = [];
 let filteredGastos = [];
@@ -1187,10 +1188,11 @@ async function pushDateToSheet(id, fechaPago, estado){
 }
 
 // ── Init ──
-window.addEventListener('load', () => {
+window.addEventListener('load', () => requireNbAuth(function appInit() {
   const now = new Date();
   const opts = { weekday:'long', year:'numeric', month:'long', day:'numeric' };
   document.getElementById('topbarDate').innerHTML = now.toLocaleDateString('es-MX', opts);
+  renderNbUserBadge('nbUserBadge');
   const sUrl = getScriptUrl();
   if(sUrl){
     document.getElementById('configBar').classList.add('ok');
@@ -1208,7 +1210,7 @@ window.addEventListener('load', () => {
     setTimeout(() => { processSyncQueue(); }, 300);
     setTimeout(() => syncFromSheet(), 800);
   }
-});
+}));
 
 document.addEventListener('click', e => {
   if(e.target.id === 'payModal') closePayModal();

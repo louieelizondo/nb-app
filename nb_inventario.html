@@ -191,6 +191,7 @@ body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif
   <button class="back-btn" id="backBtn" onclick="goBack()">‹</button>
   <h1>NB Inventario</h1>
   <div class="subtitle" id="headerSub">Selecciona una categoría</div>
+  <div id="nbUserBadge" style="position:absolute;top:12px;right:12px"></div>
 </div>
 
 <!-- View 1: Route Selection -->
@@ -363,6 +364,7 @@ body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif
 
 <div class="toast" id="toast"></div>
 
+<script src="nb_auth.js"></script>
 <script>
 // ============ PRODUCT DATA (legacy — used for seeding) ============
 </script>
@@ -1860,14 +1862,17 @@ function checkStorageSize() {
   } catch(e) {}
 }
 
-// Initialize the app
-loadOrders();
-loadProductsFromCache(); // Load cached products (overrides hardcoded if available)
-init();
-checkStorageSize();
-// Try refreshing from Sheet in background (non-blocking)
-loadProductsFromSheet().then(loaded => {
-  if (loaded) { console.log('Products refreshed from Sheet'); renderRoutes(); }
+// Initialize the app (behind auth gate)
+requireNbAuth(function appInit() {
+  renderNbUserBadge('nbUserBadge');
+  loadOrders();
+  loadProductsFromCache(); // Load cached products (overrides hardcoded if available)
+  init();
+  checkStorageSize();
+  // Try refreshing from Sheet in background (non-blocking)
+  loadProductsFromSheet().then(loaded => {
+    if (loaded) { console.log('Products refreshed from Sheet'); renderRoutes(); }
+  });
 });
 </script>
 </body>

@@ -309,10 +309,11 @@ tr:last-child td { border-bottom: none; }
 
 <div class="topbar">
   <div class="logo">NB</div>
-  <div>
+  <div style="flex:1">
     <div style="font-size:17px;font-weight:700">Captura de Facturas</div>
     <div style="font-size:11px;opacity:.75">Natural Balance · v2 con ingredientes en vivo</div>
   </div>
+  <div id="nbUserBadge"></div>
 </div>
 
 <div class="container">
@@ -598,6 +599,7 @@ tr:last-child td { border-bottom: none; }
 
 <div class="toast" id="toast"></div>
 
+<script src="nb_auth.js"></script>
 <script>
 // ══════════════════════════════════════════════
 // FALLBACK INGREDIENTS DB (baked in at build time)
@@ -1990,8 +1992,9 @@ function pruneLocalStorage() {
 // ══════════════════════════════════════════════
 // INIT
 // ══════════════════════════════════════════════
-window.addEventListener('load',()=>{
+window.addEventListener('load',()=> requireNbAuth(function appInit(){
   cleanupLegacyApiKey(); // remove old key from localStorage
+  renderNbUserBadge('nbUserBadge');
   const sUrl=getScriptUrl();
   if(sUrl){
     document.getElementById('scriptUrlBar').classList.add('ok');
@@ -2002,7 +2005,7 @@ window.addEventListener('load',()=>{
   renderMappings(); renderHistory();
   pruneLocalStorage();
   processRetryQueue();
-});
+}));
 </script>
 </body>
 </html>
