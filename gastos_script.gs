@@ -38,13 +38,13 @@ const INV_TAB = 'INVENTARIO_PRODUCTOS';
 const INV_HEADERS = [
   'ID', 'Producto', 'Categoria', 'Ubicacion', 'Tienda', 'Unidad',
   'Forma_Pedido', 'Inventario_Min', 'Inventario_Max', 'Activo',
-  'Temporada', 'Tags', 'Grupo', 'Presentacion'
+  'Temporada', 'Tags', 'Variantes'
 ];
 
 // NEW: Inventory Count History
 const INV_LOG_TAB = 'INVENTARIO_LOG';
 const INV_LOG_HEADERS = [
-  'Timestamp', 'Producto', 'Cantidad', 'Seccion', 'Categoria', 'Contó', 'Dispositivo'
+  'Timestamp', 'Producto', 'Cantidad', 'Seccion', 'Categoria', 'Variante', 'Contó', 'Dispositivo'
 ];
 
 // NEW: Orders tracking
@@ -612,8 +612,7 @@ function addProduct(body) {
     p.Activo !== undefined ? p.Activo : true,
     p.Temporada || 'Siempre',
     p.Tags || '',
-    p.Grupo || '',
-    p.Presentacion || ''
+    p.Variantes || ''
   ];
   sheet.appendRow(row);
   log('ADD_PRODUCT', id + ' | ' + p.Producto);
@@ -686,6 +685,7 @@ function logInventoryCounts(body) {
     item.cantidad,
     item.seccion || '',
     item.categoria || '',
+    item.variante || '',
     quien,
     device
   ]);
