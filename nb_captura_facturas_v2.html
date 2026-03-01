@@ -988,17 +988,31 @@ function loadCachedIngredients() {
       }
     } catch {}
   }
-  // No cache or stale: use fallback, then try to sync
-  INGREDIENTS_DB = [...FALLBACK_DB];
-  buildSuppliersFromDB();
-  updateIngUI(INGREDIENTS_DB.length, null);
+  // Stale cache or no cache: prefer stale cache over hardcoded fallback
+  if (cached) {
+    try {
+      INGREDIENTS_DB = JSON.parse(cached);
+      buildSuppliersFromDB();
+      updateIngUI(INGREDIENTS_DB.length, ts);
+      updateSyncUI('idle', '⚠️ Cache desactualizado (' + timeAgo(ts) + ') — sincronizando...');
+    } catch {
+      INGREDIENTS_DB = [...FALLBACK_DB];
+      buildSuppliersFromDB();
+      updateIngUI(INGREDIENTS_DB.length, null);
+    }
+  } else {
+    // Absolute first run: no cache at all, use hardcoded fallback
+    INGREDIENTS_DB = [...FALLBACK_DB];
+    buildSuppliersFromDB();
+    updateIngUI(INGREDIENTS_DB.length, null);
+  }
   if (savedUrl) {
     // Auto-sync silently
     syncIngredients(true).then(ok => {
-      if (!ok) updateSyncUI('idle', '⚠️ No se pudo sincronizar — usando base local (' + FALLBACK_DB.length + ' ing.)');
+      if (!ok) updateSyncUI('idle', '⚠️ No se pudo sincronizar — usando ' + (cached ? 'cache previo' : 'base local') + ' (' + INGREDIENTS_DB.length + ' ing.)');
     });
   } else {
-    updateSyncUI('idle', '📦 Base local — ' + FALLBACK_DB.length + ' ing. (sin Sheet configurado)');
+    updateSyncUI('idle', '📦 Base local — ' + INGREDIENTS_DB.length + ' ing. (sin Sheet configurado)');
   }
 }
 
@@ -1388,13 +1402,16 @@ document.addEventListener('mousedown', e=>{
 function findMatch(desc){
   const maps=getLearnedMappings(),n=normalize(desc);
   if(maps[n]){const ing=INGREDIENTS_DB.find(i=>i.n===maps[n]);if(ing)return{...ing,matchType:'learned',score:1};}
+  // Exact match
   for(const i of INGREDIENTS_DB)if(normalize(i.n)===n)return{...i,matchType:'exact',score:1};
-  for(const i of INGREDIENTS_DB){const inn=normalize(i.n);if(inn.length>3&&(inn.includes(n)||n.includes(inn)))return{...i,matchType:'contains',score:.8};}
+  // Contains match — require both strings > 5 chars to avoid "crema" matching everything
+  for(const i of INGREDIENTS_DB){const inn=normalize(i.n);if(inn.length>5&&n.length>5&&(inn.includes(n)||n.includes(inn)))return{...i,matchType:'contains',score:.8};}
+  // Fuzzy word overlap — raised threshold from 0.35 to 0.5, require at least 2 overlapping words
   const words=n.split(/\s+/).filter(w=>w.length>2);
   if(!words.length)return null;
   let best=null,bs=0;
-  for(const i of INGREDIENTS_DB){const iw=normalize(i.n).split(/\s+/).filter(w=>w.length>2);const ov=words.filter(w=>iw.includes(w)).length;const sc=ov/Math.max(words.length,iw.length||1);if(sc>bs){bs=sc;best=i;}}
-  return bs>=0.35?{...best,matchType:'fuzzy',score:bs}:null;
+  for(const i of INGREDIENTS_DB){const iw=normalize(i.n).split(/\s+/).filter(w=>w.length>2);const ov=words.filter(w=>iw.includes(w)).length;const sc=ov/Math.max(words.length,iw.length||1);if(sc>bs&&(ov>=2||words.length===1)){bs=sc;best=i;}}
+  return bs>=0.5?{...best,matchType:'fuzzy',score:bs}:null;
 }
 function badgeHTML(t,s){
   const L={learned:'📚 Aprendido',exact:'✓ Exacto',contains:'≈ Parcial',fuzzy:'≈ Fuzzy',none:'✗ Sin match'};

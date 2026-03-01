@@ -1153,13 +1153,17 @@ function setPedirFilter(filter, btn) {
 
 function getNeedsOrder() {
   const needsOrder = [];
-  const activeProducts = getActiveProducts();
-  activeProducts.forEach(p => {
+  // Include ALL active products (even out-of-season) for pre-ordering
+  const allActive = PRODUCTS.filter(p => p.active !== false);
+  allActive.forEach(p => {
     const origIdx = PRODUCTS.indexOf(p);
-    const current = counts[origIdx] || 0;
+    // Only consider products that have been counted (exist in counts{})
+    if (counts[origIdx] === undefined) return;
+    const current = counts[origIdx];
     const needed = (p.max > 0 && current < p.max) ? p.max - current : (current < p.inv ? p.inv - current : 0);
-    if (needed > 0 || (current === 0 && p.inv > 0)) {
-      needsOrder.push({ ...p, idx: origIdx, current, needed: Math.round((needed || p.inv) * 10) / 10, isUrgent: current === 0 });
+    if (needed > 0) {
+      const inSeason = isProductInSeason(p);
+      needsOrder.push({ ...p, idx: origIdx, current, needed: Math.round(needed * 10) / 10, isUrgent: current === 0, outOfSeason: !inSeason });
     }
   });
   return needsOrder;
@@ -1234,7 +1238,7 @@ function renderPedir() {
       return `
         <div class="pedir-item ${excluded ? 'excluded' : ''}">
           <input type="checkbox" ${excluded ? '' : 'checked'} onchange="togglePedirItem(${p.idx})">
-          <span class="item-text">${p.n}${p.isUrgent ? ' <span style="color:var(--red);font-size:10px">● agotado</span>' : ''}</span>
+          <span class="item-text">${p.n}${p.isUrgent ? ' <span style="color:var(--red);font-size:10px">● agotado</span>' : ''}${p.outOfSeason ? ' <span style="color:#ff9800;font-size:10px;background:#fff3e0;padding:1px 5px;border-radius:8px">⏳ fuera de temp.</span>' : ''}</span>
           <span class="item-qty">${p.needed} ${p.u||''}</span>
         </div>`;
     }).join('');
@@ -1448,10 +1452,22 @@ async function confirmReceive() {
     } catch(e) { console.log('Photo error:', e); }
   }
 
+  // Update local inventory counts with received quantities
+  let updated = 0;
+  (order.items || []).forEach(item => {
+    const idx = PRODUCTS.findIndex(p => p.n === item.name);
+    if (idx >= 0) {
+      const current = counts[idx] !== undefined ? counts[idx] : 0;
+      counts[idx] = current + (item.qty || 0);
+      updated++;
+    }
+  });
+  if (updated > 0) saveState();
+
   saveOrders();
   closeReceiveModal();
   renderRecibir();
-  toast(`✅ ${order.supplier} recibido por ${receiver}`);
+  toast(`✅ ${order.supplier} recibido por ${receiver}` + (updated ? ` · ${updated} productos actualizados` : ''));
   // Sync receive to Sheet
   pushOrderUpdateToSheet(order.id, receiver, order.received_at, order.notes);
 }

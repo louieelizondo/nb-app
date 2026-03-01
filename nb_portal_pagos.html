@@ -285,7 +285,7 @@ tbody tr.editing { background:#fffde7 !important; }
       <option value="Efectivo">Efectivo</option>
       <option value="Cheque">Cheque</option>
     </select>
-    <select id="yearFilter" onchange="applyFilters()"></select>
+    <select id="yearFilter" onchange="syncMonthFromYear(); applyFilters()"></select>
     <input type="text" id="searchInput" placeholder="Buscar proveedor o folio..." oninput="applyFilters()" style="min-width:200px;flex:1">
   </div>
 
@@ -478,6 +478,7 @@ function shiftMonth(dir){
   if(summaryMonth > 11){ summaryMonth = 0; summaryYear++; }
   if(summaryMonth < 0){ summaryMonth = 11; summaryYear--; }
   updateMonthLabel();
+  syncYearFilter();
   renderSummary();
 }
 function goToday(){
@@ -486,6 +487,24 @@ function goToday(){
   summaryYear = now.getFullYear();
   updateMonthLabel();
   renderSummary();
+}
+
+// ── Year ↔ Month sync ──
+function syncYearFilter(){
+  const sel = document.getElementById('yearFilter');
+  if(sel) sel.value = String(summaryYear);
+  applyFilters();
+}
+function syncMonthFromYear(){
+  const sel = document.getElementById('yearFilter');
+  if(sel && sel.value){
+    summaryYear = parseInt(sel.value);
+    // If switching to current year, jump to current month; otherwise stay on same month
+    const now = new Date();
+    if(summaryYear === now.getFullYear()) summaryMonth = now.getMonth();
+    updateMonthLabel();
+    renderSummary();
+  }
 }
 
 // ── Date helpers ──
@@ -517,7 +536,16 @@ function loadGastos(){
   try { allGastos = JSON.parse(localStorage.getItem(LS_KEY) || '[]'); } catch { allGastos = []; }
   const today = todayStr();
   allGastos.forEach(g => {
-    if(g.estado === 'Pendiente' && g.fecha_pago && g.fecha_pago < today) g.estado = 'Vencido';
+    // Auto-mark Vencido only from Pendiente, never from Pagado or user-set states
+    if(g.estado === 'Pendiente' && g.fecha_pago && g.fecha_pago < today) {
+      g.estado = 'Vencido';
+      g._auto_vencido = true; // track that this was auto-set
+    }
+    // Restore to Pendiente if date was moved to future and was auto-vencido
+    if(g.estado === 'Vencido' && g._auto_vencido && g.fecha_pago && g.fecha_pago >= today) {
+      g.estado = 'Pendiente';
+      delete g._auto_vencido;
+    }
   });
   saveGastos();
 }
