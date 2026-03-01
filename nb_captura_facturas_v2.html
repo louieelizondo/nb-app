@@ -337,12 +337,10 @@ tr:last-child td { border-bottom: none; }
     </div>
   </div>
 
-  <!-- API KEY -->
-  <div class="apikey-bar" id="apiKeyBar">
-    <label>🔑 Claude API Key:</label>
-    <input type="password" id="apiKeyInput" placeholder="sk-ant-api03-..." />
-    <button class="btn btn-green" onclick="saveApiKey()">Guardar</button>
-    <span id="apiKeyStatus" style="font-size:12px;color:#777">No configurada</span>
+  <!-- CLAUDE STATUS (API key now lives server-side in Apps Script) -->
+  <div class="apikey-bar" id="apiKeyBar" style="background:#e8f5e9">
+    <label>🤖 Claude AI:</label>
+    <span id="apiKeyStatus" style="font-size:12px;color:#2e7d32">✅ Vía servidor (key segura)</span>
   </div>
 
   <!-- SCRIPT URL -->
@@ -1017,18 +1015,15 @@ function loadCachedIngredients() {
 }
 
 // ══════════════════════════════════════════════
-// API KEY
+// API KEY — now lives server-side in Apps Script Properties
 // ══════════════════════════════════════════════
-function saveApiKey(){
-  const k=document.getElementById('apiKeyInput').value.trim();
-  if(!k.startsWith('sk-ant')){showToast('❌ Key inválida');return;}
-  localStorage.setItem('nb_claude_key',k);
-  document.getElementById('apiKeyBar').classList.add('ok');
-  document.getElementById('apiKeyStatus').textContent='✅ '+k.slice(0,14)+'...';
-  document.getElementById('apiKeyInput').value='';
-  showToast('✅ API key guardada');
+// Legacy: clean up old key from localStorage if present
+function cleanupLegacyApiKey(){
+  if(localStorage.getItem('nb_claude_key')){
+    localStorage.removeItem('nb_claude_key');
+    console.log('Cleaned up legacy API key from localStorage');
+  }
 }
-function getApiKey(){return localStorage.getItem('nb_claude_key')||'';}
 
 // SCRIPT URL
 function saveScriptUrl(){
@@ -1499,7 +1494,8 @@ function applyResultsFilter(){
 // CLAUDE
 // ══════════════════════════════════════════════
 async function processInvoice(){
-  const key=getApiKey(); if(!key){showToast('❌ Configura tu API key');return;}
+  const scriptUrl = getScriptUrl();
+  if(!scriptUrl){showToast('❌ Configura la Script URL primero');return;}
   if(!currentBase64){showToast('❌ Sube una imagen');return;}
   const btn=document.getElementById('processBtn');
   btn.innerHTML='<span class="spinner"></span> Analizando...'; btn.disabled=true;
@@ -1524,28 +1520,21 @@ REGLAS CRÍTICAS para precios:
 Responde ÚNICAMENTE con JSON válido (sin texto antes ni después, sin markdown):
 {"proveedor":"nombre del proveedor","numero_factura":"folio o null","tipo_documento":"Factura/Remisión/Ticket/Recibo","fecha":"YYYY-MM-DD","total":número,"moneda":"MXN","items":[{"descripcion":"nombre exacto del producto","cantidad":número,"unidad":"unidad como viene en factura","precio_unitario":número,"precio_total":número,"precio_base":número,"unidad_base":"L/KG/PZA"}]}`;
   try{
-    let data = null;
-    const apiBody = JSON.stringify({model:'claude-sonnet-4-6',max_tokens:4096,messages:[{role:'user',content:[{type:'image',source:{type:'base64',media_type:'image/jpeg',data:currentBase64}},{type:'text',text:prompt}]}]});
-    for (let attempt = 1; attempt <= 3; attempt++) {
-      try {
-        const resp = await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'x-api-key':key,'anthropic-version':'2023-06-01','content-type':'application/json','anthropic-dangerous-direct-browser-access':'true'},body:apiBody});
-        if (resp.status === 429 || resp.status === 529 || resp.status >= 500) {
-          const wait = attempt * 3000;
-          btn.innerHTML = `⏳ Reintentando (${attempt}/3)...`;
-          await new Promise(r => setTimeout(r, wait));
-          continue;
-        }
-        if(!resp.ok){const e=await resp.json();throw new Error(e.error?.message||resp.statusText);}
-        data = await resp.json();
-        break;
-      } catch(retryErr) {
-        if (attempt === 3) throw retryErr;
-        btn.innerHTML = `⏳ Reintentando (${attempt}/3)...`;
-        await new Promise(r => setTimeout(r, attempt * 2000));
-      }
-    }
-    if (!data) throw new Error('No se pudo conectar después de 3 intentos');
-    const raw=data.content[0].text.trim();
+    // Route through Apps Script proxy (API key lives server-side)
+    const resp = await fetch(scriptUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({
+        action: 'claude_analyze',
+        image_base64: currentBase64,
+        prompt: prompt
+      })
+    });
+    if(!resp.ok) throw new Error('HTTP ' + resp.status);
+    const data = await resp.json();
+    if(data.error) throw new Error(data.error);
+    if(!data.ok || !data.result) throw new Error('Respuesta inesperada del servidor');
+    const raw = data.result.content[0].text.trim();
     let parsed; try{const mx=raw.match(/```(?:json)?\n?([\s\S]*?)```/)||raw.match(/([\s\S]*)/);parsed=JSON.parse(mx?mx[1]:raw);}catch{throw new Error('Respuesta no válida.');}
     renderResults(parsed);
   }catch(e){showToast('❌ '+e.message,5000);}
@@ -2002,10 +1991,13 @@ function pruneLocalStorage() {
 // INIT
 // ══════════════════════════════════════════════
 window.addEventListener('load',()=>{
-  const key=getApiKey();
-  if(key){document.getElementById('apiKeyBar').classList.add('ok');document.getElementById('apiKeyStatus').textContent='✅ '+key.slice(0,14)+'...';}
+  cleanupLegacyApiKey(); // remove old key from localStorage
   const sUrl=getScriptUrl();
-  if(sUrl){document.getElementById('scriptUrlBar').classList.add('ok');document.getElementById('scriptUrlStatus').textContent='✅ Conectado';}
+  if(sUrl){
+    document.getElementById('scriptUrlBar').classList.add('ok');
+    document.getElementById('scriptUrlStatus').textContent='✅ Conectado';
+    document.getElementById('apiKeyBar').classList.add('ok');
+  }
   loadCachedIngredients(); // also calls buildSuppliersFromDB inside
   renderMappings(); renderHistory();
   pruneLocalStorage();

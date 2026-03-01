@@ -99,6 +99,7 @@ function doPost(e) {
       case 'update_date':   return jsonResp(updateDate(body));
       case 'delete':           return jsonResp(deleteFactura(body));
       case 'update_factura':   return jsonResp(updateFactura(body));
+      case 'claude_analyze':   return jsonResp(claudeAnalyze(body));
       case 'update_prices':    return jsonResp(updatePrices(body));
       case 'add_product':      return jsonResp(addProduct(body));
       case 'toggle_product':   return jsonResp(toggleProduct(body));
@@ -330,6 +331,72 @@ function updateFactura(body) {
     }
   }
   throw new Error('Not found: ' + id);
+}
+
+// ══════════════════════════════════════════════
+// CLAUDE API PROXY — keeps API key server-side
+// ══════════════════════════════════════════════
+
+/**
+ * Proxy Claude vision call. Client sends image + prompt, we call Claude
+ * using the API key stored in Script Properties.
+ *
+ * SETUP: In Apps Script editor → Project Settings → Script Properties →
+ *   Add: CLAUDE_API_KEY = sk-ant-api03-...
+ */
+function claudeAnalyze(body) {
+  const apiKey = PropertiesService.getScriptProperties().getProperty('CLAUDE_API_KEY');
+  if (!apiKey) throw new Error('CLAUDE_API_KEY not set in Script Properties. Go to Project Settings → Script Properties.');
+
+  const imageBase64 = body.image_base64;
+  const prompt = body.prompt;
+  if (!imageBase64 || !prompt) throw new Error('Missing image_base64 or prompt');
+
+  const payload = {
+    model: body.model || 'claude-sonnet-4-6',
+    max_tokens: body.max_tokens || 4096,
+    messages: [{
+      role: 'user',
+      content: [
+        { type: 'image', source: { type: 'base64', media_type: body.media_type || 'image/jpeg', data: imageBase64 } },
+        { type: 'text', text: prompt }
+      ]
+    }]
+  };
+
+  const options = {
+    method: 'post',
+    contentType: 'application/json',
+    headers: {
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01'
+    },
+    payload: JSON.stringify(payload),
+    muteHttpExceptions: true
+  };
+
+  // Retry logic: 3 attempts with exponential backoff
+  let lastErr = null;
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      const resp = UrlFetchApp.fetch('https://api.anthropic.com/v1/messages', options);
+      const code = resp.getResponseCode();
+      if (code === 429 || code === 529 || code >= 500) {
+        Utilities.sleep(attempt * 3000);
+        continue;
+      }
+      const result = JSON.parse(resp.getContentText());
+      if (code !== 200) {
+        throw new Error(result.error?.message || 'Claude API error ' + code);
+      }
+      log('CLAUDE_ANALYZE', 'ok | tokens: ' + (result.usage?.input_tokens || '?') + '/' + (result.usage?.output_tokens || '?'));
+      return { ok: true, result };
+    } catch(e) {
+      lastErr = e;
+      if (attempt < 3) Utilities.sleep(attempt * 2000);
+    }
+  }
+  throw new Error('Claude API failed after 3 attempts: ' + (lastErr?.message || 'unknown'));
 }
 
 // ══════════════════════════════════════════════
