@@ -416,28 +416,34 @@ function updatePrices(body) {
   if (!mp) throw new Error('Tab "' + MP_TAB + '" not found');
 
   const data = mp.getDataRange().getValues();
-  // Column A = ingredient name, Column B = cost/price
-  // Find matching rows and update price
+  // MATERIA PRIMA columns:
+  // A(0)=Ingrediente, B(1)=Categoría, C(2)=CostoPaq, D(3)=Fecha,
+  // E(4)=UnidsCaja, F(5)=VolUnid, G(6)=Unidad, H(7)=Costo/kg-L (formula)
+  // Write whole-package price to Column C (CostoPaq)
+  // Column H (Costo/kg or /L) is a formula derived from C — don't touch it
   let updated = 0;
-  const nameCol = 0; // A
-  const costCol = 1; // B
+  const nameCol = 0;     // A = ingredient name
+  const costPaqCol = 2;  // C = whole-package cost (CostoPaq)
+  const fechaCol = 3;    // D = last price date
 
   items.forEach(item => {
     const bdName = (item.bd_name || '').trim().toLowerCase();
-    const newPrice = item.precio_base || item.price;
+    // Use precio_unitario (whole-package price from invoice), NOT precio_base (per-kg/L)
+    const newPrice = item.precio_unitario || item.price;
     if (!bdName || !newPrice) return;
 
     for (let i = 1; i < data.length; i++) {
       const cellName = String(data[i][nameCol] || '').trim().toLowerCase();
       if (cellName === bdName) {
-        mp.getRange(i + 1, costCol + 1).setValue(newPrice);
+        mp.getRange(i + 1, costPaqCol + 1).setValue(newPrice);  // Col C
+        mp.getRange(i + 1, fechaCol + 1).setValue(new Date());   // Col D = today
         updated++;
         break;
       }
     }
   });
 
-  log('UPDATE_PRICES', updated + ' ingredients updated');
+  log('UPDATE_PRICES', updated + ' ingredients updated (CostoPaq col C)');
   return { ok: true, updated, message: updated + ' prices updated in MATERIA PRIMA' };
 }
 

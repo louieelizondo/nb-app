@@ -1838,6 +1838,26 @@ function updateGastosPanel(){
   `;
 }
 
+async function syncPricesToMateriaPrima(scriptUrl){
+  // Build price update items from matched invoice items
+  const priceItems = currentItems
+    .filter(it => it._match && it._match.n && it.precio_unitario)
+    .map(it => ({
+      bd_name: it._match.n,
+      precio_unitario: it.precio_unitario  // whole-package price → writes to CostoPaq (col C)
+    }));
+  if(!priceItems.length){ console.log('No matched items to sync prices'); return; }
+  try {
+    const resp = await fetch(scriptUrl, {
+      method: 'POST', headers: {'Content-Type':'text/plain'},
+      body: JSON.stringify({ action: 'update_prices', items: priceItems })
+    });
+    const data = await resp.json();
+    if(data.ok) console.log(`✅ Prices synced: ${data.updated} ingredients updated`);
+    else console.log('Price sync error:', data.error);
+  } catch(e){ console.log('Price sync failed:', e.message); }
+}
+
 function enviarGasto(){
   const forma     = document.getElementById('gastoForma').value;
   const categoria = document.getElementById('gastoCategoria').value;
@@ -1902,8 +1922,13 @@ function enviarGasto(){
     // Send full-res image to Drive (not the compressed thumbnail stored locally)
     if (currentBase64) payload.foto_full = currentBase64;
     pushToSheetWithRetry(scriptUrl, payload, 3).then(ok => {
-      if(ok) showToast(`✅ Registrado + enviado al Sheet · $${finalTotal.toFixed(2)} · ${forma}`, 4000);
-      else showToast(`⚠️ Guardado local, Sheet pendiente (reintentará)`, 5000);
+      if(ok){
+        showToast(`✅ Registrado + enviado al Sheet · $${finalTotal.toFixed(2)} · ${forma}`, 4000);
+        // Sync matched item prices back to MATERIA PRIMA
+        syncPricesToMateriaPrima(scriptUrl);
+      } else {
+        showToast(`⚠️ Guardado local, Sheet pendiente (reintentará)`, 5000);
+      }
     });
   } else {
     showToast(`✅ Registrado · $${finalTotal.toFixed(2)} · ${forma} · Pago: ${fechaPago}`, 4000);
