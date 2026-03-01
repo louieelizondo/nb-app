@@ -24,7 +24,7 @@ const NB_ALLOWED_EMAILS = [
   'le.nbclub@gmail.com',
   'facturacion.nbclub@gmail.com',
   'servicioalcliente.nbclub@gmail.com',
-  'adelalviddrez@gmail.com',
+  'adelalvidrez@gmail.com',
   'ing.elizondocardenas@gmail.com',
 ];
 

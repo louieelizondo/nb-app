@@ -1899,6 +1899,8 @@ function enviarGasto(){
   const scriptUrl = getScriptUrl();
   if(scriptUrl){
     const payload = {...gasto, action: 'create'};
+    // Send full-res image to Drive (not the compressed thumbnail stored locally)
+    if (currentBase64) payload.foto_full = currentBase64;
     pushToSheetWithRetry(scriptUrl, payload, 3).then(ok => {
       if(ok) showToast(`✅ Registrado + enviado al Sheet · $${finalTotal.toFixed(2)} · ${forma}`, 4000);
       else showToast(`⚠️ Guardado local, Sheet pendiente (reintentará)`, 5000);

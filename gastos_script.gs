@@ -126,11 +126,12 @@ function createFactura(body) {
   const g = body.gasto || body;
   const gastoId = g.id || 'G' + Date.now();
 
-  // Save photo to Google Drive if provided
+  // Save photo to Google Drive if provided (prefer full-res over thumbnail)
   let fotoUrl = '';
-  if (g.foto) {
+  const fotoData = g.foto_full || g.foto;
+  if (fotoData) {
     try {
-      fotoUrl = saveFotoToDrive(gastoId, g.foto, g.proveedor || 'unknown');
+      fotoUrl = saveFotoToDrive(gastoId, fotoData, g.proveedor || 'unknown', g.folio || '');
     } catch(err) {
       log('FOTO_ERROR', gastoId + ': ' + err.message);
     }
@@ -233,16 +234,19 @@ function updateStatus(body) {
 
   // Save comprobante PDF to Drive if provided
   let compValue = comprobante || '';
-  if (pdf_base64 && pdf_base64.length > 100) {
-    try {
-      compValue = saveComprobanteToDrive(id, pdf_base64, proveedor || 'pago');
-    } catch(err) {
-      log('COMP_PDF_ERROR', id + ': ' + err.message);
-    }
-  }
 
   for (let i = 1; i < data.length; i++) {
     if (String(data[i][0]) === String(id)) {
+      // Get folio from row for better filename
+      const folioCol = FACTURAS_HEADERS.indexOf('Folio');
+      const rowFolio = folioCol >= 0 ? String(data[i][folioCol] || '') : '';
+      if (pdf_base64 && pdf_base64.length > 100) {
+        try {
+          compValue = saveComprobanteToDrive(id, pdf_base64, proveedor || 'pago', rowFolio);
+        } catch(err) {
+          log('COMP_PDF_ERROR', id + ': ' + err.message);
+        }
+      }
       // Version conflict check
       const vc = checkVersionAndBump(sheet, i + 1, version);
       if (!vc.ok) return vc; // returns conflict response, not throw
@@ -466,12 +470,13 @@ function getComprobanteFolder() {
 /**
  * Save comprobante PDF to Drive, return shareable link
  */
-function saveComprobanteToDrive(gastoId, base64Data, proveedor) {
+function saveComprobanteToDrive(gastoId, base64Data, proveedor, folio) {
   if (!base64Data || base64Data.length < 100) return '';
   const folder = getComprobanteFolder();
   const cleanProv = (proveedor || 'comp').replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 30);
+  const cleanFolio = (folio || '').replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 40);
   const today = Utilities.formatDate(new Date(), 'America/Mexico_City', 'yyyyMMdd');
-  const fileName = today + '_' + cleanProv + '_' + gastoId + '.pdf';
+  const fileName = (cleanFolio || gastoId) + '_' + cleanProv + '_' + today + '.pdf';
   const blob = Utilities.newBlob(Utilities.base64Decode(base64Data), 'application/pdf', fileName);
   const file = folder.createFile(blob);
   file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
@@ -482,17 +487,19 @@ function saveComprobanteToDrive(gastoId, base64Data, proveedor) {
 /**
  * Save base64 JPEG to Drive, return shareable thumbnail URL
  */
-function saveFotoToDrive(gastoId, base64Data, proveedor) {
+function saveFotoToDrive(gastoId, base64Data, proveedor, folio) {
   if (!base64Data || base64Data.length < 100) return '';
   const folder = getFotoFolder();
   const cleanProv = (proveedor || 'foto').replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 30);
-  const fileName = gastoId + '_' + cleanProv + '.jpg';
+  const cleanFolio = (folio || '').replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 40);
+  const today = Utilities.formatDate(new Date(), 'America/Mexico_City', 'yyyyMMdd');
+  const fileName = (cleanFolio || gastoId) + '_' + cleanProv + '_' + today + '.jpg';
   const blob = Utilities.newBlob(Utilities.base64Decode(base64Data), 'image/jpeg', fileName);
   const file = folder.createFile(blob);
   // Make viewable by anyone with link
   file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
-  // Return direct thumbnail URL (works in <img> tags without auth)
-  return 'https://drive.google.com/thumbnail?id=' + file.getId() + '&sz=w800';
+  // Return high-res thumbnail URL (2048px — readable for invoice details)
+  return 'https://drive.google.com/thumbnail?id=' + file.getId() + '&sz=w2048';
 }
 
 /**
