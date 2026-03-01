@@ -1096,6 +1096,8 @@ function ssOpen(rowIdx, anchorEl, invoiceDesc, currentBdName) {
     if (ing && currentItems[rowIdx]) currentItems[rowIdx]._match={...ing,matchType:'learned',score:1};
     rerenderRow(rowIdx);
     showToast('📚 "'+normalize(invoiceDesc)+'" → '+bdName);
+    // Rename ingredient in MATERIA PRIMA Sheet so names match going forward
+    renameIngredientInSheet(bdName, invoiceDesc);
     ssClose();
   };
 }
@@ -1856,6 +1858,45 @@ async function syncPricesToMateriaPrima(scriptUrl){
     if(data.ok) console.log(`✅ Prices synced: ${data.updated} ingredients updated`);
     else console.log('Price sync error:', data.error);
   } catch(e){ console.log('Price sync failed:', e.message); }
+}
+
+/**
+ * Rename ingredient in MATERIA PRIMA Sheet to match invoice name.
+ * After renaming, update local INGREDIENTS_DB and remove the learned mapping
+ * (since names now match directly → exact match next time).
+ */
+async function renameIngredientInSheet(oldBdName, invoiceDesc){
+  const scriptUrl = getScriptUrl();
+  if(!scriptUrl) return;
+  // Use the raw invoice description as the new canonical name
+  const newName = (invoiceDesc||'').trim();
+  if(!newName || !oldBdName) return;
+  if(normalize(newName) === normalize(oldBdName)) return; // already same
+  try {
+    const resp = await fetch(scriptUrl, {
+      method:'POST', headers:{'Content-Type':'text/plain'},
+      body: JSON.stringify({ action:'rename_ingredient', old_name: oldBdName, new_name: newName })
+    });
+    const data = await resp.json();
+    if(data.ok && data.renamed){
+      console.log(`✅ Ingredient renamed: "${oldBdName}" → "${newName}"`);
+      // Update local DB so future matches in this session work
+      const ing = INGREDIENTS_DB.find(i=>i.n===oldBdName);
+      if(ing) ing.n = newName;
+      // Remove the learned mapping since names now match directly
+      const maps = getLearnedMappings();
+      const nKey = normalize(invoiceDesc);
+      if(maps[nKey]){
+        delete maps[nKey];
+        localStorage.setItem('nb_invoice_mappings', JSON.stringify(maps));
+        renderMappings();
+      }
+      // Update cache
+      localStorage.setItem(CACHE_KEY, JSON.stringify(INGREDIENTS_DB));
+    } else {
+      console.log('Rename skipped:', data.message);
+    }
+  } catch(e){ console.log('Rename failed:', e.message); }
 }
 
 function enviarGasto(){

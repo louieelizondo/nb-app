@@ -101,6 +101,7 @@ function doPost(e) {
       case 'update_factura':   return jsonResp(updateFactura(body));
       case 'claude_analyze':   return jsonResp(claudeAnalyze(body));
       case 'update_prices':    return jsonResp(updatePrices(body));
+      case 'rename_ingredient': return jsonResp(renameIngredient(body));
       case 'add_product':      return jsonResp(addProduct(body));
       case 'toggle_product':   return jsonResp(toggleProduct(body));
       case 'update_product':   return jsonResp(updateProduct(body));
@@ -445,6 +446,35 @@ function updatePrices(body) {
 
   log('UPDATE_PRICES', updated + ' ingredients updated (CostoPaq col C)');
   return { ok: true, updated, message: updated + ' prices updated in MATERIA PRIMA' };
+}
+
+/**
+ * Rename an ingredient in MATERIA PRIMA col A.
+ * Called when the user confirms a mapping — the invoice name becomes the new canonical name.
+ * body: { old_name: "Aceite vegetal 20L", new_name: "ACEITE VEGETAL NUTRIOLI 20L" }
+ */
+function renameIngredient(body) {
+  const oldName = (body.old_name || '').trim();
+  const newName = (body.new_name || '').trim();
+  if (!oldName || !newName) throw new Error('old_name and new_name required');
+  if (oldName.toLowerCase() === newName.toLowerCase()) return { ok: true, renamed: false, message: 'Names already match' };
+
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const mp = ss.getSheetByName(MP_TAB);
+  if (!mp) throw new Error('Tab "' + MP_TAB + '" not found');
+
+  const data = mp.getDataRange().getValues();
+  const nameCol = 0; // A = Ingrediente
+  const oldLower = oldName.toLowerCase();
+
+  for (let i = 1; i < data.length; i++) {
+    if (String(data[i][nameCol] || '').trim().toLowerCase() === oldLower) {
+      mp.getRange(i + 1, nameCol + 1).setValue(newName);
+      log('RENAME_INGREDIENT', '"' + oldName + '" → "' + newName + '"');
+      return { ok: true, renamed: true, message: 'Renamed: ' + oldName + ' → ' + newName };
+    }
+  }
+  return { ok: true, renamed: false, message: 'Ingredient not found: ' + oldName };
 }
 
 // ══════════════════════════════════════════════
