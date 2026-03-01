@@ -1113,7 +1113,13 @@ async function syncFromSheet(){
     }
 
     const sheetIds = new Set(sheetGastos.map(g => g.ID || g.id));
-    const localOnly = allGastos.filter(g => !sheetIds.has(g.id));
+    // Only keep local-only items that are recent (< 48h) — older ones were likely deleted from Sheet
+    const now = Date.now();
+    const localOnly = allGastos.filter(g => {
+      if (sheetIds.has(g.id)) return false; // exists in Sheet, will be in merged
+      const created = g.created_at ? new Date(g.created_at).getTime() : 0;
+      return (now - created) < 48 * 60 * 60 * 1000; // keep only if < 48 hours old
+    });
 
     const merged = sheetGastos.map(g => ({
       id           : g.ID || g.id || '',
