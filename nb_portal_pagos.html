@@ -417,9 +417,20 @@ async function processSyncQueue(){
     if(data.ok && data.results){
       // Remove successfully processed items
       const doneIds = new Set(data.results.filter(r => r.ok).map(r => r.queue_id));
+      // Update local versions from successful responses
+      data.results.filter(r => r.ok && r.result && r.result.version).forEach(r => {
+        const op = batch.find(b => b.queue_id === r.queue_id);
+        if(op && op.id) updateLocalVersion(op.id, r.result.version);
+      });
+      // Handle version conflicts — remove from queue (don't retry) and warn user
+      const conflicts = data.results.filter(r => !r.ok && r.result && r.result.conflict);
+      if(conflicts.length > 0){
+        conflicts.forEach(c => doneIds.add(c.queue_id)); // remove from queue, no retry
+        showToast('⚠️ Conflicto de versión: otro dispositivo editó estos datos. Sincroniza para obtener la versión actual.', 6000);
+      }
       syncQueue = syncQueue.filter(item => !doneIds.has(item.queue_id));
-      // Items that failed stay in queue for retry
-      const failed = data.results.filter(r => !r.ok);
+      // Items that failed (non-conflict) stay in queue for retry
+      const failed = data.results.filter(r => !r.ok && !(r.result && r.result.conflict));
       if(failed.length > 0) console.warn('Sync failures:', failed);
     }
     saveSyncQueue();
@@ -1122,7 +1133,8 @@ async function syncFromSheet(){
       credit_days  : parseInt(g.Credit_Days || g.credit_days || 0),
       comprobante  : g.Comprobante || g.comprobante || '',
       created_at   : g.Created_At || g.created_at || '',
-      foto_url     : g.Foto_URL || g.foto_url || ''
+      foto_url     : g.Foto_URL || g.foto_url || '',
+      version      : parseInt(g.Version || g.version || 0) || 0
     }));
 
     // Preserve local base64 photos for entries that also exist in Sheet
@@ -1143,9 +1155,19 @@ async function syncFromSheet(){
 }
 
 // ── Push functions (now use sync queue instead of fire-and-forget no-cors) ──
+function getGastoVersion(id){
+  const g = allGastos.find(x => x.id === id);
+  return g ? (g.version || 0) : 0;
+}
+
+function updateLocalVersion(id, newVersion){
+  const g = allGastos.find(x => x.id === id);
+  if(g && newVersion) { g.version = newVersion; saveGastos(); }
+}
+
 async function pushStatusToSheet(id, estado, fechaPagoReal, comprobante, pdfBase64, proveedor){
   if(!getScriptUrl()) return;
-  const payload = { action: 'update_status', id, estado, fecha_pago_real: fechaPagoReal||'', comprobante: comprobante||'' };
+  const payload = { action: 'update_status', id, estado, fecha_pago_real: fechaPagoReal||'', comprobante: comprobante||'', version: getGastoVersion(id) };
   if(pdfBase64){
     payload.pdf_base64 = pdfBase64;
     payload.proveedor = proveedor || '';
@@ -1156,12 +1178,12 @@ async function pushStatusToSheet(id, estado, fechaPagoReal, comprobante, pdfBase
 
 async function pushFacturaToSheet(id, fields){
   if(!getScriptUrl()) return;
-  enqueueSync({ action: 'update_factura', id, ...fields });
+  enqueueSync({ action: 'update_factura', id, ...fields, version: getGastoVersion(id) });
 }
 
 async function pushDateToSheet(id, fechaPago, estado){
   if(!getScriptUrl()) return;
-  enqueueSync({ action: 'update_date', id, fecha_pago: fechaPago, estado });
+  enqueueSync({ action: 'update_date', id, fecha_pago: fechaPago, estado, version: getGastoVersion(id) });
 }
 
 // ── Init ──

@@ -29,7 +29,8 @@ const FACTURAS_HEADERS = [
   'ID', 'Folio', 'Tipo_Documento', 'Proveedor', 'Proveedor_Raw',
   'Fecha_Compra', 'Monto_Factura', 'Ajustes', 'Monto_Pagar',
   'Forma_Pago', 'Categoria', 'Estado', 'Fecha_Pago', 'Credit_Days',
-  'Comprobante', 'Fecha_Pago_Real', 'Created_At', 'Items_JSON', 'Foto_URL'
+  'Comprobante', 'Fecha_Pago_Real', 'Created_At', 'Items_JSON', 'Foto_URL',
+  'Version'
 ];
 
 // Inventory Products
@@ -153,12 +154,13 @@ function createFactura(body) {
     '',
     g.created_at || new Date().toISOString(),
     g.items_json || '',
-    fotoUrl
+    fotoUrl,
+    1  // Version starts at 1
   ];
 
   sheet.appendRow(row);
   log('CREATE', gastoId + ' | ' + g.proveedor + ' | $' + g.monto_pagar + (fotoUrl ? ' | 📷' : ''));
-  return { ok: true, id: row[0], foto_url: fotoUrl, message: 'Factura registrada' };
+  return { ok: true, id: row[0], foto_url: fotoUrl, version: 1, message: 'Factura registrada' };
 }
 
 function listFacturas(params) {
@@ -196,8 +198,34 @@ function getFactura(id) {
   throw new Error('Not found: ' + id);
 }
 
+/**
+ * Check version and bump it. Returns { ok, row, sheetVersion } or throws conflict.
+ * If client sends no version, skip check (backwards compat for old clients).
+ */
+function checkVersionAndBump(sheet, rowIndex, clientVersion) {
+  const vCol = FACTURAS_HEADERS.indexOf('Version') + 1;
+  if (vCol < 1) return { ok: true }; // no version column yet
+  const sheetVersion = parseInt(sheet.getRange(rowIndex, vCol).getValue()) || 0;
+  if (clientVersion !== undefined && clientVersion !== null && clientVersion !== '') {
+    const cv = parseInt(clientVersion);
+    if (!isNaN(cv) && cv !== sheetVersion) {
+      return {
+        ok: false,
+        conflict: true,
+        sheetVersion,
+        clientVersion: cv,
+        message: 'Conflict: your version (' + cv + ') differs from current (' + sheetVersion + '). Please reload.'
+      };
+    }
+  }
+  // Bump version
+  const newVersion = sheetVersion + 1;
+  sheet.getRange(rowIndex, vCol).setValue(newVersion);
+  return { ok: true, newVersion };
+}
+
 function updateStatus(body) {
-  const { id, estado, fecha_pago_real, comprobante, pdf_base64, proveedor } = body;
+  const { id, estado, fecha_pago_real, comprobante, pdf_base64, proveedor, version } = body;
   if (!id || !estado) throw new Error('Missing id or estado');
   const sheet = getOrCreateTab(FACTURAS_TAB, FACTURAS_HEADERS);
   const data  = sheet.getDataRange().getValues();
@@ -214,35 +242,43 @@ function updateStatus(body) {
 
   for (let i = 1; i < data.length; i++) {
     if (String(data[i][0]) === String(id)) {
+      // Version conflict check
+      const vc = checkVersionAndBump(sheet, i + 1, version);
+      if (!vc.ok) return vc; // returns conflict response, not throw
+
       const estadoCol  = FACTURAS_HEADERS.indexOf('Estado') + 1;
       const realCol    = FACTURAS_HEADERS.indexOf('Fecha_Pago_Real') + 1;
       const compCol    = FACTURAS_HEADERS.indexOf('Comprobante') + 1;
       sheet.getRange(i + 1, estadoCol).setValue(estado);
       if (fecha_pago_real) sheet.getRange(i + 1, realCol).setValue(fecha_pago_real);
       if (compValue) sheet.getRange(i + 1, compCol).setValue(compValue);
-      log('UPDATE_STATUS', id + ' → ' + estado + (pdf_base64 ? ' | 📎 PDF' : ''));
-      return { ok: true, message: 'Status updated', comprobante_url: compValue };
+      log('UPDATE_STATUS', id + ' → ' + estado + (pdf_base64 ? ' | 📎 PDF' : '') + ' v' + (vc.newVersion||'?'));
+      return { ok: true, message: 'Status updated', comprobante_url: compValue, version: vc.newVersion };
     }
   }
   throw new Error('Not found: ' + id);
 }
 
 function updateDate(body) {
-  const { id, fecha_pago, estado } = body;
+  const { id, fecha_pago, estado, version } = body;
   if (!id || !fecha_pago) throw new Error('Missing id or fecha_pago');
   const sheet = getOrCreateTab(FACTURAS_TAB, FACTURAS_HEADERS);
   const data  = sheet.getDataRange().getValues();
 
   for (let i = 1; i < data.length; i++) {
     if (String(data[i][0]) === String(id)) {
+      // Version conflict check
+      const vc = checkVersionAndBump(sheet, i + 1, version);
+      if (!vc.ok) return vc;
+
       const fpCol = FACTURAS_HEADERS.indexOf('Fecha_Pago') + 1;
       sheet.getRange(i + 1, fpCol).setValue(fecha_pago);
       if (estado) {
         const esCol = FACTURAS_HEADERS.indexOf('Estado') + 1;
         sheet.getRange(i + 1, esCol).setValue(estado);
       }
-      log('UPDATE_DATE', id + ' → ' + fecha_pago);
-      return { ok: true, message: 'Date updated' };
+      log('UPDATE_DATE', id + ' → ' + fecha_pago + ' v' + (vc.newVersion||'?'));
+      return { ok: true, message: 'Date updated', version: vc.newVersion };
     }
   }
   throw new Error('Not found: ' + id);
@@ -265,7 +301,7 @@ function deleteFactura(body) {
 }
 
 function updateFactura(body) {
-  const { id } = body;
+  const { id, version } = body;
   if (!id) throw new Error('Missing id');
   const sheet = getOrCreateTab(FACTURAS_TAB, FACTURAS_HEADERS);
   const data  = sheet.getDataRange().getValues();
@@ -279,14 +315,18 @@ function updateFactura(body) {
 
   for (let i = 1; i < data.length; i++) {
     if (String(data[i][0]) === String(id)) {
+      // Version conflict check
+      const vc = checkVersionAndBump(sheet, i + 1, version);
+      if (!vc.ok) return vc;
+
       editableFields.forEach(field => {
         if (body[field] !== undefined) {
           const col = FACTURAS_HEADERS.indexOf(field) + 1;
           if (col > 0) sheet.getRange(i + 1, col).setValue(body[field]);
         }
       });
-      log('UPDATE_FACTURA', id + ' | fields: ' + Object.keys(body).filter(k => editableFields.includes(k)).join(','));
-      return { ok: true, message: 'Factura updated' };
+      log('UPDATE_FACTURA', id + ' | fields: ' + Object.keys(body).filter(k => editableFields.includes(k)).join(',') + ' v' + (vc.newVersion||'?'));
+      return { ok: true, message: 'Factura updated', version: vc.newVersion };
     }
   }
   throw new Error('Not found: ' + id);
@@ -697,7 +737,12 @@ function processSyncBatch(body) {
         case 'audit':          result = writeAudit(op); break;
         default: result = { ok: false, error: 'Unknown action: ' + op.action };
       }
-      results.push({ queue_id: op.queue_id || null, ok: true, result });
+      // If the inner function returned a conflict, bubble it up as not-ok
+      if (result && result.conflict) {
+        results.push({ queue_id: op.queue_id || null, ok: false, result });
+      } else {
+        results.push({ queue_id: op.queue_id || null, ok: true, result });
+      }
     } catch(err) {
       results.push({ queue_id: op.queue_id || null, ok: false, error: err.message });
     }
@@ -721,6 +766,16 @@ function getOrCreateTab(name, headers) {
       sheet.getRange(1, 1, 1, headers.length).setFontWeight('bold');
       sheet.setFrozenRows(1);
     }
+  } else if (headers) {
+    // Auto-migrate: add any new header columns that are missing
+    const existing = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0].map(String);
+    headers.forEach(h => {
+      if (!existing.includes(h)) {
+        const newCol = sheet.getLastColumn() + 1;
+        sheet.getRange(1, newCol).setValue(h).setFontWeight('bold');
+        existing.push(h);
+      }
+    });
   }
   return sheet;
 }
