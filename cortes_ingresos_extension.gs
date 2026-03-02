@@ -716,9 +716,7 @@ function getMonthlySummary(params) {
   const facturas = sheetToObjects(FACTURAS_TAB, FACTURAS_HEADERS);
   let monthGastos;
   if (month && month.includes('-')) {
-    monthGastos = facturas.filter(r =>
-      formatDateStr(r.Fecha_Compra).startsWith(month) || formatDateStr(r.Fecha_Pago).startsWith(month)
-    );
+    monthGastos = facturas.filter(r => formatDateStr(r.Fecha_Compra).startsWith(month));
   } else {
     monthGastos = facturas;
   }
@@ -869,11 +867,26 @@ function getDashboardData(params) {
     dayOfWeekAvg[dia] = Math.round(dowTotals[dia] / dowCounts[dia]);
   });
 
+  // Mesa sales for selected month (avoids a separate API call)
+  const mesaFields = [
+    'Cocina1', 'Cocina2', 'Cocina3',
+    'Produccion1', 'Produccion2', 'Produccion3',
+    'Casa1', 'Casa2', 'Express', 'Granja',
+    'FrutasVerduras', 'ProveedorVentas', 'MermasCanastas', 'Pedidos', 'Mixto'
+  ];
+  const mesaSales = {};
+  mesaFields.forEach(f => { mesaSales[f] = 0; });
+  const monthIngresos = ingresos.filter(r => formatDateStr(r.Fecha).startsWith(currentPrefix));
+  monthIngresos.forEach(r => {
+    mesaFields.forEach(f => { mesaSales[f] += parseFloat(r[f]) || 0; });
+  });
+
   return {
     year,
     monthly,
     dailySales,
     dayOfWeekAvg,
+    mesaSales,
     totalDays: ingresos.length
   };
 }

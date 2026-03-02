@@ -516,20 +516,30 @@
       showError('');
       showSkeletons(true);
 
-      const [dashboardRes, summaryRes, trendsRes, mesaRes] = await Promise.all([
+      const [dashboardRes, trendsRes] = await Promise.all([
         fetch(`${API_URL}?action=get_dashboard_data&year=${year}&month=${month}`),
-        fetch(`${API_URL}?action=get_monthly_summary&month=${monthStr}&year=${year}`),
-        fetch(`${API_URL}?action=get_payment_trends&year=${year}`),
-        fetch(`${API_URL}?action=get_mesa_sales&month=${monthStr}`)
+        fetch(`${API_URL}?action=get_payment_trends&year=${year}`)
       ]);
 
       let dashboardData = await dashboardRes.json();
-      let summaryData = await summaryRes.json();
       let trendsData = await trendsRes.json();
-      let mesaData = await mesaRes.json();
 
       // Check for errors
       if (!dashboardData || dashboardData.error) throw new Error('Error loading dashboard data');
+
+      // Derive KPI summary from dashboard monthly data (avoids separate API call)
+      const mesName = MONTH_NAMES[viewMonth];
+      const md = dashboardData.monthly[mesName] || {};
+      const summaryData = {
+        totalIngresos: md.ingresos || 0,
+        totalGastos: md.gastos || 0,
+        faltaFacturar: md.faltaFacturar || 0,
+        days: md.days || 0,
+        paymentBreakdown: md.paymentTypes || { tarjeta: 0, transferencias: 0, cashback: 0, efectivo: 0 }
+      };
+
+      // Mesa sales are now included in dashboard data
+      const mesaData = { mesaSales: dashboardData.mesaSales || {} };
 
       currentData = { dashboard: dashboardData, summary: summaryData, trends: trendsData, mesa: mesaData };
 
