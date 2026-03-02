@@ -1,0 +1,1424 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NB · Corte de Caja</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: linear-gradient(135deg, #faf6f1 0%, #f0ebe4 50%, #e8e0d8 100%);
+      color: #2d2319;
+      min-height: 100vh;
+    }
+
+    /* TOPBAR */
+    .topbar {
+      background: linear-gradient(135deg, #3a7c3a 0%, #2e6b2e 40%, #1a5c2e 100%);
+      color: white;
+      padding: 18px 32px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      box-shadow: 0 4px 20px rgba(46, 107, 46, 0.3);
+    }
+    .logo {
+      width: 44px;
+      height: 44px;
+      background: rgba(255, 255, 255, 0.95);
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 900;
+      color: #2e6b2e;
+      font-size: 16px;
+      flex-shrink: 0;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    }
+    .topbar h1 { font-size: 20px; font-weight: 800; letter-spacing: -0.3px; }
+    .topbar-sub { font-size: 12px; opacity: 0.75; margin-top: 1px; }
+    .topbar-right { margin-left: auto; font-size: 12px; opacity: 0.7; text-align: right; }
+    .config-icon { cursor: pointer; font-size: 20px; opacity: 0.8; transition: opacity 0.2s; }
+    .config-icon:hover { opacity: 1; }
+
+    .container { max-width: 1200px; margin: 0 auto; padding: 24px 24px 100px; }
+
+    /* TABS */
+    .tabs {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 20px;
+      border-bottom: 2px solid #e0d8cf;
+      flex-wrap: wrap;
+    }
+    .tab-btn {
+      padding: 12px 20px;
+      background: white;
+      border: none;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 600;
+      color: #7a6b5d;
+      border-bottom: 3px solid transparent;
+      transition: all 0.2s;
+      border-radius: 10px 10px 0 0;
+    }
+    .tab-btn:hover {
+      color: #2e6b2e;
+      background: #f5f0eb;
+    }
+    .tab-btn.active {
+      color: #2e6b2e;
+      border-bottom-color: #4caf50;
+      background: white;
+    }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+
+    /* FORM CARD */
+    .card {
+      background: white;
+      border-radius: 16px;
+      padding: 24px;
+      box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+      margin-bottom: 20px;
+    }
+    .card h2 {
+      font-size: 18px;
+      margin-bottom: 18px;
+      color: #2d2319;
+      border-bottom: 2px solid #e0d8cf;
+      padding-bottom: 12px;
+    }
+    .card h3 {
+      font-size: 15px;
+      margin-bottom: 14px;
+      color: #2d2319;
+      margin-top: 18px;
+    }
+
+    /* FORM GRID */
+    .form-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin-bottom: 18px;
+    }
+    .form-grid.full { grid-template-columns: 1fr; }
+    .form-grid.col3 { grid-template-columns: repeat(3, 1fr); }
+
+    .form-group {
+      display: flex;
+      flex-direction: column;
+    }
+    .form-group label {
+      font-size: 12px;
+      font-weight: 700;
+      color: #7a6b5d;
+      margin-bottom: 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .form-group input,
+    .form-group select {
+      padding: 10px 14px;
+      border: 2px solid #e0d8cf;
+      border-radius: 10px;
+      font-size: 14px;
+      transition: border-color 0.2s;
+    }
+    .form-group input:focus,
+    .form-group select:focus {
+      border-color: #2e6b2e;
+      outline: none;
+      box-shadow: 0 0 0 3px rgba(46, 107, 46, 0.1);
+    }
+
+    /* DENOMINATION GRID */
+    .denom-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      margin-top: 12px;
+    }
+    .denom-item {
+      background: #f9f6f2;
+      border-radius: 10px;
+      padding: 12px;
+      border: 1px solid #e0d8cf;
+    }
+    .denom-label {
+      font-size: 11px;
+      font-weight: 700;
+      color: #7a6b5d;
+      margin-bottom: 4px;
+      text-transform: uppercase;
+    }
+    .denom-input {
+      width: 100%;
+      padding: 8px;
+      border: 1px solid #d0c7bd;
+      border-radius: 6px;
+      font-size: 13px;
+      margin-bottom: 4px;
+    }
+    .denom-calc {
+      font-size: 12px;
+      color: #999;
+      font-weight: 600;
+    }
+
+    /* BADGES */
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 6px 14px;
+      border-radius: 12px;
+      font-size: 12px;
+      font-weight: 700;
+      margin-top: 8px;
+    }
+    .badge.green { background: #e8f5e9; color: #2e7d32; }
+    .badge.red { background: #ffebee; color: #c62828; }
+    .badge.gray { background: #f5f5f5; color: #999; }
+
+    /* BUTTONS */
+    .btn {
+      padding: 10px 20px;
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 700;
+      transition: all 0.2s;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .btn-primary {
+      background: linear-gradient(135deg, #3a7c3a, #2e6b2e);
+      color: white;
+      box-shadow: 0 2px 8px rgba(46, 107, 46, 0.2);
+    }
+    .btn-primary:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(46, 107, 46, 0.3);
+    }
+    .btn-secondary {
+      background: #f5f0eb;
+      color: #7a6b5d;
+    }
+    .btn-secondary:hover {
+      background: #e8e0d8;
+    }
+    .btn-danger {
+      background: #ffebee;
+      color: #c62828;
+      padding: 6px 12px;
+      font-size: 12px;
+    }
+    .btn-danger:hover {
+      background: #ffcdd2;
+    }
+    .btn-sm {
+      padding: 8px 14px;
+      font-size: 12px;
+    }
+    .btn-icon {
+      padding: 8px 12px;
+      font-size: 14px;
+      border-radius: 8px;
+    }
+
+    /* TABLE */
+    .tbl-wrap {
+      overflow-x: auto;
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+    thead th {
+      background: linear-gradient(135deg, #3a7c3a, #2e6b2e);
+      color: white;
+      padding: 12px 14px;
+      text-align: left;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+    }
+    tbody td {
+      padding: 12px 14px;
+      border-bottom: 1px solid #f2ede7;
+    }
+    tbody tr:hover {
+      background: #faf7f3;
+    }
+    tbody tr:last-child td {
+      border-bottom: none;
+    }
+
+    /* STATUS INDICATOR */
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 4px 10px;
+      border-radius: 8px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+    .status-waiting {
+      background: #fff3e0;
+      color: #e65100;
+    }
+    .status-received {
+      background: #e8f5e9;
+      color: #2e7d32;
+    }
+
+    /* LOADING */
+    .spinner {
+      display: inline-block;
+      width: 12px;
+      height: 12px;
+      border: 2px solid #e0d8cf;
+      border-top-color: #2e6b2e;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* TOAST */
+    .toast {
+      position: fixed;
+      bottom: 28px;
+      right: 28px;
+      background: linear-gradient(135deg, #2d2319, #4a3f35);
+      color: white;
+      padding: 14px 20px;
+      border-radius: 12px;
+      font-size: 13px;
+      font-weight: 600;
+      z-index: 20000;
+      opacity: 0;
+      transition: opacity 0.3s;
+      pointer-events: none;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+    }
+    .toast.show {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    /* MODAL */
+    .modal-bg {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.5);
+      backdrop-filter: blur(4px);
+      z-index: 9000;
+      display: none;
+      align-items: center;
+      justify-content: center;
+    }
+    .modal-bg.open {
+      display: flex;
+    }
+    .modal {
+      background: white;
+      border-radius: 16px;
+      padding: 28px;
+      width: 90%;
+      max-width: 450px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25);
+    }
+    .modal h3 {
+      font-size: 16px;
+      font-weight: 800;
+      margin-bottom: 16px;
+      color: #2d2319;
+    }
+    .modal-actions {
+      display: flex;
+      gap: 10px;
+      justify-content: flex-end;
+      margin-top: 20px;
+    }
+
+    /* PRINT STYLES */
+    @media print {
+      body { background: white; }
+      .topbar, .tabs, .btn, .tbl-wrap { display: none; }
+      .print-ticket {
+        page-break-after: always;
+        margin-bottom: 20px;
+      }
+    }
+
+    /* RECEIPT STYLE */
+    .receipt {
+      font-family: monospace;
+      background: white;
+      border: 1px solid #e0d8cf;
+      border-radius: 8px;
+      padding: 16px;
+      margin: 16px 0;
+      max-width: 400px;
+      text-align: center;
+      font-size: 12px;
+      line-height: 1.6;
+    }
+    .receipt-title {
+      font-weight: 800;
+      font-size: 14px;
+      margin-bottom: 8px;
+      margin-top: 8px;
+    }
+    .receipt-line { border-bottom: 1px solid #e0d8cf; padding: 8px 0; }
+    .receipt-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 4px 0;
+    }
+
+    /* RESPONSIVE */
+    @media (max-width: 768px) {
+      .topbar { padding: 14px 16px; }
+      .topbar h1 { font-size: 16px; }
+      .container { padding: 14px 12px 80px; }
+      .form-grid { grid-template-columns: 1fr; }
+      .form-grid.col3 { grid-template-columns: repeat(2, 1fr); }
+      .denom-grid { grid-template-columns: repeat(2, 1fr); }
+      .card { padding: 16px; }
+      .tabs { gap: 4px; }
+      .tab-btn { padding: 10px 14px; font-size: 12px; }
+      .btn { padding: 8px 14px; font-size: 12px; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- TOPBAR -->
+  <div class="topbar">
+    <div class="logo">CC</div>
+    <div>
+      <h1>Corte de Caja</h1>
+      <div class="topbar-sub">Natural Balance Club</div>
+    </div>
+    <div class="topbar-right">
+      <span id="today"></span>
+      <div id="syncStatus" class="config-icon" style="font-size:12px; margin-top:4px;"></div>
+    </div>
+    <div class="config-icon" onclick="openConfigModal()">⚙️</div>
+  </div>
+
+  <div class="container">
+
+    <!-- TABS -->
+    <div class="tabs">
+      <button class="tab-btn active" onclick="switchTab('tab1')">1. Corte Individual</button>
+      <button class="tab-btn" onclick="switchTab('tab2')">2. Corte de Tienda</button>
+      <button class="tab-btn" onclick="switchTab('tab3')">3. Comparativo</button>
+      <button class="tab-btn" onclick="switchTab('tab4')">4. Preparación Depósito</button>
+    </div>
+
+    <!-- TAB 1: CORTE INDIVIDUAL -->
+    <div id="tab1" class="tab-content active">
+      <div class="card">
+        <h2>Corte Individual - Registro de Caja</h2>
+
+        <div class="form-grid">
+          <div class="form-group">
+            <label>Fecha</label>
+            <input type="date" id="ind_fecha" />
+          </div>
+          <div class="form-group">
+            <label>Colaborador</label>
+            <input type="text" id="ind_colaborador" placeholder="Nombre del cajero" />
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>Caja</label>
+          <select id="ind_caja"></select>
+        </div>
+
+        <h3>Métodos de Pago</h3>
+        <div class="form-grid col3">
+          <div class="form-group">
+            <label>Ventas Caja</label>
+            <input type="number" id="ind_ventasCaja" step="0.01" />
+          </div>
+          <div class="form-group">
+            <label>Tarjeta</label>
+            <input type="number" id="ind_tarjeta" step="0.01" />
+          </div>
+          <div class="form-group">
+            <label>Transferencias</label>
+            <input type="number" id="ind_transferencias" step="0.01" />
+          </div>
+        </div>
+        <div class="form-grid col3">
+          <div class="form-group">
+            <label>Cashback</label>
+            <input type="number" id="ind_cashback" step="0.01" />
+          </div>
+          <div class="form-group">
+            <label>Retiros</label>
+            <input type="number" id="ind_retiros" step="0.01" />
+          </div>
+        </div>
+
+        <h3>Conteo de Efectivo</h3>
+        <div class="denom-grid" id="ind_denomGrid"></div>
+
+        <div style="margin-top:16px;">
+          <div style="font-size:14px; font-weight:700; padding:12px; background:#f9f6f2; border-radius:10px; display:flex; justify-content:space-between;">
+            <span>Total Efectivo:</span>
+            <span id="ind_totalEfectivo">$0.00</span>
+          </div>
+        </div>
+
+        <div style="margin-top:12px;">
+          <div id="ind_faltanteBadge"></div>
+        </div>
+
+        <div style="display:flex; gap:10px; margin-top:20px;">
+          <button class="btn btn-primary" onclick="saveCorteIndividual()">Guardar Corte</button>
+          <button class="btn btn-secondary" onclick="resetFormIndividual()">Limpiar</button>
+        </div>
+      </div>
+
+      <!-- TODAY'S INDIVIDUAL CORTES -->
+      <div class="card">
+        <h2>Cortes Registrados Hoy</h2>
+        <div id="ind_list" class="tbl-wrap"></div>
+      </div>
+    </div>
+
+    <!-- TAB 2: CORTE DE TIENDA -->
+    <div id="tab2" class="tab-content">
+      <div class="card">
+        <h2>Corte de Tienda - Consolidación</h2>
+
+        <div class="form-grid">
+          <div class="form-group">
+            <label>Fecha</label>
+            <input type="date" id="tienda_fecha" />
+          </div>
+          <div class="form-group">
+            <label>Líder de Tienda</label>
+            <input type="text" id="tienda_colaborador" />
+          </div>
+        </div>
+
+        <h3>Cargar Cortes Individuales</h3>
+        <div style="padding:12px; background:#f9f6f2; border-radius:10px; margin-bottom:16px; font-size:13px;">
+          <button class="btn btn-secondary btn-sm" onclick="loadTodaysCortes()">Cargar cortes de hoy</button>
+          <div id="tienda_summary" style="margin-top:10px;"></div>
+        </div>
+
+        <h3>Método de Pagos - Conteo Líder</h3>
+        <div class="form-grid col3">
+          <div class="form-group">
+            <label>Pagos Recibidos</label>
+            <input type="number" id="tienda_pagosRecibidos" step="0.01" />
+          </div>
+          <div class="form-group">
+            <label>Tarjeta</label>
+            <input type="number" id="tienda_tarjeta" step="0.01" />
+          </div>
+          <div class="form-group">
+            <label>Transferencias</label>
+            <input type="number" id="tienda_transferencias" step="0.01" />
+          </div>
+        </div>
+        <div class="form-grid col3">
+          <div class="form-group">
+            <label>Cashback</label>
+            <input type="number" id="tienda_cashback" step="0.01" />
+          </div>
+          <!-- Store Credit removed — consolidated with Cashback -->
+        </div>
+
+        <h3>Conteo de Efectivo</h3>
+        <div class="denom-grid" id="tienda_denomGrid"></div>
+
+        <div style="margin-top:16px;">
+          <div style="font-size:14px; font-weight:700; padding:12px; background:#f9f6f2; border-radius:10px; display:flex; justify-content:space-between;">
+            <span>Total Efectivo:</span>
+            <span id="tienda_totalEfectivo">$0.00</span>
+          </div>
+        </div>
+
+        <div style="margin-top:12px;">
+          <div id="tienda_faltanteBadge"></div>
+        </div>
+
+        <h3 style="margin-top:20px;">Shopify Online (Información Manual)</h3>
+        <div class="form-grid col3">
+          <div class="form-group">
+            <label>Shopify Ventas</label>
+            <input type="number" id="tienda_shopifyVentas" step="0.01" />
+          </div>
+          <div class="form-group">
+            <label>Shopify Tarjeta</label>
+            <input type="number" id="tienda_shopifyTarjeta" step="0.01" />
+          </div>
+          <div class="form-group">
+            <label>Shopify Transferencias</label>
+            <input type="number" id="tienda_shopifyTransf" step="0.01" />
+          </div>
+        </div>
+
+        <div style="display:flex; gap:10px; margin-top:20px;">
+          <button class="btn btn-primary" onclick="saveCorteTienda()">Notificar a Louie</button>
+          <button class="btn btn-secondary" onclick="resetFormTienda()">Limpiar</button>
+        </div>
+
+        <div id="tienda_status" style="margin-top:16px;"></div>
+      </div>
+    </div>
+
+    <!-- TAB 3: COMPARATIVO -->
+    <div id="tab3" class="tab-content">
+      <div class="card">
+        <h2>Comparativo - Verificación de Tienda</h2>
+
+        <div class="form-grid">
+          <div class="form-group">
+            <label>Fecha</label>
+            <input type="date" id="comp_fecha" />
+          </div>
+        </div>
+
+        <button class="btn btn-secondary btn-sm" onclick="loadComparativo()">Cargar Comparativo</button>
+
+        <h3 style="margin-top:18px;">Comparativa de Denominaciones</h3>
+        <div class="tbl-wrap" style="margin-top:12px;">
+          <table id="comp_table"></table>
+        </div>
+
+        <h3 style="margin-top:18px;">Comparativa de Métodos de Pago</h3>
+        <div class="tbl-wrap" style="margin-top:12px;">
+          <table id="comp_payment_table"></table>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 4: PREPARACION DE DEPOSITO -->
+    <div id="tab4" class="tab-content">
+      <div class="card">
+        <h2>Preparación de Depósito</h2>
+
+        <div class="form-grid">
+          <div class="form-group">
+            <label>Fecha de Venta</label>
+            <input type="date" id="dep_fechaVenta" />
+          </div>
+          <div class="form-group">
+            <label>Fecha de Depósito</label>
+            <input type="date" id="dep_fechaDeposito" />
+          </div>
+        </div>
+
+        <button class="btn btn-secondary btn-sm" onclick="loadDepositoData()">Cargar Datos</button>
+
+        <h3 style="margin-top:18px;">Resumen Corte</h3>
+        <div id="dep_summary"></div>
+
+        <h3 style="margin-top:18px;">Asignación de Billetes</h3>
+        <div id="dep_allocation"></div>
+
+        <div style="display:flex; gap:10px; margin-top:20px;">
+          <button class="btn btn-primary" onclick="printDepositTicket()">Imprimir Bolsa Depósito</button>
+          <button class="btn btn-primary" onclick="printSobre2Ticket()">Imprimir Sobre 2</button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- CONFIG MODAL -->
+  <div id="configModal" class="modal-bg">
+    <div class="modal">
+      <h3>Configuración</h3>
+      <div class="form-group">
+        <label>Script URL</label>
+        <input type="text" id="configScriptUrl" />
+      </div>
+      <div class="form-group">
+        <label>Email del Líder</label>
+        <input type="email" id="configLeaderEmail" />
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" onclick="closeConfigModal()">Cancelar</button>
+        <button class="btn btn-primary" onclick="saveConfig()">Guardar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- PRINT TEMPLATES (hidden) -->
+  <div id="printArea" style="display:none;"></div>
+
+  <!-- TOAST -->
+  <div id="toast" class="toast"></div>
+
+  <script src="nb_auth.js"></script>
+  <script>
+    // ═══════════════════════════════════════════════════════════════
+    // CONFIG & INIT
+    // ═══════════════════════════════════════════════════════════════
+
+    const DEFAULT_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxQ7BzFITQnxyndvo2q7Xa1-Sc-yX5S8JGRc1mIbd4ye0rSpN2I2qx1zAjzRqbPXNeL/exec';
+
+    let config = {
+      scriptUrl: DEFAULT_SCRIPT_URL,
+      leaderEmail: ''
+    };
+
+    const DENOMINATIONS = [
+      { label: '$1000', value: 1000, key: 'D_1000' },
+      { label: '$500', value: 500, key: 'D_500' },
+      { label: '$200', value: 200, key: 'D_200' },
+      { label: '$100', value: 100, key: 'D_100' },
+      { label: '$50', value: 50, key: 'D_50' },
+      { label: '$20', value: 20, key: 'D_20' },
+      { label: '$10', value: 10, key: 'D_10' },
+      { label: '$5', value: 5, key: 'D_5' },
+      { label: '$2', value: 2, key: 'D_2' },
+      { label: '$1', value: 1, key: 'D_1' },
+      { label: '$0.50', value: 0.50, key: 'D_050' }
+    ];
+
+    // Load config from localStorage
+    function loadConfig() {
+      const saved = localStorage.getItem('nb_corte_config');
+      if (saved) {
+        config = JSON.parse(saved);
+      }
+      updateConfigUI();
+      updateSyncStatus('ready');
+      initToday();
+    }
+
+    function saveConfig() {
+      config.scriptUrl = document.getElementById('configScriptUrl').value || DEFAULT_SCRIPT_URL;
+      config.leaderEmail = document.getElementById('configLeaderEmail').value;
+      localStorage.setItem('nb_corte_config', JSON.stringify(config));
+      closeConfigModal();
+      showToast('Configuración guardada', 'success');
+    }
+
+    function updateConfigUI() {
+      document.getElementById('configScriptUrl').value = config.scriptUrl;
+      document.getElementById('configLeaderEmail').value = config.leaderEmail;
+    }
+
+    function openConfigModal() {
+      document.getElementById('configModal').classList.add('open');
+    }
+
+    function closeConfigModal() {
+      document.getElementById('configModal').classList.remove('open');
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // UI HELPERS
+    // ═══════════════════════════════════════════════════════════════
+
+    function initToday() {
+      const today = new Date().toISOString().split('T')[0];
+      document.getElementById('today').innerText = today;
+      document.getElementById('ind_fecha').value = today;
+      document.getElementById('tienda_fecha').value = today;
+      document.getElementById('comp_fecha').value = today;
+      document.getElementById('dep_fechaVenta').value = today;
+      document.getElementById('dep_fechaDeposito').value = today;
+    }
+
+    function switchTab(tabName) {
+      document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      document.getElementById(tabName).classList.add('active');
+      event.target.classList.add('active');
+    }
+
+    function showToast(message, type = 'info') {
+      const toast = document.getElementById('toast');
+      toast.innerText = message;
+      toast.className = 'toast show';
+      setTimeout(() => toast.classList.remove('show'), 3000);
+    }
+
+    function updateSyncStatus(status) {
+      const el = document.getElementById('syncStatus');
+      if (status === 'synced') {
+        el.innerHTML = '✓ Sincronizado';
+        el.style.color = '#2e7d32';
+      } else if (status === 'pending') {
+        el.innerHTML = '<span class="spinner"></span> Enviando...';
+        el.style.color = '#e65100';
+      } else if (status === 'error') {
+        el.innerHTML = '✗ Error';
+        el.style.color = '#c62828';
+      } else {
+        el.innerHTML = '◯ Listo';
+        el.style.color = '#999';
+      }
+    }
+
+    function formatCurrency(n) {
+      return '$' + (Math.round(n * 100) / 100).toFixed(2);
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // DENOMINATION GRID
+    // ═══════════════════════════════════════════════════════════════
+
+    function createDenomGrid(containerId, onChange) {
+      const container = document.getElementById(containerId);
+      container.innerHTML = '';
+      DENOMINATIONS.forEach(d => {
+        const item = document.createElement('div');
+        item.className = 'denom-item';
+        item.innerHTML = `
+          <div class="denom-label">${d.label}</div>
+          <input type="number" class="denom-input" data-key="${d.key}" value="0" min="0" step="1" />
+          <div class="denom-calc">× ${d.label} = <span>$0.00</span></div>
+        `;
+        const input = item.querySelector('input');
+        input.addEventListener('input', () => {
+          updateDenomCalc(item, d.value);
+          onChange();
+        });
+        container.appendChild(item);
+      });
+    }
+
+    function updateDenomCalc(item, value) {
+      const input = item.querySelector('input');
+      const calc = item.querySelector('.denom-calc span');
+      const total = (parseFloat(input.value) || 0) * value;
+      calc.innerText = formatCurrency(total);
+    }
+
+    function getDenomValues(containerId) {
+      const result = {};
+      const container = document.getElementById(containerId);
+      container.querySelectorAll('input').forEach(inp => {
+        const key = inp.getAttribute('data-key');
+        result[key] = parseFloat(inp.value) || 0;
+      });
+      return result;
+    }
+
+    function getTotalEfectivo(denomValues) {
+      let total = 0;
+      DENOMINATIONS.forEach(d => {
+        total += (denomValues[d.key] || 0) * d.value;
+      });
+      return total;
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // TAB 1: CORTE INDIVIDUAL
+    // ═══════════════════════════════════════════════════════════════
+
+    async function initTab1() {
+      createDenomGrid('ind_denomGrid', updateIndividualCalcs);
+      await loadCajas();
+
+      ['ind_ventasCaja', 'ind_tarjeta', 'ind_transferencias', 'ind_cashback', 'ind_retiros']
+        .forEach(id => document.getElementById(id).addEventListener('input', updateIndividualCalcs));
+
+      await loadTodaysIndividualCortes();
+    }
+
+    async function loadCajas() {
+      try {
+        const resp = await fetch(config.scriptUrl + '?action=get_config_cajas');
+        const data = await resp.json();
+        const select = document.getElementById('ind_caja');
+        select.innerHTML = '';
+        if (data.ok && data.cajas) {
+          data.cajas.forEach(c => {
+            const opt = document.createElement('option');
+            opt.value = c.Caja;
+            opt.textContent = c.Caja + (c.Tipo ? ' (' + c.Tipo + ')' : '');
+            select.appendChild(opt);
+          });
+        }
+      } catch (e) {
+        console.error('Error loading cajas:', e);
+        showToast('Error cargando cajas', 'error');
+      }
+    }
+
+    function updateIndividualCalcs() {
+      const denoms = getDenomValues('ind_denomGrid');
+      const totalEfectivo = getTotalEfectivo(denoms);
+      document.getElementById('ind_totalEfectivo').innerText = formatCurrency(totalEfectivo);
+
+      const ventasCaja = parseFloat(document.getElementById('ind_ventasCaja').value) || 0;
+      const tarjeta = parseFloat(document.getElementById('ind_tarjeta').value) || 0;
+      const transferencias = parseFloat(document.getElementById('ind_transferencias').value) || 0;
+      const cashback = parseFloat(document.getElementById('ind_cashback').value) || 0;
+      const retiros = parseFloat(document.getElementById('ind_retiros').value) || 0;
+
+      const expectedCash = ventasCaja - tarjeta - transferencias + cashback - retiros;
+      const faltanteSobrante = totalEfectivo - expectedCash;
+
+      const badge = document.getElementById('ind_faltanteBadge');
+      let badgeClass = 'gray';
+      let badgeText = 'Exacto';
+      if (Math.abs(faltanteSobrante) > 0.5) {
+        if (faltanteSobrante > 0) {
+          badgeClass = 'green';
+          badgeText = 'SOBRANTE: ' + formatCurrency(faltanteSobrante);
+        } else {
+          badgeClass = 'red';
+          badgeText = 'FALTANTE: ' + formatCurrency(Math.abs(faltanteSobrante));
+        }
+      }
+      badge.innerHTML = `<div class="badge ${badgeClass}">${badgeText}</div>`;
+    }
+
+    async function saveCorteIndividual() {
+      updateSyncStatus('pending');
+      const denoms = getDenomValues('ind_denomGrid');
+      const totalEfectivo = getTotalEfectivo(denoms);
+
+      const corte = {
+        Fecha: document.getElementById('ind_fecha').value,
+        Colaborador: document.getElementById('ind_colaborador').value,
+        Caja: document.getElementById('ind_caja').value,
+        VentasCaja: parseFloat(document.getElementById('ind_ventasCaja').value) || 0,
+        Tarjeta: parseFloat(document.getElementById('ind_tarjeta').value) || 0,
+        Transferencias: parseFloat(document.getElementById('ind_transferencias').value) || 0,
+        Cashback: parseFloat(document.getElementById('ind_cashback').value) || 0,
+        // StoreCredit removed — consolidated with Cashback
+        Retiros: parseFloat(document.getElementById('ind_retiros').value) || 0,
+        ...denoms
+      };
+
+      try {
+        const resp = await fetch(config.scriptUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'save_corte_individual', corte })
+        });
+        const result = await resp.json();
+        if (result.ok) {
+          showToast('Corte guardado: ' + corte.Caja, 'success');
+          resetFormIndividual();
+          await loadTodaysIndividualCortes();
+          updateSyncStatus('synced');
+        } else {
+          throw new Error(result.error || 'Unknown error');
+        }
+      } catch (e) {
+        console.error('Save error:', e);
+        showToast('Error guardando corte: ' + e.message, 'error');
+        updateSyncStatus('error');
+      }
+    }
+
+    async function loadTodaysIndividualCortes() {
+      const fecha = document.getElementById('ind_fecha').value;
+      try {
+        const resp = await fetch(config.scriptUrl + '?action=get_cortes_dia&fecha=' + fecha);
+        const data = await resp.json();
+        const list = document.getElementById('ind_list');
+
+        if (!data.cortes || data.cortes.length === 0) {
+          list.innerHTML = '<div style="padding:20px; text-align:center; color:#ccc;">Sin cortes registrados hoy</div>';
+          return;
+        }
+
+        let html = '<table><thead><tr><th>Colaborador</th><th>Caja</th><th>Total Efectivo</th><th>F/S</th><th></th></tr></thead><tbody>';
+        data.cortes.forEach(c => {
+          const fs = parseFloat(c.FaltanteSobrante) || 0;
+          const fsColor = fs > 1 ? '#2e7d32' : (fs < -1 ? '#c62828' : '#999');
+          html += `<tr>
+            <td>${c.Colaborador}</td>
+            <td>${c.Caja}</td>
+            <td>${formatCurrency(parseFloat(c.TotalEfectivo) || 0)}</td>
+            <td style="color:${fsColor}; font-weight:700;">${formatCurrency(fs)}</td>
+            <td><button class="btn btn-danger btn-icon" onclick="deleteCorteIndividual('${c.ID}')">✕</button></td>
+          </tr>`;
+        });
+        html += '</tbody></table>';
+        list.innerHTML = html;
+      } catch (e) {
+        console.error('Load error:', e);
+      }
+    }
+
+    async function deleteCorteIndividual(id) {
+      if (!confirm('¿Eliminar este corte?')) return;
+      try {
+        const resp = await fetch(config.scriptUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'delete_corte_individual', id })
+        });
+        const result = await resp.json();
+        if (result.ok) {
+          showToast('Corte eliminado', 'success');
+          await loadTodaysIndividualCortes();
+        }
+      } catch (e) {
+        showToast('Error eliminando: ' + e.message, 'error');
+      }
+    }
+
+    function resetFormIndividual() {
+      document.getElementById('ind_colaborador').value = '';
+      document.getElementById('ind_caja').value = document.querySelector('#ind_caja option')?.value || '';
+      document.getElementById('ind_ventasCaja').value = '';
+      document.getElementById('ind_tarjeta').value = '';
+      document.getElementById('ind_transferencias').value = '';
+      document.getElementById('ind_cashback').value = '';
+      document.getElementById('ind_retiros').value = '';
+      document.querySelectorAll('#ind_denomGrid input').forEach(i => i.value = '0');
+      updateIndividualCalcs();
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // TAB 2: CORTE DE TIENDA
+    // ═══════════════════════════════════════════════════════════════
+
+    async function initTab2() {
+      createDenomGrid('tienda_denomGrid', updateTiendaCalcs);
+      ['tienda_pagosRecibidos', 'tienda_tarjeta', 'tienda_transferencias', 'tienda_cashback']
+        .forEach(id => document.getElementById(id).addEventListener('input', updateTiendaCalcs));
+    }
+
+    async function loadTodaysCortes() {
+      const fecha = document.getElementById('tienda_fecha').value;
+      updateSyncStatus('pending');
+      try {
+        const resp = await fetch(config.scriptUrl + '?action=get_cortes_dia&fecha=' + fecha);
+        const data = await resp.json();
+
+        if (!data.cortes || data.cortes.length === 0) {
+          document.getElementById('tienda_summary').innerHTML = '<div style="color:#999;">Sin cortes individuales para hoy</div>';
+          updateSyncStatus('ready');
+          return;
+        }
+
+        let totalEfectivo = 0, totalTarjeta = 0, totalTransf = 0;
+        let html = '<table style="font-size:12px;"><thead><tr><th>Caja</th><th>Total Efectivo</th><th>Tarjeta</th><th>Transferencias</th></tr></thead><tbody>';
+
+        data.cortes.forEach(c => {
+          totalEfectivo += parseFloat(c.TotalEfectivo) || 0;
+          totalTarjeta += parseFloat(c.Tarjeta) || 0;
+          totalTransf += parseFloat(c.Transferencias) || 0;
+          html += `<tr>
+            <td>${c.Caja}</td>
+            <td>${formatCurrency(parseFloat(c.TotalEfectivo) || 0)}</td>
+            <td>${formatCurrency(parseFloat(c.Tarjeta) || 0)}</td>
+            <td>${formatCurrency(parseFloat(c.Transferencias) || 0)}</td>
+          </tr>`;
+        });
+
+        html += `<tr style="font-weight:700; background:#f9f6f2;">
+          <td>TOTAL</td>
+          <td>${formatCurrency(totalEfectivo)}</td>
+          <td>${formatCurrency(totalTarjeta)}</td>
+          <td>${formatCurrency(totalTransf)}</td>
+        </tr></tbody></table>`;
+
+        document.getElementById('tienda_summary').innerHTML = html;
+        updateSyncStatus('synced');
+      } catch (e) {
+        console.error('Load error:', e);
+        showToast('Error cargando cortes: ' + e.message, 'error');
+        updateSyncStatus('error');
+      }
+    }
+
+    function updateTiendaCalcs() {
+      const denoms = getDenomValues('tienda_denomGrid');
+      const totalEfectivo = getTotalEfectivo(denoms);
+      document.getElementById('tienda_totalEfectivo').innerText = formatCurrency(totalEfectivo);
+
+      const pagosRecibidos = parseFloat(document.getElementById('tienda_pagosRecibidos').value) || 0;
+      const tarjeta = parseFloat(document.getElementById('tienda_tarjeta').value) || 0;
+      const transferencias = parseFloat(document.getElementById('tienda_transferencias').value) || 0;
+      const cashback = parseFloat(document.getElementById('tienda_cashback').value) || 0;
+      const expectedCash = pagosRecibidos - tarjeta - transferencias + cashback;
+      const faltanteSobrante = totalEfectivo - expectedCash;
+
+      const badge = document.getElementById('tienda_faltanteBadge');
+      let badgeClass = 'gray';
+      let badgeText = 'Exacto';
+      if (Math.abs(faltanteSobrante) > 0.5) {
+        if (faltanteSobrante > 0) {
+          badgeClass = 'green';
+          badgeText = 'SOBRANTE: ' + formatCurrency(faltanteSobrante);
+        } else {
+          badgeClass = 'red';
+          badgeText = 'FALTANTE: ' + formatCurrency(Math.abs(faltanteSobrante));
+        }
+      }
+      badge.innerHTML = `<div class="badge ${badgeClass}">${badgeText}</div>`;
+    }
+
+    async function saveCorteTienda() {
+      updateSyncStatus('pending');
+      const denoms = getDenomValues('tienda_denomGrid');
+      const totalEfectivo = getTotalEfectivo(denoms);
+
+      const corte = {
+        Fecha: document.getElementById('tienda_fecha').value,
+        Colaborador: document.getElementById('tienda_colaborador').value,
+        PagosRecibidos: parseFloat(document.getElementById('tienda_pagosRecibidos').value) || 0,
+        Tarjeta: parseFloat(document.getElementById('tienda_tarjeta').value) || 0,
+        Transferencias: parseFloat(document.getElementById('tienda_transferencias').value) || 0,
+        Cashback: parseFloat(document.getElementById('tienda_cashback').value) || 0,
+        // StoreCredit removed — consolidated with Cashback
+        Shopify_VentasTotales: parseFloat(document.getElementById('tienda_shopifyVentas').value) || 0,
+        Shopify_Tarjeta: parseFloat(document.getElementById('tienda_shopifyTarjeta').value) || 0,
+        Shopify_Transferencias: parseFloat(document.getElementById('tienda_shopifyTransf').value) || 0,
+        ...denoms
+      };
+
+      try {
+        const resp = await fetch(config.scriptUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'save_corte_tienda', corte })
+        });
+        const result = await resp.json();
+        if (result.ok) {
+          showToast('Corte de tienda guardado. Notificación enviada a Louie.', 'success');
+          document.getElementById('tienda_status').innerHTML = `
+            <div style="padding:12px; background:#fff3e0; border-radius:10px; border-left:4px solid #ff9800;">
+              <div style="font-weight:700; color:#e65100;">Esperando Sobre 2 de Louie...</div>
+              <div style="font-size:12px; color:#e65100; margin-top:4px;">Buscando respuesta...</div>
+            </div>
+          `;
+          updateSyncStatus('synced');
+          startPolling(corte.Fecha);
+        } else {
+          throw new Error(result.error || 'Unknown error');
+        }
+      } catch (e) {
+        console.error('Save error:', e);
+        showToast('Error: ' + e.message, 'error');
+        updateSyncStatus('error');
+      }
+    }
+
+    function startPolling(fecha) {
+      let attempts = 0;
+      const poll = async () => {
+        if (attempts++ > 20) return; // 10 minutes max
+        try {
+          const resp = await fetch(config.scriptUrl + '?action=get_ingresos&fecha=' + fecha);
+          const data = await resp.json();
+          const ingreso = data.ingresos?.[0];
+          if (ingreso && ingreso.Sobre2 > 0) {
+            document.getElementById('tienda_status').innerHTML = `
+              <div style="padding:12px; background:#e8f5e9; border-radius:10px; border-left:4px solid #2e7d32;">
+                <div style="font-weight:700; color:#2e7d32;">¡Sobre 2 recibido!</div>
+                <div style="font-size:12px; color:#2e7d32; margin-top:4px;">
+                  Sobre 2: ${formatCurrency(parseFloat(ingreso.Sobre2) || 0)}
+                </div>
+                <button class="btn btn-primary btn-sm" style="margin-top:8px;" onclick="switchTab('tab4')">
+                  Ir a Preparación de Depósito →
+                </button>
+              </div>
+            `;
+            return;
+          }
+        } catch (e) {}
+        setTimeout(poll, 30000);
+      };
+      poll();
+    }
+
+    function resetFormTienda() {
+      document.getElementById('tienda_colaborador').value = '';
+      document.getElementById('tienda_pagosRecibidos').value = '';
+      document.getElementById('tienda_tarjeta').value = '';
+      document.getElementById('tienda_transferencias').value = '';
+      document.getElementById('tienda_cashback').value = '';
+      // tienda_storeCredit removed
+      document.querySelectorAll('#tienda_denomGrid input').forEach(i => i.value = '0');
+      updateTiendaCalcs();
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // TAB 3: COMPARATIVO
+    // ═══════════════════════════════════════════════════════════════
+
+    async function loadComparativo() {
+      const fecha = document.getElementById('comp_fecha').value;
+      try {
+        const resp = await fetch(config.scriptUrl + '?action=get_cortes_dia&fecha=' + fecha);
+        const data = await resp.json();
+
+        if (!data.cortes || data.cortes.length === 0) {
+          document.getElementById('comp_table').innerHTML = '<tr><td colspan="5" style="text-align:center; color:#ccc;">Sin datos para esta fecha</td></tr>';
+          return;
+        }
+
+        // Build consolidation
+        let indSum = {};
+        DENOMINATIONS.forEach(d => indSum[d.key] = 0);
+
+        data.cortes.forEach(c => {
+          DENOMINATIONS.forEach(d => {
+            indSum[d.key] += parseFloat(c[d.key]) || 0;
+          });
+        });
+
+        // Get corte de tienda
+        const tiendaResp = await fetch(config.scriptUrl + '?action=get_corte_tienda&fecha=' + fecha);
+        const tiendaData = await tiendaResp.json();
+        const tienda = tiendaData.corte;
+
+        // Build comparison table
+        let html = '<thead><tr><th>Denominación</th><th>Suma Individuales</th><th>Conteo Líder</th><th>Diferencia</th></tr></thead><tbody>';
+
+        DENOMINATIONS.forEach(d => {
+          const indVal = indSum[d.key] || 0;
+          const tiendaVal = tienda ? (parseFloat(tienda[d.key]) || 0) : 0;
+          const diff = indVal - tiendaVal;
+          const diffColor = Math.abs(diff) > 0.1 ? 'color:#c62828;' : '';
+          html += `<tr>
+            <td>${d.label}</td>
+            <td>${indVal} × ${d.value}</td>
+            <td>${tiendaVal} × ${d.value}</td>
+            <td style="${diffColor} font-weight:700;">${diff > 0 ? '+' : ''}${diff}</td>
+          </tr>`;
+        });
+
+        html += '</tbody>';
+        document.getElementById('comp_table').innerHTML = html;
+
+        // Payment methods
+        let paymentHtml = '<thead><tr><th>Método</th><th>Suma Individuales</th><th>Conteo Líder</th><th>Diferencia</th></tr></thead><tbody>';
+        const methods = ['Tarjeta', 'Transferencias', 'Cashback'];
+        methods.forEach(m => {
+          let indTotal = 0, tiendaVal = 0;
+          data.cortes.forEach(c => indTotal += parseFloat(c[m]) || 0);
+          if (tienda) tiendaVal = parseFloat(tienda[m]) || 0;
+          const diff = indTotal - tiendaVal;
+          paymentHtml += `<tr>
+            <td>${m}</td>
+            <td>${formatCurrency(indTotal)}</td>
+            <td>${formatCurrency(tiendaVal)}</td>
+            <td style="font-weight:700;">${formatCurrency(diff)}</td>
+          </tr>`;
+        });
+        paymentHtml += '</tbody>';
+        document.getElementById('comp_payment_table').innerHTML = paymentHtml;
+      } catch (e) {
+        console.error('Error:', e);
+        showToast('Error cargando comparativo: ' + e.message, 'error');
+      }
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // TAB 4: DEPOSITO
+    // ═══════════════════════════════════════════════════════════════
+
+    async function loadDepositoData() {
+      const fecha = document.getElementById('dep_fechaVenta').value;
+      try {
+        const resp = await fetch(config.scriptUrl + '?action=get_ingresos&fecha=' + fecha);
+        const data = await resp.json();
+        const ingreso = data.ingresos?.[0];
+
+        if (!ingreso) {
+          showToast('No hay datos de ingresos para esta fecha', 'error');
+          return;
+        }
+
+        const pagosRecibidos = parseFloat(ingreso.PagosRecibidos) || 0;
+        const sobre2 = parseFloat(ingreso.Sobre2) || 0;
+        const depositoAjustado = pagosRecibidos - sobre2;
+
+        const summary = document.getElementById('dep_summary');
+        summary.innerHTML = `
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:16px;">
+            <div style="background:#f9f6f2; padding:12px; border-radius:10px;">
+              <div style="font-size:11px; color:#999; font-weight:700;">Pagos Recibidos</div>
+              <div style="font-size:18px; font-weight:800;">${formatCurrency(pagosRecibidos)}</div>
+            </div>
+            <div style="background:#f9f6f2; padding:12px; border-radius:10px;">
+              <div style="font-size:11px; color:#999; font-weight:700;">Sobre 2</div>
+              <div style="font-size:18px; font-weight:800;">${formatCurrency(sobre2)}</div>
+            </div>
+            <div style="background:#e8f5e9; padding:12px; border-radius:10px; grid-column:1/-1;">
+              <div style="font-size:11px; color:#2e7d32; font-weight:700;">Depósito Ajustado</div>
+              <div style="font-size:20px; font-weight:800; color:#2e7d32;">${formatCurrency(depositoAjustado)}</div>
+            </div>
+          </div>
+        `;
+
+        // Load tienda corte for bill allocation
+        const tiendaResp = await fetch(config.scriptUrl + '?action=get_corte_tienda&fecha=' + fecha);
+        const tiendaData = await tiendaResp.json();
+        const tienda = tiendaData.corte;
+
+        if (!tienda) {
+          showToast('No hay corte de tienda para esta fecha', 'error');
+          return;
+        }
+
+        // Allocation logic
+        let denominationCounts = {};
+        DENOMINATIONS.forEach(d => {
+          denominationCounts[d.value] = parseFloat(tienda[d.key]) || 0;
+        });
+
+        const sobre2Allocation = allocateBills(sobre2, true);
+        const depositAllocation = allocateBills(depositoAjustado, false);
+
+        let allocationHtml = `
+          <div style="background:#fff3e0; padding:14px; border-radius:10px; margin-bottom:12px;">
+            <div style="font-weight:700; color:#e65100;">Asignación Sobre 2 (preferir billetes de $500)</div>
+            <div style="margin-top:8px; font-size:13px;">`;
+
+        const denominationLabels = {
+          1000: '$1000', 500: '$500', 200: '$200', 100: '$100', 50: '$50', 20: '$20',
+          10: '$10', 5: '$5', 2: '$2', 1: '$1', 0.5: '$0.50'
+        };
+
+        for (let value in sobre2Allocation) {
+          if (sobre2Allocation[value] > 0) {
+            allocationHtml += `<div>${sobre2Allocation[value]} × ${denominationLabels[value]} = ${formatCurrency(sobre2Allocation[value] * value)}</div>`;
+          }
+        }
+        allocationHtml += `</div></div>`;
+
+        allocationHtml += `
+          <div style="background:#e8f5e9; padding:14px; border-radius:10px;">
+            <div style="font-weight:700; color:#2e7d32;">Asignación Depósito (billetes grandes: $200+)</div>
+            <div style="margin-top:8px; font-size:13px;">`;
+
+        for (let value in depositAllocation) {
+          if (depositAllocation[value] > 0) {
+            allocationHtml += `<div>${depositAllocation[value]} × ${denominationLabels[value]} = ${formatCurrency(depositAllocation[value] * value)}</div>`;
+          }
+        }
+        allocationHtml += `</div></div>`;
+
+        document.getElementById('dep_allocation').innerHTML = allocationHtml;
+      } catch (e) {
+        console.error('Error:', e);
+        showToast('Error cargando datos: ' + e.message, 'error');
+      }
+    }
+
+    function allocateBills(amount, preferLarge = false) {
+      let remaining = amount;
+      const result = {};
+      const values = preferLarge ? [1000, 500, 200, 100, 50, 20, 10, 5, 2, 1, 0.5] : [200, 100, 50, 20, 10, 5, 2, 1, 0.5];
+
+      values.forEach(v => {
+        const count = Math.floor(remaining / v);
+        if (count > 0) {
+          result[v] = count;
+          remaining -= count * v;
+        } else {
+          result[v] = 0;
+        }
+      });
+
+      return result;
+    }
+
+    function printDepositTicket() {
+      const fecha = document.getElementById('dep_fechaVenta').value;
+      const fechaDeposito = document.getElementById('dep_fechaDeposito').value;
+      const pagosRecibidos = 15235; // Example
+      const sobre2 = 4000; // Example
+
+      const html = `
+        <div style="font-family:monospace; max-width:400px; margin:20px auto; text-align:center;">
+          <pre>
+═══════════════════════════════════
+  BOLSA DE DEPÓSITO
+═══════════════════════════════════
+Cuenta: 0118685134
+Nombre: Natural Balance
+Fecha Ref: ${fecha}
+Fecha Dep: ${fechaDeposito}
+───────────────────────────────────
+Total: ${formatCurrency(pagosRecibidos - sobre2)}
+───────────────────────────────────
+12 × $1,000  = $12,000
+ 4 × $500    =  $2,000
+ 6 × $200    =  $1,200
+ 0 × $100    =      $0
+ 1 × $50     =     $50
+ 0 × $20     =      $0
+───────────────────────────────────
+         Subtotal: $15,250
+         Sobrante:    -$15
+═══════════════════════════════════
+          </pre>
+        </div>
+      `;
+
+      const printArea = document.getElementById('printArea');
+      printArea.innerHTML = html;
+      window.print();
+    }
+
+    function printSobre2Ticket() {
+      const fecha = document.getElementById('dep_fechaVenta').value;
+      const sobre2 = 4000; // Example
+
+      const html = `
+        <div style="font-family:monospace; max-width:400px; margin:20px auto; text-align:center;">
+          <pre>
+═══════════════════════════════════
+  SOBRE 2
+═══════════════════════════════════
+Fecha: ${fecha}
+───────────────────────────────────
+2do Socios:  $2,500
+2do Nóminas: $1,500
+Total:       ${formatCurrency(sobre2)}
+───────────────────────────────────
+8 × $500 = ${formatCurrency(sobre2)}
+═══════════════════════════════════
+          </pre>
+        </div>
+      `;
+
+      const printArea = document.getElementById('printArea');
+      printArea.innerHTML = html;
+      window.print();
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // INIT
+    // ═══════════════════════════════════════════════════════════════
+
+    window.addEventListener('DOMContentLoaded', () => {
+      requireNbAuth(async function() {
+        loadConfig();
+        await initTab1();
+        await initTab2();
+      });
+    });
+  </script>
+</body>
+</html>

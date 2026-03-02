@@ -1,0 +1,1382 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NB · Registro de Ingresos</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: linear-gradient(135deg, #faf6f1 0%, #f0ebe4 50%, #e8e0d8 100%);
+      color: #2d2319;
+      min-height: 100vh;
+    }
+
+    /* TOPBAR */
+    .topbar {
+      background: linear-gradient(135deg, #4caf50 0%, #388e3c 40%, #2e7d32 100%);
+      color: white;
+      padding: 18px 32px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      box-shadow: 0 4px 20px rgba(46, 125, 50, 0.3);
+    }
+    .logo {
+      width: 44px;
+      height: 44px;
+      background: rgba(255, 255, 255, 0.95);
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 900;
+      color: #2e7d32;
+      font-size: 16px;
+      flex-shrink: 0;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    }
+    .topbar h1 { font-size: 20px; font-weight: 800; letter-spacing: -0.3px; }
+    .topbar-sub { font-size: 12px; opacity: 0.75; margin-top: 1px; }
+    .topbar-right { margin-left: auto; font-size: 12px; opacity: 0.7; text-align: right; }
+
+    .container { max-width: 1400px; margin: 0 auto; padding: 24px 24px 100px; }
+
+    /* TABS */
+    .tabs {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 20px;
+      border-bottom: 2px solid #e0d8cf;
+      flex-wrap: wrap;
+    }
+    .tab-btn {
+      padding: 12px 20px;
+      background: white;
+      border: none;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 600;
+      color: #7a6b5d;
+      border-bottom: 3px solid transparent;
+      transition: all 0.2s;
+      border-radius: 10px 10px 0 0;
+    }
+    .tab-btn:hover {
+      color: #2e7d32;
+      background: #f5f0eb;
+    }
+    .tab-btn.active {
+      color: #2e7d32;
+      border-bottom-color: #4caf50;
+      background: white;
+    }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+
+    /* CARDS */
+    .card {
+      background: white;
+      border-radius: 16px;
+      padding: 24px;
+      box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+      margin-bottom: 20px;
+    }
+    .card h2 {
+      font-size: 18px;
+      margin-bottom: 18px;
+      color: #2d2319;
+      border-bottom: 2px solid #e0d8cf;
+      padding-bottom: 12px;
+    }
+    .card h3 {
+      font-size: 15px;
+      margin-bottom: 14px;
+      color: #2d2319;
+      margin-top: 16px;
+      border-bottom: 1px solid #f0ebe4;
+      padding-bottom: 8px;
+    }
+
+    /* FORM */
+    .form-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin-bottom: 18px;
+    }
+    .form-grid.full { grid-template-columns: 1fr; }
+    .form-grid.three { grid-template-columns: 1fr 1fr 1fr; }
+
+    .form-group {
+      display: flex;
+      flex-direction: column;
+    }
+    .form-group label {
+      font-size: 12px;
+      font-weight: 700;
+      color: #7a6b5d;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+      margin-bottom: 6px;
+    }
+    .form-group input,
+    .form-group select,
+    .form-group textarea {
+      padding: 10px 14px;
+      border: 2px solid #e0d8cf;
+      border-radius: 10px;
+      font-size: 14px;
+      transition: border-color 0.2s;
+      font-family: inherit;
+    }
+    .form-group input:focus,
+    .form-group select:focus,
+    .form-group textarea:focus {
+      border-color: #4caf50;
+      outline: none;
+      box-shadow: 0 0 0 3px rgba(76, 175, 80, 0.1);
+    }
+    .form-group input[type="number"] { text-align: right; }
+
+    /* PENDING CARDS */
+    .pending-card {
+      background: #fffbf0;
+      border: 2px solid #ffd700;
+      border-radius: 12px;
+      padding: 18px;
+      margin-bottom: 14px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .pending-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(255, 215, 0, 0.2);
+    }
+    .pending-card h4 {
+      font-size: 15px;
+      font-weight: 700;
+      color: #2d2319;
+      margin-bottom: 8px;
+    }
+    .pending-card p {
+      font-size: 13px;
+      color: #7a6b5d;
+      margin-bottom: 4px;
+    }
+    .pending-card .review-btn {
+      margin-top: 10px;
+      font-size: 12px;
+      color: #2e7d32;
+      font-weight: 700;
+    }
+
+    /* SUMMARY BOXES */
+    .summary-box {
+      background: #e8f5e9;
+      border: 2px solid #4caf50;
+      border-radius: 12px;
+      padding: 14px 18px;
+      margin-bottom: 12px;
+    }
+    .summary-box .label {
+      font-size: 11px;
+      font-weight: 700;
+      color: #2e7d32;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+    }
+    .summary-box .value {
+      font-size: 24px;
+      font-weight: 900;
+      color: #1b5e20;
+      margin-top: 4px;
+    }
+    .summary-box.large .value { font-size: 32px; }
+    .summary-box.alert {
+      background: #ffebee;
+      border-color: #f44336;
+    }
+    .summary-box.alert .label {
+      color: #c62828;
+    }
+    .summary-box.alert .value {
+      color: #b71c1c;
+    }
+
+    /* BADGE */
+    .badge {
+      display: inline-block;
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+    .badge-success {
+      background: #e8f5e9;
+      color: #2e7d32;
+    }
+    .badge-modified {
+      background: #fff3e0;
+      color: #e65100;
+    }
+
+    /* QUICK BUTTONS */
+    .quick-btn-group {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-bottom: 16px;
+    }
+    .quick-btn {
+      padding: 8px 16px;
+      background: #f5f0eb;
+      border: 2px solid #e0d8cf;
+      border-radius: 10px;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 700;
+      color: #7a6b5d;
+      transition: all 0.2s;
+    }
+    .quick-btn:hover {
+      background: #e8e0d8;
+      border-color: #4caf50;
+    }
+    .quick-btn.active {
+      background: #e8f5e9;
+      border-color: #4caf50;
+      color: #2e7d32;
+    }
+
+    /* BUTTONS */
+    .btn {
+      padding: 10px 20px;
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 700;
+      transition: all 0.2s;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .btn-primary {
+      background: linear-gradient(135deg, #4caf50, #2e7d32);
+      color: white;
+      box-shadow: 0 2px 6px rgba(46, 125, 50, 0.25);
+    }
+    .btn-primary:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(46, 125, 50, 0.35);
+    }
+    .btn-secondary {
+      background: #f5f0eb;
+      color: #7a6b5d;
+    }
+    .btn-secondary:hover {
+      background: #e8e0d8;
+    }
+    .btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    .btn-group {
+      display: flex;
+      gap: 10px;
+      margin-top: 18px;
+    }
+
+    /* TABLE */
+    .tbl-wrap {
+      overflow-x: auto;
+      background: white;
+      border-radius: 16px;
+      box-shadow: 0 2px 16px rgba(0, 0, 0, 0.06);
+      margin-bottom: 20px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+    thead th {
+      background: linear-gradient(135deg, #4caf50, #2e7d32);
+      color: white;
+      padding: 13px 16px;
+      text-align: left;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      white-space: nowrap;
+      position: sticky;
+      top: 0;
+    }
+    thead th:first-child { border-radius: 16px 0 0 0; }
+    thead th:last-child { border-radius: 0 16px 0 0; }
+    tbody td {
+      padding: 12px 16px;
+      border-bottom: 1px solid #f2ede7;
+      vertical-align: middle;
+    }
+    tbody td input, tbody td select {
+      width: 100%;
+      padding: 6px 8px;
+      border: 1px solid #e0d8cf;
+      border-radius: 6px;
+      font-size: 12px;
+    }
+    tbody tr { transition: background 0.15s; }
+    tbody tr:hover { background: #faf7f3; }
+    tbody tr:last-child td { border-bottom: none; }
+    tbody td.total {
+      font-weight: 700;
+      color: #2e7d32;
+      background: #e8f5e9;
+    }
+
+    /* PROGRESS BAR */
+    .progress-bar {
+      width: 100%;
+      height: 24px;
+      background: #e0d8cf;
+      border-radius: 12px;
+      overflow: hidden;
+      margin-bottom: 8px;
+    }
+    .progress-bar-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #4caf50, #2e7d32);
+      transition: width 0.3s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-size: 11px;
+      font-weight: 700;
+    }
+
+    /* TOAST */
+    .toast {
+      position: fixed;
+      bottom: 28px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: linear-gradient(135deg, #2d2319, #4a3f35);
+      color: white;
+      padding: 14px 28px;
+      border-radius: 14px;
+      font-size: 14px;
+      font-weight: 600;
+      z-index: 20000;
+      opacity: 0;
+      transition: opacity 0.3s, transform 0.3s;
+      pointer-events: none;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+    }
+    .toast.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(-4px);
+      pointer-events: auto;
+    }
+    .toast.success {
+      background: linear-gradient(135deg, #2e7d32, #1b5e20);
+    }
+    .toast.error {
+      background: linear-gradient(135deg, #c62828, #7f0000);
+    }
+
+    /* LOADING */
+    .loading {
+      text-align: center;
+      padding: 32px;
+      color: #7a6b5d;
+    }
+    .spinner {
+      display: inline-block;
+      width: 24px;
+      height: 24px;
+      border: 3px solid #e0d8cf;
+      border-top-color: #4caf50;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin-bottom: 12px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* EMPTY STATE */
+    .empty-state {
+      text-align: center;
+      padding: 48px 24px;
+      color: #7a6b5d;
+    }
+    .empty-state p {
+      font-size: 16px;
+      margin-bottom: 8px;
+    }
+
+    /* MODAL */
+    .modal-bg {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.5);
+      backdrop-filter: blur(4px);
+      z-index: 9000;
+      display: none;
+      align-items: center;
+      justify-content: center;
+    }
+    .modal-bg.open { display: flex; }
+    .modal {
+      background: white;
+      border-radius: 20px;
+      padding: 32px;
+      width: 90%;
+      max-width: 600px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25);
+    }
+    .modal h3 {
+      font-size: 18px;
+      font-weight: 800;
+      margin-bottom: 18px;
+      color: #2d2319;
+    }
+    .modal .form-group { margin-bottom: 16px; }
+    .modal .btn-group { justify-content: flex-end; }
+
+    /* CONFIG SECTION */
+    .config-btn {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      width: 56px;
+      height: 56px;
+      background: #4caf50;
+      color: white;
+      border: none;
+      border-radius: 50%;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      box-shadow: 0 4px 12px rgba(46, 125, 50, 0.3);
+      z-index: 8000;
+      transition: all 0.2s;
+    }
+    .config-btn:hover {
+      transform: scale(1.1);
+      box-shadow: 0 6px 16px rgba(46, 125, 50, 0.4);
+    }
+
+    /* RESPONSIVE */
+    @media (max-width: 768px) {
+      .topbar { padding: 14px 16px; }
+      .container { padding: 16px 16px 80px; }
+      .form-grid, .form-grid.three { grid-template-columns: 1fr; }
+      .summary-box .value { font-size: 20px; }
+      table { font-size: 12px; }
+      tbody td { padding: 10px 12px; }
+      .tabs { flex-wrap: wrap; }
+    }
+  </style>
+</head>
+<body>
+<!-- NB NAVIGATION BAR -->
+<style>
+  .nb-nav { display:flex; align-items:center; gap:0; background:#1a3a1a; padding:0 16px; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; font-size:13px; overflow-x:auto; }
+  .nb-nav a { color:rgba(255,255,255,.7); text-decoration:none; padding:10px 16px; white-space:nowrap; transition:all .15s; border-bottom:2px solid transparent; font-weight:600; }
+  .nb-nav a:hover { color:#fff; background:rgba(255,255,255,.08); }
+  .nb-nav a.active { color:#fff; border-bottom-color:#4caf50; background:rgba(76,175,80,.15); }
+  .nb-nav .nav-brand { color:#4caf50; font-weight:800; font-size:14px; padding:10px 16px 10px 0; margin-right:8px; border-right:1px solid rgba(255,255,255,.15); letter-spacing:.5px; }
+  @media(max-width:600px) { .nb-nav a { padding:10px 12px; font-size:12px; } .nb-nav .nav-brand { font-size:12px; padding:8px 12px 8px 0; } }
+</style>
+<nav class="nb-nav">
+  <span class="nav-brand">NB Finance</span>
+  <a href="corte_caja.html" id="nav-corte">Corte de Caja</a>
+  <a href="registro_ingresos.html" id="nav-ingresos" class="active">Ingresos</a>
+  <a href="nb_portal_pagos.html" id="nav-pagos">Portal de Pagos</a>
+  <a href="dashboard_nb.html" id="nav-dashboard">Dashboard</a>
+</nav>
+<!-- END NB NAVIGATION BAR -->
+
+<!-- TOPBAR -->
+<div class="topbar">
+  <div class="logo">NB</div>
+  <div>
+    <h1>Registro de Ingresos</h1>
+    <div class="topbar-sub">Centro de Comando — Louie</div>
+  </div>
+  <div class="topbar-right">
+    <span id="todayDate"></span>
+  </div>
+</div>
+
+<div class="container">
+
+<!-- TABS -->
+<div class="tabs">
+  <button class="tab-btn active" data-tab="tab-pendientes">Pendientes</button>
+  <button class="tab-btn" data-tab="tab-sobre2">Sobre 2 + Depósito</button>
+  <button class="tab-btn" data-tab="tab-ventas">Ventas por Mesa</button>
+  <button class="tab-btn" data-tab="tab-facturacion">Facturación</button>
+  <button class="tab-btn" data-tab="tab-historial">Historial</button>
+</div>
+
+<!-- TAB 1: PENDIENTES -->
+<div id="tab-pendientes" class="tab-content active">
+  <div class="card">
+    <h2>Días Pendientes de Sobre 2</h2>
+    <p style="color: #7a6b5d; font-size: 13px; margin-bottom: 18px;">Fechas con Corte de Tienda guardado pero sin Sobre 2 aún</p>
+    <div id="pendientes-list"></div>
+  </div>
+</div>
+
+<!-- TAB 2: SOBRE 2 + DEPÓSITO -->
+<div id="tab-sobre2" class="tab-content">
+  <div class="card">
+    <h2>Sobre 2 & Depósito BBVA</h2>
+
+    <div class="form-grid full">
+      <div class="form-group">
+        <label>Fecha</label>
+        <input type="date" id="sobre2-fecha">
+      </div>
+    </div>
+
+    <h3>Resumen del Corte de Tienda</h3>
+    <div class="form-grid">
+      <div class="form-group">
+        <label>Pagos Recibidos</label>
+        <input type="number" id="corte-pagosRecibidos" placeholder="0.00">
+      </div>
+      <div class="form-group">
+        <label>Tarjeta</label>
+        <input type="number" id="corte-tarjeta" placeholder="0.00">
+      </div>
+      <div class="form-group">
+        <label>Transferencias</label>
+        <input type="number" id="corte-transferencias" placeholder="0.00">
+      </div>
+      <div class="form-group">
+        <label>Cashback</label>
+        <input type="number" id="corte-cashback" placeholder="0.00">
+      </div>
+      <div class="form-group">
+        <label>Total Efectivo</label>
+        <input type="number" id="corte-totalEfectivo" placeholder="0.00">
+      </div>
+      <div class="form-group">
+        <label>Faltante / Sobrante</label>
+        <input type="number" id="corte-faltanteSobrante" placeholder="0.00">
+      </div>
+    </div>
+    <p style="color: #7a6b5d; font-size: 12px; margin-top: -8px;">Estos valores vienen del Corte de Tienda. Son EDITABLES si encuentras errores.</p>
+    <div id="corte-modified-badge" style="display: none; margin-top: 8px;"><span class="badge badge-modified">Modificado</span></div>
+
+    <h3>Sobre 2 (2ndo Socios + 2ndo Nóminas)</h3>
+    <div class="form-grid">
+      <div class="form-group">
+        <label>2ndo Socios</label>
+        <input type="number" id="sobre2-socios" placeholder="0.00">
+      </div>
+      <div class="form-group">
+        <label>2ndo Nóminas</label>
+        <input type="number" id="sobre2-nominas" placeholder="0.00">
+      </div>
+    </div>
+
+    <div style="margin-bottom: 16px;">
+      <p style="font-size: 12px; color: #7a6b5d; margin-bottom: 8px;">Montos comunes:</p>
+      <div class="quick-btn-group">
+        <button class="quick-btn" onclick="setSobre2Total(0)">$0</button>
+        <button class="quick-btn" onclick="setSobre2Total(2000)">$2,000</button>
+        <button class="quick-btn" onclick="setSobre2Total(4000)">$4,000</button>
+        <button class="quick-btn" onclick="setSobre2Total(5000)">$5,000</button>
+        <button class="quick-btn" onclick="setSobre2Total(8000)">$8,000</button>
+      </div>
+    </div>
+
+    <h3>Cálculos Automáticos</h3>
+    <div class="summary-box large">
+      <div class="label">Sobre 2</div>
+      <div class="value" id="sobre2-total">$0.00</div>
+    </div>
+    <div class="summary-box large">
+      <div class="label">Depósito BBVA</div>
+      <div class="value" id="deposito-total">$0.00</div>
+    </div>
+
+    <h3>IVA a Venta (Opcional)</h3>
+    <div class="form-grid full">
+      <div class="form-group">
+        <label>IVA a Venta</label>
+        <input type="number" id="ivaAVenta" placeholder="0.00">
+      </div>
+    </div>
+
+    <div class="btn-group">
+      <button class="btn btn-primary" onclick="saveSobre2()">
+        Guardar & Notificar Líder
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- TAB 3: VENTAS POR MESA -->
+<div id="tab-ventas" class="tab-content">
+  <div class="card">
+    <h2>Ventas por Mesa (Biweekly)</h2>
+
+    <div class="form-grid">
+      <div class="form-group">
+        <label>Fecha Inicio</label>
+        <input type="date" id="ventas-dateStart">
+      </div>
+      <div class="form-group">
+        <label>Fecha Fin</label>
+        <input type="date" id="ventas-dateEnd">
+      </div>
+    </div>
+
+    <p style="color: #7a6b5d; font-size: 13px; margin-bottom: 16px;">
+      <strong>Modo:</strong> Totales del período — Estos datos vienen de Shopify → Ventas por Proveedor → Total Neto
+    </p>
+
+    <div class="tbl-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Mesa / Estación</th>
+            <th>Total Neto</th>
+          </tr>
+        </thead>
+        <tbody id="ventas-table-body">
+        </tbody>
+      </table>
+    </div>
+
+    <div class="btn-group">
+      <button class="btn btn-primary" onclick="saveVentasPorMesa()">Guardar Ventas</button>
+    </div>
+  </div>
+</div>
+
+<!-- TAB 4: FACTURACIÓN -->
+<div id="tab-facturacion" class="tab-content">
+  <div class="card">
+    <h2>Facturación Mensual</h2>
+
+    <div class="form-grid full">
+      <div class="form-group">
+        <label>Mes</label>
+        <input type="month" id="facturacion-month">
+      </div>
+    </div>
+
+    <h3>Resumen Mensual</h3>
+    <div class="form-grid three">
+      <div class="summary-box">
+        <div class="label">Total Pagos Recibidos</div>
+        <div class="value" id="monthly-pagosRecibidos">$0.00</div>
+      </div>
+      <div class="summary-box">
+        <div class="label">Total Sobre 2</div>
+        <div class="value" id="monthly-sobre2">$0.00</div>
+      </div>
+      <div class="summary-box">
+        <div class="label">A Facturar</div>
+        <div class="value" id="monthly-xFacturar">$0.00</div>
+      </div>
+    </div>
+
+    <div class="form-grid" style="grid-template-columns: 1fr 1fr;">
+      <div class="summary-box">
+        <div class="label">Ya Facturado</div>
+        <div class="value" id="monthly-facturado">$0.00</div>
+      </div>
+      <div class="summary-box alert" id="monthly-falta-box">
+        <div class="label">Falta Facturar</div>
+        <div class="value" id="monthly-falta">$0.00</div>
+      </div>
+    </div>
+
+    <div style="margin-bottom: 20px;">
+      <p style="font-size: 12px; color: #7a6b5d; margin-bottom: 8px;">Progreso:</p>
+      <div class="progress-bar">
+        <div class="progress-bar-fill" id="facturacion-progress" style="width: 0%">
+          <span id="facturacion-progress-text">0%</span>
+        </div>
+      </div>
+    </div>
+
+    <h3>Detalle Diario</h3>
+    <div class="tbl-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Fecha</th>
+            <th>Pagos Recibidos</th>
+            <th>Sobre 2</th>
+            <th>A Facturar</th>
+            <th>Fact. Clientes</th>
+            <th>Fact. Gen1</th>
+            <th>Fact. Gen2</th>
+            <th>Fact. Gen3</th>
+            <th>Fact. Gen4</th>
+            <th>Fact. Gen5</th>
+            <th>Fact. Gen6</th>
+            <th>CFDI</th>
+            <th>Total Facturado</th>
+            <th>Falta</th>
+          </tr>
+        </thead>
+        <tbody id="facturacion-table-body">
+        </tbody>
+      </table>
+    </div>
+
+    <div class="btn-group">
+      <button class="btn btn-primary" onclick="saveFacturacion()">Guardar Cambios</button>
+    </div>
+  </div>
+</div>
+
+<!-- TAB 5: HISTORIAL -->
+<div id="tab-historial" class="tab-content">
+  <div class="card">
+    <h2>Historial de Ingresos</h2>
+
+    <div class="form-grid full">
+      <div class="form-group">
+        <label>Mes</label>
+        <input type="month" id="historial-month">
+      </div>
+    </div>
+
+    <div class="tbl-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Fecha</th>
+            <th>Día</th>
+            <th>Pagos Recibidos</th>
+            <th>Sobre 2</th>
+            <th>Depósito BBVA</th>
+            <th>Total Facturado</th>
+            <th>Falta Factura</th>
+            <th>Acciones</th>
+          </tr>
+        </thead>
+        <tbody id="historial-table-body">
+        </tbody>
+      </table>
+    </div>
+
+    <div style="text-align: right; margin-top: 16px;">
+      <button class="btn btn-secondary" onclick="exportHistorial()">Descargar CSV</button>
+    </div>
+  </div>
+</div>
+
+</div>
+
+<!-- CONFIG BUTTON -->
+<button class="config-btn" onclick="openConfigModal()">⚙️</button>
+
+<!-- CONFIG MODAL -->
+<div class="modal-bg" id="config-modal">
+  <div class="modal">
+    <h3>Configuración</h3>
+    <div class="form-group">
+      <label>URL de Apps Script</label>
+      <input type="text" id="config-scriptUrl" placeholder="https://script.google.com/...">
+    </div>
+    <div class="form-group">
+      <label>Email Líder (para notificaciones)</label>
+      <input type="email" id="config-leaderEmail" value="facturacion.nbclub@gmail.com">
+    </div>
+    <div class="btn-group">
+      <button class="btn btn-secondary" onclick="closeConfigModal()">Cancelar</button>
+      <button class="btn btn-primary" onclick="saveConfig()">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
+
+<script src="nb_auth.js"></script>
+<script>
+// CONFIG & STATE
+const CONFIG_KEY = 'nb_registro_ingresos_config';
+const DEFAULT_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxQ7BzFITQnxyndvo2q7Xa1-Sc-yX5S8JGRc1mIbd4ye0rSpN2I2qx1zAjzRqbPXNeL/exec';
+const DEFAULT_LEADER_EMAIL = 'facturacion.nbclub@gmail.com';
+
+const MESAS = ['Cocina1', 'Cocina2', 'Cocina3', 'Produccion1', 'Produccion2', 'Produccion3', 'Casa1', 'Casa2', 'Express', 'Granja', 'FrutasVerduras', 'ProveedorVentas', 'MermasCanastas', 'Pedidos', 'Mixto'];
+const MESA_LABELS = {
+  'Cocina1': 'Cocina 1', 'Cocina2': 'Cocina 2', 'Cocina3': 'Cocina 3',
+  'Produccion1': 'Producción 1', 'Produccion2': 'Producción 2', 'Produccion3': 'Producción 3',
+  'Casa1': 'Casa 1', 'Casa2': 'Casa 2', 'Express': 'Express', 'Granja': 'Granja',
+  'FrutasVerduras': 'Frutas y Verduras', 'ProveedorVentas': 'Proveedor', 'MermasCanastas': 'Mermas',
+  'Pedidos': 'Pedidos', 'Mixto': 'Mixto'
+};
+
+let currentConfig = {};
+let corteModified = false;
+
+// INIT
+document.addEventListener('DOMContentLoaded', function() {
+  requireNbAuth(function() {
+    loadConfig();
+    setTodayDate();
+    initializeEventListeners();
+    loadPendientes();
+    startAutoRefresh();
+  });
+});
+
+function loadConfig() {
+  const saved = localStorage.getItem(CONFIG_KEY);
+  if (saved) {
+    currentConfig = JSON.parse(saved);
+  } else {
+    currentConfig = {
+      scriptUrl: DEFAULT_SCRIPT_URL,
+      leaderEmail: DEFAULT_LEADER_EMAIL
+    };
+  }
+  document.getElementById('config-scriptUrl').value = currentConfig.scriptUrl || DEFAULT_SCRIPT_URL;
+  document.getElementById('config-leaderEmail').value = currentConfig.leaderEmail || DEFAULT_LEADER_EMAIL;
+}
+
+function saveConfig() {
+  currentConfig.scriptUrl = document.getElementById('config-scriptUrl').value || DEFAULT_SCRIPT_URL;
+  currentConfig.leaderEmail = document.getElementById('config-leaderEmail').value || DEFAULT_LEADER_EMAIL;
+  localStorage.setItem(CONFIG_KEY, JSON.stringify(currentConfig));
+  closeConfigModal();
+  showToast('Configuración guardada ✓', 'success');
+}
+
+function openConfigModal() {
+  document.getElementById('config-modal').classList.add('open');
+}
+
+function closeConfigModal() {
+  document.getElementById('config-modal').classList.remove('open');
+}
+
+function setTodayDate() {
+  const today = new Date().toLocaleDateString('es-MX', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+  document.getElementById('todayDate').textContent = today.charAt(0).toUpperCase() + today.slice(1);
+}
+
+function formatPeso(num) {
+  return '$' + (num || 0).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+}
+
+function formatDate(dateStr) {
+  if (!dateStr) return '';
+  const d = new Date(dateStr + 'T00:00:00');
+  return d.toLocaleDateString('es-MX');
+}
+
+function getDayOfWeek(dateStr) {
+  if (!dateStr) return '';
+  const d = new Date(dateStr + 'T00:00:00');
+  const days = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+  return days[d.getDay()];
+}
+
+function showToast(message, type = 'success') {
+  const toast = document.getElementById('toast');
+  toast.textContent = message;
+  toast.className = 'toast show ' + type;
+  setTimeout(() => {
+    toast.classList.remove('show');
+  }, 3000);
+}
+
+function initializeEventListeners() {
+  // TAB NAVIGATION
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', function() {
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+      this.classList.add('active');
+      document.getElementById(this.dataset.tab).classList.add('active');
+    });
+  });
+
+  // TAB 2: SOBRE 2 CALCULATIONS
+  document.getElementById('sobre2-fecha').addEventListener('change', loadCorteData);
+  document.getElementById('corte-pagosRecibidos').addEventListener('change', updateCorteModified);
+  document.getElementById('corte-tarjeta').addEventListener('change', updateCorteModified);
+  document.getElementById('corte-transferencias').addEventListener('change', updateCorteModified);
+  document.getElementById('corte-cashback').addEventListener('change', updateCorteModified);
+  document.getElementById('corte-totalEfectivo').addEventListener('change', updateCorteModified);
+  document.getElementById('corte-faltanteSobrante').addEventListener('change', updateCorteModified);
+
+  ['sobre2-socios', 'sobre2-nominas'].forEach(id => {
+    document.getElementById(id).addEventListener('change', calculateSobre2Totals);
+  });
+
+  // TAB 3: VENTAS
+  document.getElementById('ventas-dateStart').addEventListener('change', loadVentasMesas);
+  document.getElementById('ventas-dateEnd').addEventListener('change', loadVentasMesas);
+
+  // TAB 4: FACTURACIÓN
+  document.getElementById('facturacion-month').addEventListener('change', loadFacturacionMonth);
+
+  // TAB 5: HISTORIAL
+  document.getElementById('historial-month').addEventListener('change', loadHistorial);
+
+  // Initialize defaults
+  const today = new Date().toISOString().split('T')[0];
+  const currentMonth = today.slice(0, 7);
+
+  document.getElementById('sobre2-fecha').value = today;
+  document.getElementById('facturacion-month').value = currentMonth;
+  document.getElementById('historial-month').value = currentMonth;
+
+  // Biweekly defaults
+  const startDate = new Date(today);
+  startDate.setDate(startDate.getDate() - 14);
+  document.getElementById('ventas-dateStart').value = startDate.toISOString().split('T')[0];
+  document.getElementById('ventas-dateEnd').value = today;
+}
+
+function updateCorteModified() {
+  corteModified = true;
+  document.getElementById('corte-modified-badge').style.display = 'block';
+}
+
+// TAB 1: PENDIENTES
+async function loadPendientes() {
+  const container = document.getElementById('pendientes-list');
+  container.innerHTML = '<div class="loading"><div class="spinner"></div> Cargando...</div>';
+
+  try {
+    const month = new Date().toISOString().slice(0, 7);
+    const data = await callAPI('get_ingresos', { month });
+
+    if (!data.ingresos || data.ingresos.length === 0) {
+      container.innerHTML = '<div class="empty-state"><p>Todo al día ✓</p></div>';
+      return;
+    }
+
+    // Filter for pending (has PagosRecibidos but no Sobre2)
+    const pending = data.ingresos.filter(r =>
+      (r.PagosRecibidos || 0) > 0 && (!r.Sobre2 || r.Sobre2 === 0 || r.Sobre2 === '')
+    );
+
+    if (pending.length === 0) {
+      container.innerHTML = '<div class="empty-state"><p>Todo al día ✓</p></div>';
+      return;
+    }
+
+    container.innerHTML = pending.map(r => `
+      <div class="pending-card" onclick="goToDate('${r.Fecha}')">
+        <h4>${formatDate(r.Fecha)} — ${getDayOfWeek(r.Fecha)}</h4>
+        <p><strong>Pagos Recibidos:</strong> ${formatPeso(r.PagosRecibidos)}</p>
+        <p><strong>Tarjeta:</strong> ${formatPeso(r.Tarjeta)} | <strong>Transferencias:</strong> ${formatPeso(r.Transferencias)} | <strong>Cashback:</strong> ${formatPeso(r.Cashback)}</p>
+        <p><strong>Faltante/Sobrante:</strong> ${formatPeso(r.FaltanteSobrante)}</p>
+        <div class="review-btn">Revisar →</div>
+      </div>
+    `).join('');
+  } catch (err) {
+    container.innerHTML = '<div class="empty-state" style="color: #c62828;"><p>Error cargando pendientes</p></div>';
+    console.error('Error:', err);
+  }
+}
+
+function goToDate(fecha) {
+  document.getElementById('sobre2-fecha').value = fecha;
+  loadCorteData();
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+  document.querySelector('[data-tab="tab-sobre2"]').classList.add('active');
+  document.getElementById('tab-sobre2').classList.add('active');
+}
+
+// TAB 2: SOBRE 2 & DEPÓSITO
+async function loadCorteData() {
+  const fecha = document.getElementById('sobre2-fecha').value;
+  if (!fecha) return;
+
+  try {
+    const data = await callAPI('get_corte_tienda', { fecha });
+    const corte = data.corte;
+
+    if (!corte) {
+      // Try to get from ingresos
+      const ingData = await callAPI('get_ingresos', { fecha });
+      if (ingData.ingresos && ingData.ingresos.length > 0) {
+        const ing = ingData.ingresos[0];
+        document.getElementById('corte-pagosRecibidos').value = ing.PagosRecibidos || '';
+        document.getElementById('corte-tarjeta').value = ing.Tarjeta || '';
+        document.getElementById('corte-transferencias').value = ing.Transferencias || '';
+        document.getElementById('corte-cashback').value = ing.Cashback || '';
+        document.getElementById('corte-totalEfectivo').value = ing.TotalEfectivo || '';
+        document.getElementById('corte-faltanteSobrante').value = ing.FaltanteSobrante || '';
+
+        document.getElementById('sobre2-socios').value = ing['2ndoSocios'] || '';
+        document.getElementById('sobre2-nominas').value = ing['2ndoNominas'] || '';
+        document.getElementById('ivaAVenta').value = ing.IvaAVenta || '';
+      }
+      return;
+    }
+
+    // Populate from corte
+    document.getElementById('corte-pagosRecibidos').value = corte.PagosRecibidos || '';
+    document.getElementById('corte-tarjeta').value = corte.Tarjeta || '';
+    document.getElementById('corte-transferencias').value = corte.Transferencias || '';
+    document.getElementById('corte-cashback').value = corte.Cashback || '';
+    document.getElementById('corte-totalEfectivo').value = corte.TotalEfectivo || '';
+    document.getElementById('corte-faltanteSobrante').value = corte.FaltanteSobrante || '';
+
+    // Load any existing sobre2
+    const ingData = await callAPI('get_ingresos', { fecha });
+    if (ingData.ingresos && ingData.ingresos.length > 0) {
+      const ing = ingData.ingresos[0];
+      document.getElementById('sobre2-socios').value = ing['2ndoSocios'] || '';
+      document.getElementById('sobre2-nominas').value = ing['2ndoNominas'] || '';
+      document.getElementById('ivaAVenta').value = ing.IvaAVenta || '';
+    }
+
+    corteModified = false;
+    document.getElementById('corte-modified-badge').style.display = 'none';
+    calculateSobre2Totals();
+  } catch (err) {
+    showToast('Error cargando datos: ' + err.message, 'error');
+  }
+}
+
+function setSobre2Total(amount) {
+  // Distribute amount equally or as user preference
+  const socios = Math.floor(amount / 2);
+  const nominas = amount - socios;
+
+  document.getElementById('sobre2-socios').value = socios;
+  document.getElementById('sobre2-nominas').value = nominas;
+  calculateSobre2Totals();
+}
+
+function calculateSobre2Totals() {
+  const socios = parseFloat(document.getElementById('sobre2-socios').value) || 0;
+  const nominas = parseFloat(document.getElementById('sobre2-nominas').value) || 0;
+  const sobre2 = socios + nominas;
+
+  const pagosRecibidos = parseFloat(document.getElementById('corte-pagosRecibidos').value) || 0;
+  const deposito = pagosRecibidos - sobre2;
+
+  document.getElementById('sobre2-total').textContent = formatPeso(sobre2);
+  document.getElementById('deposito-total').textContent = formatPeso(deposito);
+}
+
+async function saveSobre2() {
+  const fecha = document.getElementById('sobre2-fecha').value;
+  if (!fecha) {
+    showToast('Selecciona una fecha', 'error');
+    return;
+  }
+
+  const socios = parseFloat(document.getElementById('sobre2-socios').value) || 0;
+  const nominas = parseFloat(document.getElementById('sobre2-nominas').value) || 0;
+  const ivaAVenta = parseFloat(document.getElementById('ivaAVenta').value) || 0;
+
+  const pagosRecibidos = parseFloat(document.getElementById('corte-pagosRecibidos').value) || 0;
+  const tarjeta = parseFloat(document.getElementById('corte-tarjeta').value) || 0;
+  const transferencias = parseFloat(document.getElementById('corte-transferencias').value) || 0;
+  const cashback = parseFloat(document.getElementById('corte-cashback').value) || 0;
+
+  const body = {
+    ingreso: {
+      Fecha: fecha,
+      PagosRecibidos: pagosRecibidos,
+      Tarjeta: tarjeta,
+      Transferencias: transferencias,
+      Cashback: cashback,
+      '2ndoSocios': socios,
+      '2ndoNominas': nominas,
+      IvaAVenta: ivaAVenta,
+      notifyLeader: true
+    }
+  };
+
+  if (corteModified) {
+    // Include edited corte fields
+    body.ingreso.TotalEfectivo = parseFloat(document.getElementById('corte-totalEfectivo').value) || 0;
+    body.ingreso.FaltanteSobrante = parseFloat(document.getElementById('corte-faltanteSobrante').value) || 0;
+  }
+
+  try {
+    const result = await callAPI('save_ingreso', body);
+    showToast('Guardado ✓ — Notificación enviada a la líder', 'success');
+    loadPendientes();
+    // Show redirect to Corte de Caja
+    showCorteRedirect(fecha);
+  } catch (err) {
+    showToast('Error: ' + err.message, 'error');
+  }
+}
+
+function showCorteRedirect(fecha) {
+  // Remove any previous redirect banner
+  const prev = document.getElementById('corte-redirect-banner');
+  if (prev) prev.remove();
+
+  const banner = document.createElement('div');
+  banner.id = 'corte-redirect-banner';
+  banner.style.cssText = 'margin:16px 0;padding:16px 20px;background:linear-gradient(135deg,#e8f5e9,#c8e6c9);border-radius:12px;border-left:4px solid #2e7d32;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;';
+  banner.innerHTML = `
+    <div>
+      <strong style="color:#2e7d32;">Sobre 2 guardado para ${fecha}</strong>
+      <div style="font-size:13px;color:#555;margin-top:4px;">Continúa con el Corte de Tienda y Preparación de Depósito</div>
+    </div>
+    <a href="corte_caja.html" style="background:#2e7d32;color:white;padding:10px 20px;border-radius:8px;text-decoration:none;font-weight:700;font-size:14px;white-space:nowrap;">
+      Ir a Corte de Caja →
+    </a>
+  `;
+  // Insert at top of the sobre2 tab content
+  const tab = document.getElementById('tab-sobre2');
+  if (tab) tab.insertBefore(banner, tab.firstChild);
+}
+
+// TAB 3: VENTAS POR MESA
+async function loadVentasMesas() {
+  const container = document.getElementById('ventas-table-body');
+  container.innerHTML = MESAS.map(mesa => `
+    <tr>
+      <td>${MESA_LABELS[mesa] || mesa}</td>
+      <td><input type="number" data-mesa="${mesa}" placeholder="0.00"></td>
+    </tr>
+  `).join('');
+}
+
+async function saveVentasPorMesa() {
+  const startDate = document.getElementById('ventas-dateStart').value;
+  const endDate = document.getElementById('ventas-dateEnd').value;
+
+  if (!startDate || !endDate) {
+    showToast('Selecciona ambas fechas', 'error');
+    return;
+  }
+
+  const mesaValues = {};
+  MESAS.forEach(mesa => {
+    const input = document.querySelector(`input[data-mesa="${mesa}"]`);
+    mesaValues[mesa] = parseFloat(input?.value) || 0;
+  });
+
+  try {
+    // Get all dates in range
+    const dates = [];
+    const current = new Date(startDate);
+    const end = new Date(endDate);
+    while (current <= end) {
+      dates.push(current.toISOString().split('T')[0]);
+      current.setDate(current.getDate() + 1);
+    }
+
+    // Save for each date (divide equally)
+    for (const fecha of dates) {
+      const body = { ingreso: { Fecha: fecha, ...mesaValues } };
+      await callAPI('save_ingreso', body);
+    }
+
+    showToast('Ventas guardadas ✓', 'success');
+    loadVentasMesas();
+  } catch (err) {
+    showToast('Error: ' + err.message, 'error');
+  }
+}
+
+// TAB 4: FACTURACIÓN
+async function loadFacturacionMonth() {
+  const month = document.getElementById('facturacion-month').value;
+  if (!month) return;
+
+  try {
+    const data = await callAPI('get_ingresos', { month });
+    const ingresos = data.ingresos || [];
+
+    // Calculate monthly totals
+    let totalPagos = 0, totalSobre2 = 0, totalFacturado = 0;
+    ingresos.forEach(r => {
+      totalPagos += parseFloat(r.PagosRecibidos) || 0;
+      totalSobre2 += parseFloat(r.Sobre2) || 0;
+      totalFacturado += parseFloat(r.TotalFacturado) || 0;
+    });
+
+    const xFacturar = totalPagos - totalSobre2;
+    const falta = xFacturar - totalFacturado;
+    const percent = xFacturar > 0 ? Math.round((totalFacturado / xFacturar) * 100) : 0;
+
+    document.getElementById('monthly-pagosRecibidos').textContent = formatPeso(totalPagos);
+    document.getElementById('monthly-sobre2').textContent = formatPeso(totalSobre2);
+    document.getElementById('monthly-xFacturar').textContent = formatPeso(xFacturar);
+    document.getElementById('monthly-facturado').textContent = formatPeso(totalFacturado);
+    document.getElementById('monthly-falta').textContent = formatPeso(falta);
+
+    document.getElementById('facturacion-progress').style.width = percent + '%';
+    document.getElementById('facturacion-progress-text').textContent = percent + '%';
+
+    if (falta <= 0) {
+      document.getElementById('monthly-falta-box').classList.remove('alert');
+    } else {
+      document.getElementById('monthly-falta-box').classList.add('alert');
+    }
+
+    // Populate daily table
+    const tbody = document.getElementById('facturacion-table-body');
+    tbody.innerHTML = ingresos.map(r => `
+      <tr>
+        <td>${formatDate(r.Fecha)}</td>
+        <td>${formatPeso(r.PagosRecibidos)}</td>
+        <td>${formatPeso(r.Sobre2)}</td>
+        <td>${formatPeso((r.PagosRecibidos || 0) - (r.Sobre2 || 0))}</td>
+        <td><input type="number" data-fecha="${r.Fecha}" data-field="FactClientes" value="${r.FactClientes || 0}" placeholder="0.00"></td>
+        <td><input type="number" data-fecha="${r.Fecha}" data-field="FactGen1" value="${r.FactGen1 || 0}" placeholder="0.00"></td>
+        <td><input type="number" data-fecha="${r.Fecha}" data-field="FactGen2" value="${r.FactGen2 || 0}" placeholder="0.00"></td>
+        <td><input type="number" data-fecha="${r.Fecha}" data-field="FactGen3" value="${r.FactGen3 || 0}" placeholder="0.00"></td>
+        <td><input type="number" data-fecha="${r.Fecha}" data-field="FactGen4" value="${r.FactGen4 || 0}" placeholder="0.00"></td>
+        <td><input type="number" data-fecha="${r.Fecha}" data-field="FactGen5" value="${r.FactGen5 || 0}" placeholder="0.00"></td>
+        <td><input type="number" data-fecha="${r.Fecha}" data-field="FactGen6" value="${r.FactGen6 || 0}" placeholder="0.00"></td>
+        <td><input type="text" data-fecha="${r.Fecha}" data-field="FacturasCFDI" value="${r.FacturasCFDI || ''}" placeholder="CFDI"></td>
+        <td class="total">${formatPeso(r.TotalFacturado)}</td>
+        <td class="total">${formatPeso((r.TotalXFacturar || 0) - (r.TotalFacturado || 0))}</td>
+      </tr>
+    `).join('');
+  } catch (err) {
+    showToast('Error: ' + err.message, 'error');
+  }
+}
+
+async function saveFacturacion() {
+  const month = document.getElementById('facturacion-month').value;
+  const inputs = document.querySelectorAll('[data-fecha]');
+
+  const changes = {};
+  inputs.forEach(inp => {
+    const fecha = inp.dataset.fecha;
+    const field = inp.dataset.field;
+    if (!changes[fecha]) changes[fecha] = {};
+    changes[fecha][field] = field.includes('CFDI') ? inp.value : (parseFloat(inp.value) || 0);
+  });
+
+  try {
+    for (const [fecha, updates] of Object.entries(changes)) {
+      await callAPI('update_facturacion', { fecha, ...updates });
+    }
+    showToast('Facturación actualizada ✓', 'success');
+    loadFacturacionMonth();
+  } catch (err) {
+    showToast('Error: ' + err.message, 'error');
+  }
+}
+
+// TAB 5: HISTORIAL
+async function loadHistorial() {
+  const month = document.getElementById('historial-month').value;
+  if (!month) return;
+
+  try {
+    const data = await callAPI('get_ingresos', { month });
+    const ingresos = (data.ingresos || []).sort((a, b) => new Date(a.Fecha) - new Date(b.Fecha));
+
+    if (ingresos.length === 0) {
+      document.getElementById('historial-table-body').innerHTML = '<tr><td colspan="8" style="text-align: center; color: #7a6b5d;">Sin datos</td></tr>';
+      return;
+    }
+
+    let totalPagos = 0, totalSobre2 = 0, totalDeposito = 0, totalFacturado = 0, totalFalta = 0;
+
+    const rows = ingresos.map(r => {
+      totalPagos += parseFloat(r.PagosRecibidos) || 0;
+      totalSobre2 += parseFloat(r.Sobre2) || 0;
+      totalDeposito += (parseFloat(r.PagosRecibidos) || 0) - (parseFloat(r.Sobre2) || 0);
+      totalFacturado += parseFloat(r.TotalFacturado) || 0;
+      totalFalta += parseFloat(r.FaltaFactura) || 0;
+
+      return `<tr onclick="goToDate('${r.Fecha}')">
+        <td>${formatDate(r.Fecha)}</td>
+        <td>${r.DiaSemana || ''}</td>
+        <td>${formatPeso(r.PagosRecibidos)}</td>
+        <td>${formatPeso(r.Sobre2)}</td>
+        <td>${formatPeso((r.PagosRecibidos || 0) - (r.Sobre2 || 0))}</td>
+        <td>${formatPeso(r.TotalFacturado)}</td>
+        <td>${formatPeso(r.FaltaFactura)}</td>
+        <td style="cursor: pointer; color: #2e7d32; font-weight: 700;">Editar →</td>
+      </tr>`;
+    });
+
+    rows.push(`<tr style="background: #e8f5e9; font-weight: 700;">
+      <td colspan="2">TOTALES</td>
+      <td>${formatPeso(totalPagos)}</td>
+      <td>${formatPeso(totalSobre2)}</td>
+      <td>${formatPeso(totalDeposito)}</td>
+      <td>${formatPeso(totalFacturado)}</td>
+      <td>${formatPeso(totalFalta)}</td>
+      <td></td>
+    </tr>`);
+
+    document.getElementById('historial-table-body').innerHTML = rows.join('');
+  } catch (err) {
+    showToast('Error: ' + err.message, 'error');
+  }
+}
+
+function exportHistorial() {
+  const month = document.getElementById('historial-month').value;
+  if (!month) {
+    showToast('Selecciona un mes', 'error');
+    return;
+  }
+
+  showToast('Exportando...', 'success');
+  // TODO: Implement CSV export
+}
+
+// AUTO-REFRESH
+function startAutoRefresh() {
+  // Refresh pendientes every 60 seconds
+  setInterval(() => {
+    const activeTab = document.querySelector('.tab-btn.active');
+    if (activeTab && activeTab.dataset.tab === 'tab-pendientes') {
+      loadPendientes();
+    }
+  }, 60000);
+}
+
+// API HELPER
+async function callAPI(action, params = {}) {
+  const url = new URL(currentConfig.scriptUrl || DEFAULT_SCRIPT_URL);
+  url.searchParams.append('action', action);
+
+  for (const [key, value] of Object.entries(params)) {
+    if (value === undefined) continue;
+    if (typeof value === 'object') {
+      url.searchParams.append(key, JSON.stringify(value));
+    } else {
+      url.searchParams.append(key, value);
+    }
+  }
+
+  const response = await fetch(url, { method: 'GET', mode: 'cors' });
+  const data = await response.json();
+
+  if (!data.ok && data.error) {
+    throw new Error(data.error || 'API error');
+  }
+
+  return data;
+}
+</script>
+
+</body>
+</html>

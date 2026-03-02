@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NB · Centro de Finanzas</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: linear-gradient(135deg, #faf6f1 0%, #f0ebe4 50%, #e8e0d8 100%);
+      color: #2d2319;
+      min-height: 100vh;
+    }
+
+    .hero {
+      background: linear-gradient(135deg, #1a3a1a 0%, #2e6b2e 50%, #3a7c3a 100%);
+      color: white;
+      padding: 48px 32px 56px;
+      text-align: center;
+    }
+    .hero-logo {
+      width: 72px; height: 72px;
+      background: rgba(255,255,255,.95);
+      border-radius: 18px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 900;
+      color: #2e6b2e;
+      font-size: 26px;
+      margin-bottom: 16px;
+      box-shadow: 0 4px 16px rgba(0,0,0,.2);
+    }
+    .hero h1 { font-size: 28px; font-weight: 800; margin-bottom: 6px; }
+    .hero p { font-size: 15px; opacity: .8; }
+
+    .grid {
+      max-width: 900px;
+      margin: -32px auto 0;
+      padding: 0 24px 60px;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 20px;
+    }
+
+    .card {
+      background: white;
+      border-radius: 16px;
+      padding: 28px 24px;
+      box-shadow: 0 4px 20px rgba(0,0,0,.06);
+      border-top: 4px solid #ddd;
+      transition: transform .15s, box-shadow .15s;
+      text-decoration: none;
+      color: inherit;
+      display: block;
+    }
+    .card:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 8px 32px rgba(0,0,0,.1);
+    }
+    .card-icon { font-size: 32px; margin-bottom: 12px; }
+    .card h2 { font-size: 18px; font-weight: 800; margin-bottom: 6px; color: #2d2319; }
+    .card p { font-size: 13px; color: #7a6b5d; line-height: 1.5; }
+
+    .card.corte { border-top-color: #ff9800; }
+    .card.ingresos { border-top-color: #4caf50; }
+    .card.pagos { border-top-color: #5c6bc0; }
+    .card.dashboard { border-top-color: #e53935; }
+
+    .footer {
+      text-align: center;
+      padding: 24px;
+      font-size: 12px;
+      color: #999;
+    }
+
+    @media(max-width: 600px) {
+      .hero { padding: 32px 20px 44px; }
+      .hero h1 { font-size: 22px; }
+      .grid { padding: 0 16px 40px; margin-top: -24px; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="hero">
+  <div class="hero-logo">NB</div>
+  <h1>Centro de Finanzas</h1>
+  <p>Natural Balance Club — Sistema de Administración</p>
+</div>
+
+<div class="grid">
+  <a href="corte_caja.html" class="card corte">
+    <div class="card-icon">📋</div>
+    <h2>Corte de Caja</h2>
+    <p>Corte individual, corte de tienda, comparativo y preparación de depósito. Acceso rápido al flujo diario de caja.</p>
+  </a>
+
+  <a href="registro_ingresos.html" class="card ingresos">
+    <div class="card-icon">💰</div>
+    <h2>Registro de Ingresos</h2>
+    <p>Pendientes, Sobre 2, ventas por mesa, facturación e historial de ingresos. Donde Louie registra el segundo sobre.</p>
+  </a>
+
+  <a href="nb_portal_pagos.html" class="card pagos">
+    <div class="card-icon">📄</div>
+    <h2>Portal de Pagos</h2>
+    <p>Seguimiento de facturas, estados de pago, vencimientos y sincronización con Google Sheets. Gestión completa de gastos.</p>
+  </a>
+
+  <a href="dashboard_nb.html" class="card dashboard">
+    <div class="card-icon">📊</div>
+    <h2>Dashboard Gerencial</h2>
+    <p>Visión ejecutiva con KPIs, tendencias de pago, ventas por mesa y resumen mensual. Datos en tiempo real.</p>
+  </a>
+</div>
+
+<div class="footer">
+  Natural Balance Club · Sistema de Finanzas v2.0
+</div>
+
+<script src="nb_auth.js"></script>
+<script>
+  // Auth gate — content is hidden until authenticated
+  document.querySelector('.grid').style.display = 'none';
+  document.addEventListener('DOMContentLoaded', () => {
+    requireNbAuth(function() {
+      document.querySelector('.grid').style.display = '';
+    });
+  });
+</script>
+
+</body>
+</html>
