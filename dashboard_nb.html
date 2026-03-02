@@ -688,9 +688,16 @@
     const tbody = document.querySelector('#monthlyTable tbody');
     tbody.innerHTML = '';
 
+    let totIng = 0, totGas = 0, totNeto = 0, totFact = 0, totFalta = 0;
+
     MESES.slice(1).forEach((mes, idx) => {
       const m = idx + 1;
       const monthData = monthly[mes] || { ingresos: 0, gastos: 0, neto: 0, facturado: 0, faltaFacturar: 0 };
+      totIng += monthData.ingresos || 0;
+      totGas += monthData.gastos || 0;
+      totNeto += (monthData.ingresos || 0) - (monthData.gastos || 0);
+      totFact += monthData.facturado || 0;
+      totFalta += monthData.faltaFacturar || 0;
 
       const row = document.createElement('tr');
       row.innerHTML = `
@@ -703,6 +710,19 @@
       `;
       tbody.appendChild(row);
     });
+
+    // Totals row
+    const totRow = document.createElement('tr');
+    totRow.style.cssText = 'background:#f5f0eb; border-top:3px solid #2e7d32; font-weight:800;';
+    totRow.innerHTML = `
+      <td><strong>TOTAL</strong></td>
+      <td style="text-align: right;">${formatCurrency(totIng)}</td>
+      <td style="text-align: right;">${formatCurrency(totGas)}</td>
+      <td style="text-align: right;" class="${totNeto >= 0 ? 'positive' : 'negative'}">${formatCurrency(totNeto)}</td>
+      <td style="text-align: right;">${formatCurrency(totFact)}</td>
+      <td style="text-align: right;" class="warning">${formatCurrency(totFalta)}</td>
+    `;
+    tbody.appendChild(totRow);
   }
 
   // UPDATE DAY OF WEEK CHART

@@ -307,11 +307,11 @@ tbody tr.editing { background:#fffde7 !important; }
 
   <div class="filters">
     <div class="chip-group" id="statusFilter">
-      <button class="chip active" onclick="setStatusFilter('all',this)">Todos</button>
-      <button class="chip" onclick="setStatusFilter('Pendiente',this)">Pendientes</button>
-      <button class="chip" onclick="setStatusFilter('Pagado',this)">Pagados</button>
-      <button class="chip chip-vencido" onclick="setStatusFilter('Vencido',this)">Vencidos</button>
+      <button class="chip active" onclick="setStatusFilter('Pendiente',this)">Pendientes</button>
       <button class="chip" onclick="setStatusFilter('sin_fecha',this)" style="border-color:#e65100;color:#e65100">📅 Sin fecha</button>
+      <button class="chip chip-vencido" onclick="setStatusFilter('Vencido',this)">Vencidos</button>
+      <button class="chip" onclick="setStatusFilter('Pagado',this)">Pagados</button>
+      <button class="chip" onclick="setStatusFilter('all',this)">Todos</button>
     </div>
     <select id="formaFilter" onchange="applyFilters()" style="min-width:140px">
       <option value="">Todas las formas</option>
@@ -408,7 +408,7 @@ tbody tr.editing { background:#fffde7 !important; }
 <script>
 let allGastos = [];
 let filteredGastos = [];
-let currentStatusFilter = 'all';
+let currentStatusFilter = 'Pendiente';
 let editingId = null;
 let selectedIds = new Set();
 const LS_KEY = 'nb_gastos';

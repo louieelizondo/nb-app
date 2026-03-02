@@ -844,23 +844,36 @@
       await loadTodaysIndividualCortes();
     }
 
+    const DEFAULT_CAJAS = [
+      { Caja: 'Caja 1', Tipo: 'Registro' },
+      { Caja: 'Caja 2', Tipo: 'Registro' },
+      { Caja: 'Caja 3', Tipo: 'Registro' },
+      { Caja: 'Caja 4', Tipo: 'Registro' },
+      { Caja: 'Repartidor 1', Tipo: 'Repartidor' },
+      { Caja: 'Repartidor 2', Tipo: 'Repartidor' }
+    ];
+
     async function loadCajas() {
+      const select = document.getElementById('ind_caja');
+      select.innerHTML = '<option value="">Selecciona caja...</option>';
       try {
         const resp = await fetch(config.scriptUrl + '?action=get_config_cajas');
         const data = await resp.json();
-        const select = document.getElementById('ind_caja');
-        select.innerHTML = '';
-        if (data.ok && data.cajas) {
-          data.cajas.forEach(c => {
-            const opt = document.createElement('option');
-            opt.value = c.Caja;
-            opt.textContent = c.Caja + (c.Tipo ? ' (' + c.Tipo + ')' : '');
-            select.appendChild(opt);
-          });
-        }
+        const cajas = (data.ok && data.cajas && data.cajas.length > 0) ? data.cajas : DEFAULT_CAJAS;
+        cajas.forEach(c => {
+          const opt = document.createElement('option');
+          opt.value = c.Caja;
+          opt.textContent = c.Caja + (c.Tipo ? ' (' + c.Tipo + ')' : '');
+          select.appendChild(opt);
+        });
       } catch (e) {
-        console.error('Error loading cajas:', e);
-        showToast('Error cargando cajas', 'error');
+        console.error('Error loading cajas, using defaults:', e);
+        DEFAULT_CAJAS.forEach(c => {
+          const opt = document.createElement('option');
+          opt.value = c.Caja;
+          opt.textContent = c.Caja + ' (' + c.Tipo + ')';
+          select.appendChild(opt);
+        });
       }
     }
 
@@ -894,15 +907,28 @@
     }
 
     async function saveCorteIndividual() {
+      // Validate required fields
+      const fecha = document.getElementById('ind_fecha').value;
+      const colaborador = document.getElementById('ind_colaborador').value.trim();
+      const caja = document.getElementById('ind_caja').value;
+      const ventasCaja = document.getElementById('ind_ventasCaja').value;
+
+      if (!fecha) { showToast('Selecciona una fecha', 'error'); return; }
+      if (!colaborador) { showToast('Ingresa el nombre del cajero', 'error'); return; }
+      if (!caja) { showToast('Selecciona una caja', 'error'); return; }
+      if (!ventasCaja || parseFloat(ventasCaja) === 0) { showToast('Ingresa las ventas de caja', 'error'); return; }
+
       updateSyncStatus('pending');
       const denoms = getDenomValues('ind_denomGrid');
       const totalEfectivo = getTotalEfectivo(denoms);
 
+      if (totalEfectivo === 0) { showToast('Cuenta el efectivo — total es $0', 'error'); updateSyncStatus('error'); return; }
+
       const corte = {
-        Fecha: document.getElementById('ind_fecha').value,
-        Colaborador: document.getElementById('ind_colaborador').value,
-        Caja: document.getElementById('ind_caja').value,
-        VentasCaja: parseFloat(document.getElementById('ind_ventasCaja').value) || 0,
+        Fecha: fecha,
+        Colaborador: colaborador,
+        Caja: caja,
+        VentasCaja: parseFloat(ventasCaja) || 0,
         Tarjeta: parseFloat(document.getElementById('ind_tarjeta').value) || 0,
         Transferencias: parseFloat(document.getElementById('ind_transferencias').value) || 0,
         Cashback: parseFloat(document.getElementById('ind_cashback').value) || 0,
