@@ -23,6 +23,17 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; b
 .month-rotator .mr-label { font-size:18px; font-weight:800; color:#2d2319; min-width:200px; text-align:center; text-transform:capitalize; }
 .month-rotator .mr-today { font-size:12px; font-weight:600; color:#2e6b2e; cursor:pointer; padding:4px 12px; border-radius:8px; border:1.5px solid #2e6b2e; background:white; transition:all .15s; }
 .month-rotator .mr-today:hover { background:#e8f5e9; }
+.month-rotator .mr-label:hover { background:#f5f0eb; border-radius:8px; }
+.month-picker { display:none; position:absolute; top:100%; left:50%; transform:translateX(-50%); margin-top:8px; background:white; border-radius:14px; box-shadow:0 8px 32px rgba(0,0,0,.18); padding:16px; z-index:200; min-width:260px; }
+.month-picker.open { display:block; }
+.mp-year-row { display:flex; align-items:center; justify-content:center; gap:16px; margin-bottom:12px; }
+.mp-year-row span { font-size:16px; font-weight:800; color:#2d2319; min-width:50px; text-align:center; }
+.mp-arrow { background:none; border:1.5px solid #e0d8cf; border-radius:8px; width:32px; height:32px; display:flex; align-items:center; justify-content:center; cursor:pointer; font-size:14px; color:#7a6b5d; transition:all .15s; }
+.mp-arrow:hover { border-color:#2e7d32; color:#2e7d32; background:#e8f5e9; }
+.mp-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:6px; }
+.mp-grid button { padding:8px 4px; border:none; border-radius:8px; background:#f5f0eb; color:#2d2319; font-size:13px; font-weight:600; cursor:pointer; transition:all .15s; }
+.mp-grid button:hover { background:#e8f5e9; color:#2e7d32; }
+.mp-grid button.active { background:#2e7d32; color:white; }
 
 /* SYNC STATUS INDICATOR */
 .sync-indicator { display:flex; align-items:center; gap:6px; font-size:11px; font-weight:600; padding:4px 10px; border-radius:8px; margin-left:8px; white-space:nowrap; }
@@ -278,11 +289,19 @@ tbody tr.editing { background:#fffde7 !important; }
     <span class="sync-indicator synced" id="syncIndicator"><span class="dot"></span><span id="syncIndicatorText">Synced</span></span>
   </div>
 
-  <div class="month-rotator">
+  <div class="month-rotator" style="position:relative;">
     <button class="mr-btn" onclick="shiftMonth(-1)">◀</button>
-    <span class="mr-label" id="mrLabel"></span>
+    <span class="mr-label" id="mrLabel" onclick="toggleMonthPicker()" style="cursor:pointer;"></span>
     <button class="mr-btn" onclick="shiftMonth(1)">▶</button>
     <button class="mr-today" onclick="goToday()">Hoy</button>
+    <div class="month-picker" id="monthPicker">
+      <div class="mp-year-row">
+        <button class="mp-arrow" onclick="pickerShiftYear(-1)">◀</button>
+        <span id="mpYear"></span>
+        <button class="mp-arrow" onclick="pickerShiftYear(1)">▶</button>
+      </div>
+      <div class="mp-grid" id="mpGrid"></div>
+    </div>
   </div>
   <div class="summary-row" id="summaryRow"></div>
 
@@ -507,6 +526,7 @@ function shiftMonth(dir){
   if(summaryMonth > 11){ summaryMonth = 0; summaryYear++; }
   if(summaryMonth < 0){ summaryMonth = 11; summaryYear--; }
   updateMonthLabel();
+  closeMonthPicker();
   syncYearFilter();
   renderSummary();
 }
@@ -515,8 +535,54 @@ function goToday(){
   summaryMonth = now.getMonth();
   summaryYear = now.getFullYear();
   updateMonthLabel();
+  closeMonthPicker();
   renderSummary();
 }
+
+// ── Month picker (jump-to-month) ──
+let pickerYear = new Date().getFullYear();
+function toggleMonthPicker(){
+  const picker = document.getElementById('monthPicker');
+  const isOpen = picker.classList.contains('open');
+  if(isOpen){ closeMonthPicker(); return; }
+  pickerYear = summaryYear;
+  renderMonthGrid();
+  picker.classList.add('open');
+}
+function closeMonthPicker(){
+  document.getElementById('monthPicker').classList.remove('open');
+}
+function pickerShiftYear(dir){
+  pickerYear += dir;
+  document.getElementById('mpYear').textContent = pickerYear;
+  renderMonthGrid();
+}
+function renderMonthGrid(){
+  document.getElementById('mpYear').textContent = pickerYear;
+  const grid = document.getElementById('mpGrid');
+  grid.innerHTML = '';
+  MONTH_NAMES.forEach((name, i) => {
+    const btn = document.createElement('button');
+    btn.textContent = name.substring(0,3);
+    if(i === summaryMonth && pickerYear === summaryYear) btn.classList.add('active');
+    btn.onclick = () => {
+      summaryMonth = i;
+      summaryYear = pickerYear;
+      updateMonthLabel();
+      closeMonthPicker();
+      syncYearFilter();
+      renderSummary();
+    };
+    grid.appendChild(btn);
+  });
+}
+document.addEventListener('click', (e) => {
+  const picker = document.getElementById('monthPicker');
+  const rotator = document.querySelector('.month-rotator');
+  if(picker && rotator && !rotator.contains(e.target) && !picker.contains(e.target)){
+    closeMonthPicker();
+  }
+});
 
 // ── Year ↔ Month sync ──
 function syncYearFilter(){

@@ -52,8 +52,9 @@
       display: flex;
       gap: 12px;
       align-items: center;
+      position: relative;
     }
-    .topbar-select, .topbar-btn {
+    .topbar-btn {
       padding: 10px 16px;
       border: none;
       border-radius: 8px;
@@ -64,11 +65,31 @@
       cursor: pointer;
       transition: all 0.2s;
     }
-    .topbar-select { appearance: none; padding-right: 28px; background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e"); background-repeat: no-repeat; background-position: right 8px center; background-size: 16px; }
-    .topbar-btn:hover, .topbar-select:hover {
+    .topbar-btn:hover {
       background: rgba(255, 255, 255, 0.3);
     }
     .topbar-btn.refresh { background: rgba(255, 255, 255, 0.25); }
+
+    /* MONTH ROTATOR */
+    .month-rotator { display:flex; align-items:center; gap:10px; position:relative; }
+    .month-rotator .mr-btn { background:rgba(255,255,255,.2); border:1.5px solid rgba(255,255,255,.35); border-radius:10px; width:36px; height:36px; display:flex; align-items:center; justify-content:center; cursor:pointer; font-size:16px; color:white; transition:all .15s; font-weight:700; }
+    .month-rotator .mr-btn:hover { background:rgba(255,255,255,.35); }
+    .month-rotator .mr-label { font-size:16px; font-weight:800; color:white; min-width:170px; text-align:center; cursor:pointer; padding:6px 12px; border-radius:8px; transition:background .15s; }
+    .month-rotator .mr-label:hover { background:rgba(255,255,255,.15); }
+    .month-rotator .mr-today { font-size:11px; font-weight:700; color:white; cursor:pointer; padding:5px 12px; border-radius:8px; border:1.5px solid rgba(255,255,255,.4); background:transparent; transition:all .15s; }
+    .month-rotator .mr-today:hover { background:rgba(255,255,255,.2); }
+
+    /* MONTH PICKER DROPDOWN */
+    .month-picker { display:none; position:absolute; top:100%; right:0; margin-top:8px; background:white; border-radius:14px; box-shadow:0 8px 32px rgba(0,0,0,.2); padding:16px; z-index:200; min-width:260px; }
+    .month-picker.open { display:block; }
+    .mp-year-row { display:flex; align-items:center; justify-content:center; gap:16px; margin-bottom:12px; }
+    .mp-year-row span { font-size:16px; font-weight:800; color:#2d2319; min-width:50px; text-align:center; }
+    .mp-arrow { background:none; border:1.5px solid #e0d8cf; border-radius:8px; width:32px; height:32px; display:flex; align-items:center; justify-content:center; cursor:pointer; font-size:14px; color:#7a6b5d; transition:all .15s; }
+    .mp-arrow:hover { border-color:#2e7d32; color:#2e7d32; background:#e8f5e9; }
+    .mp-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:6px; }
+    .mp-grid button { padding:8px 4px; border:none; border-radius:8px; background:#f5f0eb; color:#2d2319; font-size:13px; font-weight:600; cursor:pointer; transition:all .15s; }
+    .mp-grid button:hover { background:#e8f5e9; color:#2e7d32; }
+    .mp-grid button.active { background:#2e7d32; color:white; }
 
     .container { max-width: 1400px; margin: 0 auto; padding: 24px 24px 100px; }
 
@@ -190,9 +211,11 @@
         width: 100%;
         margin-top: 12px;
       }
-      .topbar-select, .topbar-btn {
+      .topbar-btn {
         flex: 1;
       }
+      .month-rotator .mr-label { font-size:14px; min-width:140px; }
+      .month-picker { right:auto; left:0; }
       .kpi-row {
         grid-template-columns: 1fr 1fr;
       }
@@ -266,25 +289,20 @@
     </div>
   </div>
   <div class="topbar-controls">
-    <select id="yearSelect" class="topbar-select">
-      <option value="2025">2025</option>
-      <option value="2026" selected>2026</option>
-    </select>
-    <select id="monthSelect" class="topbar-select">
-      <option value="">Mes Actual</option>
-      <option value="01">Enero</option>
-      <option value="02">Febrero</option>
-      <option value="03" selected>Marzo</option>
-      <option value="04">Abril</option>
-      <option value="05">Mayo</option>
-      <option value="06">Junio</option>
-      <option value="07">Julio</option>
-      <option value="08">Agosto</option>
-      <option value="09">Septiembre</option>
-      <option value="10">Octubre</option>
-      <option value="11">Noviembre</option>
-      <option value="12">Diciembre</option>
-    </select>
+    <div class="month-rotator">
+      <button class="mr-btn" onclick="shiftMonth(-1)">◀</button>
+      <span class="mr-label" id="mrLabel" onclick="toggleMonthPicker()"></span>
+      <button class="mr-btn" onclick="shiftMonth(1)">▶</button>
+      <button class="mr-today" onclick="goToday()">Hoy</button>
+    </div>
+    <div class="month-picker" id="monthPicker">
+      <div class="mp-year-row">
+        <button class="mp-arrow" onclick="pickerShiftYear(-1)">◀</button>
+        <span id="mpYear"></span>
+        <button class="mp-arrow" onclick="pickerShiftYear(1)">▶</button>
+      </div>
+      <div class="mp-grid" id="mpGrid"></div>
+    </div>
     <button class="topbar-btn refresh" id="refreshBtn">⟳ Actualizar</button>
   </div>
 </div>
@@ -410,18 +428,83 @@
   let chartInstances = {};
   let currentData = {};
 
+  // ════════════ MONTH ROTATOR STATE ════════════
+  const MONTH_NAMES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+  let viewMonth = new Date().getMonth();   // 0-based
+  let viewYear  = new Date().getFullYear();
+  let pickerYear = viewYear;
+
+  function updateMonthLabel() {
+    document.getElementById('mrLabel').textContent = `${MONTH_NAMES[viewMonth]} ${viewYear}`;
+  }
+  function shiftMonth(dir) {
+    viewMonth += dir;
+    if (viewMonth > 11) { viewMonth = 0; viewYear++; }
+    if (viewMonth < 0)  { viewMonth = 11; viewYear--; }
+    updateMonthLabel();
+    closeMonthPicker();
+    fetchData();
+  }
+  function goToday() {
+    const now = new Date();
+    viewMonth = now.getMonth();
+    viewYear  = now.getFullYear();
+    updateMonthLabel();
+    closeMonthPicker();
+    fetchData();
+  }
+  function toggleMonthPicker() {
+    const picker = document.getElementById('monthPicker');
+    const isOpen = picker.classList.contains('open');
+    if (isOpen) { closeMonthPicker(); return; }
+    pickerYear = viewYear;
+    renderMonthGrid();
+    picker.classList.add('open');
+  }
+  function closeMonthPicker() {
+    document.getElementById('monthPicker').classList.remove('open');
+  }
+  function pickerShiftYear(dir) {
+    pickerYear += dir;
+    document.getElementById('mpYear').textContent = pickerYear;
+    renderMonthGrid();
+  }
+  function renderMonthGrid() {
+    document.getElementById('mpYear').textContent = pickerYear;
+    const grid = document.getElementById('mpGrid');
+    grid.innerHTML = '';
+    MONTH_NAMES.forEach((name, i) => {
+      const btn = document.createElement('button');
+      btn.textContent = name.substring(0, 3);
+      if (i === viewMonth && pickerYear === viewYear) btn.classList.add('active');
+      btn.onclick = () => {
+        viewMonth = i;
+        viewYear = pickerYear;
+        updateMonthLabel();
+        closeMonthPicker();
+        fetchData();
+      };
+      grid.appendChild(btn);
+    });
+  }
+
+  // Close picker on outside click
+  document.addEventListener('click', (e) => {
+    const picker = document.getElementById('monthPicker');
+    const rotator = document.querySelector('.month-rotator');
+    if (picker && rotator && !rotator.contains(e.target) && !picker.contains(e.target)) {
+      closeMonthPicker();
+    }
+  });
+
   // FORMAT CURRENCY
   function formatCurrency(value) {
     return new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', minimumFractionDigits: 0 }).format(value || 0);
   }
 
-  // GET CURRENT MONTH/YEAR
+  // GET CURRENT MONTH/YEAR (reads from rotator state)
   function getCurrentMonthYear() {
-    const now = new Date();
-    const year = document.getElementById('yearSelect').value || String(now.getFullYear());
-    const monthVal = document.getElementById('monthSelect').value;
-    const month = monthVal || String(now.getMonth() + 1).padStart(2, '0');
-    return { year, month };
+    return { year: String(viewYear), month: String(viewMonth + 1).padStart(2, '0') };
   }
 
   // FETCH DATA
@@ -599,8 +682,7 @@
 
   // UPDATE MONTHLY TABLE
   function updateMonthlyTable(data) {
-    const year = document.getElementById('yearSelect').value;
-    document.getElementById('yearDisplay').textContent = `(${year})`;
+    document.getElementById('yearDisplay').textContent = `(${viewYear})`;
 
     const monthly = data.monthly || {};
     const tbody = document.querySelector('#monthlyTable tbody');
@@ -733,11 +815,10 @@
 
   // EVENT LISTENERS
   document.getElementById('refreshBtn').addEventListener('click', fetchData);
-  document.getElementById('yearSelect').addEventListener('change', fetchData);
-  document.getElementById('monthSelect').addEventListener('change', fetchData);
 
   // INITIAL LOAD
   window.addEventListener('load', () => {
+    updateMonthLabel();
     requireNbAuth(() => setTimeout(fetchData, 500));
   });
 
