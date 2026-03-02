@@ -351,6 +351,13 @@ tr:last-child td { border-bottom: none; }
 
 <div class="container">
 
+  <!-- ═══ STORAGE WARNING BAR ═══ -->
+  <div id="storageWarningBar" style="display:none;background:#fff3cd;border:1px solid #ffc107;border-radius:10px;padding:10px 16px;margin-bottom:12px;font-size:13px;color:#856404;display:flex;align-items:center;justify-content:space-between;gap:12px;">
+    <span id="storageWarningText">⚠️ Almacenamiento alto</span>
+    <button onclick="clearHistory()" style="background:#e65100;color:white;border:none;border-radius:6px;padding:5px 12px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;flex-shrink:0;">🗑 Limpiar ahora</button>
+  </div>
+
+
   <!-- CAPTURE OPTIONS -->
   <div id="captureOptions" class="capture-options">
     <div class="capture-card" onclick="openCamera()">
@@ -1642,7 +1649,7 @@ function saveHistory(){
   h=h.filter(r=>r.date>=cutStr);
   localStorage.setItem('nb_price_history',JSON.stringify(h)); renderHistory(); showToast('💾 Historial guardado');
 }
-function clearHistory(){if(!confirm('¿Borrar historial?'))return;localStorage.removeItem('nb_price_history');renderHistory();showToast('🗑️ Eliminado');}
+function clearHistory(){if(!confirm('¿Borrar historial?'))return;localStorage.removeItem('nb_price_history');renderHistory();showToast('🗑️ Eliminado');const bar=document.getElementById('storageWarningBar');if(bar)bar.style.display='none';}
 function renderHistory(){
   const h=JSON.parse(localStorage.getItem('nb_price_history')||'[]');
   document.getElementById('historyCount').textContent='('+h.length+')';
@@ -2083,11 +2090,14 @@ function pruneLocalStorage() {
     totalSize += (k.length + (localStorage.getItem(k) || '').length) * 2; // UTF-16
   }
   const mb = (totalSize / 1024 / 1024).toFixed(2);
+  const bar = document.getElementById('storageWarningBar');
+  const txt = document.getElementById('storageWarningText');
   if (totalSize > 4 * 1024 * 1024) {
     console.warn(`⚠️ localStorage at ${mb}MB — nearing limit!`);
-    showToast(`⚠️ Almacenamiento al ${mb}MB — considera limpiar historial`, 5000);
+    if (bar) { txt.textContent = `⚠️ Almacenamiento al ${mb}MB — considera limpiar historial`; bar.style.display = 'flex'; }
   } else {
     console.log(`💾 localStorage: ${mb}MB`);
+    if (bar) bar.style.display = 'none';
   }
 }
 
