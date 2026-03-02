@@ -785,8 +785,8 @@ function parseGvizTable(t) {
     if (nn.includes('fecha') || nn.match(/^\d+(\.\d+)?$/)) continue;
     if (seen.has(nn)) continue;
     seen.add(nn);
-    // Col 7 = Costo por kg/lt (the normalized price)
-    const rawCost = getV(7);
+    // Col 2 = Costo x Paquete (purchase price — used for invoice comparison)
+    const rawCost = getV(2);
     const cost = typeof rawCost === 'number'
       ? rawCost
       : parseFloat(String(rawCost || '').replace(/[^0-9.]/g, '')) || 0;
