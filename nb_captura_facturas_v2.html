@@ -467,9 +467,9 @@ tr:last-child td { border-bottom: none; }
   <div class="card">
     <button class="panel-toggle" onclick="togglePanel('mappingsBody','mArrow')">
       <span>📚 Mapeos Aprendidos <span id="mappingsCount" style="font-size:12px;color:#777">(0)</span></span>
-      <span id="mArrow">▼</span>
+      <span id="mArrow">▶</span>
     </button>
-    <div class="panel-body" id="mappingsBody">
+    <div class="panel-body hidden" id="mappingsBody">
       <p style="font-size:12px;color:#777;margin-bottom:10px">Correcciones guardadas. Se aplican automáticamente en futuras facturas.</p>
       <div id="mappingsList"></div>
       <button class="btn btn-red btn-small" style="margin-top:8px" onclick="clearAllMappings()">🗑️ Borrar todos</button>
