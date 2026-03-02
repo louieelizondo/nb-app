@@ -69,7 +69,16 @@ body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif
 .variante-input input { width:100%; padding:4px 8px; border:1px solid #e0e0e0; border-radius:6px; font-size:11px; background:#fafafa; }
 .item-meta .tag-badge { background:#fff3e0; color:#e65100; padding:1px 5px; border-radius:4px; font-size:10px; }
 .item-meta .season-badge { background:#e8f5e9; color:#2e7d32; padding:1px 5px; border-radius:4px; font-size:10px; }
-
+/* ── Quick min/max editor (temp while calibrating) ── */
+.max-tap  { background:var(--green-bg); color:var(--green); padding:1px 6px; border-radius:4px; font-size:10px; cursor:pointer; }
+.no-max-tap { background:#fff3cd; color:#856404; padding:1px 6px; border-radius:4px; font-size:10px; cursor:pointer; }
+.minmax-editor { display:none; background:#f0f7f4; border-top:1px solid #d8ead2; padding:8px 16px; }
+.minmax-row { display:flex; align-items:center; gap:8px; }
+.minmax-field { display:flex; flex-direction:column; align-items:center; gap:2px; flex:1; }
+.minmax-field span { font-size:10px; font-weight:700; color:var(--gray); text-transform:uppercase; }
+.minmax-field input { width:100%; padding:6px; border:1px solid var(--gray-border); border-radius:6px; font-size:14px; font-weight:600; text-align:center; -moz-appearance:textfield; }
+.minmax-field input::-webkit-outer-spin-button, .minmax-field input::-webkit-inner-spin-button { -webkit-appearance:none; }
+.minmax-save { background:var(--green); color:white; border:none; border-radius:6px; padding:10px 16px; font-size:16px; font-weight:700; cursor:pointer; flex-shrink:0; }
 
 /* Stepper */
 .stepper { display:flex; align-items:center; gap:0; flex-shrink:0; }
@@ -538,6 +547,63 @@ function setVariant(idx, val) {
   saveState();
 }
 
+// ── Quick Min/Max editor (inline during counting) ──
+function toggleMinMax(idx) {
+  const editor = document.getElementById('mme-' + idx);
+  if (!editor) return;
+  const isOpen = editor.style.display === 'flex';
+  // Close any other open editors first
+  document.querySelectorAll('.minmax-editor').forEach(el => { el.style.display = 'none'; });
+  if (!isOpen) {
+    editor.style.display = 'flex';
+    const maxInput = document.getElementById('mmax-' + idx);
+    if (maxInput) { maxInput.select(); maxInput.focus(); }
+  }
+}
+
+function saveMinMax(idx) {
+  const newMin = parseFloat(document.getElementById('mmin-' + idx).value) || 0;
+  const newMax = parseFloat(document.getElementById('mmax-' + idx).value) || 0;
+
+  PRODUCTS[idx].inv = newMin;
+  PRODUCTS[idx].max = newMax;
+  saveProductsToCache();
+
+  // Close editor
+  const editor = document.getElementById('mme-' + idx);
+  if (editor) editor.style.display = 'none';
+
+  // Update the badge inline (no full re-render needed)
+  const badge = document.getElementById('maxbadge-' + idx);
+  if (badge) {
+    if (newMax > 0) {
+      badge.className = 'max-tap';
+      badge.textContent = 'Máx: ' + newMax + ' ✏️';
+    } else {
+      badge.className = 'no-max-tap';
+      badge.textContent = '⚙️ Fijar máx';
+    }
+  }
+
+  updateSummaryStats();
+  toast('✅ Mín: ' + newMin + '  Máx: ' + newMax);
+
+  // Push to Sheet
+  const p = PRODUCTS[idx];
+  if (p.id) {
+    const url = getScriptUrl();
+    if (url) {
+      fetch(url, { method: 'POST', headers: {'Content-Type':'text/plain'},
+        body: JSON.stringify({ action: 'update_product', id: p.id,
+          fields: { Inventario_Min: newMin, Inventario_Max: newMax }
+        })
+      }).then(r => r.json())
+        .then(d => { if (d.ok) console.log('✅ Min/Max synced to Sheet:', p.id); })
+        .catch(e => console.log('MinMax sync error:', e));
+    }
+  }
+}
+
 // ============ ROUTES VIEW ============
 function renderRoutes() {
   const activeProducts = getActiveProducts();
@@ -669,6 +735,9 @@ function renderSections() {
 
     items.forEach(item => {
       const count = counts[item.idx] !== undefined ? counts[item.idx] : item.inv;
+      const maxBadge = item.max > 0
+        ? `<span id="maxbadge-${item.idx}" class="max-tap" onclick="toggleMinMax(${item.idx})">Máx: ${item.max} ✏️</span>`
+        : `<span id="maxbadge-${item.idx}" class="no-max-tap" onclick="toggleMinMax(${item.idx})">⚙️ Fijar máx</span>`;
       html += `
           <div class="item-row">
             <div class="item-info">
@@ -676,7 +745,7 @@ function renderSections() {
               <div class="item-meta">
                 ${item.s ? '<span>'+item.s+'</span>' : ''}
                 ${item.u ? ' <span class="unit-badge">'+item.u+'</span>' : ''}
-                ${item.max > 0 ? ' <span>Máx: '+item.max+'</span>' : ''}
+                 ${maxBadge}
                 ${item.variantes ? ' <span class="variante-badge">📎 variantes</span>' : ''}
                 ${item.tags ? ' '+item.tags.split(',').map(t=>'<span class="tag-badge">'+t.trim()+'</span>').join(' ') : ''}
               </div>
@@ -687,6 +756,13 @@ function renderSections() {
                      onchange="setCount(${item.idx},this.value)"
                      inputmode="decimal" step="0.5" min="0">
               <button onclick="adj(${item.idx},1)">+</button>
+            </div>
+          </div>
+          <div class="minmax-editor" id="mme-${item.idx}">
+            <div class="minmax-row">
+              <div class="minmax-field"><span>Mín</span><input type="number" id="mmin-${item.idx}" value="${item.inv||0}" step="0.5" min="0" inputmode="decimal"></div>
+              <div class="minmax-field"><span>Máx</span><input type="number" id="mmax-${item.idx}" value="${item.max||0}" step="0.5" min="0" inputmode="decimal"></div>
+              <button class="minmax-save" onclick="saveMinMax(${item.idx})">✓</button>
             </div>
           </div>
           ${item.variantes ? '<div class="variante-input" style="padding:0 16px 6px"><input type="text" id="var-'+item.idx+'" placeholder="'+item.variantes+'" value="'+(variantNotes[item.idx]||'')+'" onchange="setVariant('+item.idx+',this.value)"></div>' : ''}`;
