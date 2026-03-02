@@ -206,11 +206,13 @@
     /* Desktop: side-by-side charts */
     @media (min-width: 1200px) {
       .charts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
-      .charts-grid > .chart-container { margin-bottom: 0; }
+      .charts-grid > .section { margin-bottom: 0; }
+      .charts-grid > .section .chart-container { margin-bottom: 0; }
     }
 
     /* Tablet */
     @media (max-width: 768px) {
+      .charts-grid { grid-template-columns: 1fr; }
       .topbar {
         flex-direction: column;
         align-items: flex-start;
@@ -432,24 +434,25 @@
     </div>
   </div>
 
-  <!-- SECTION 4: DAY OF WEEK ANALYSIS -->
-  <div class="section">
-    <h2 class="section-title">Análisis por Día de la Semana</h2>
-    <div class="chart-container">
-      <div class="chart-wrapper">
-        <div class="loading-skeleton" id="chart4Skeleton"></div>
-        <canvas id="dayOfWeekChart" style="display: none;"></canvas>
+  <!-- SECTIONS 4-5: SIDE-BY-SIDE ON WIDE DESKTOP -->
+  <div class="charts-grid">
+    <div class="section">
+      <h2 class="section-title">Análisis por Día de la Semana</h2>
+      <div class="chart-container">
+        <div class="chart-wrapper">
+          <div class="loading-skeleton" id="chart4Skeleton"></div>
+          <canvas id="dayOfWeekChart" style="display: none;"></canvas>
+        </div>
       </div>
     </div>
-  </div>
 
-  <!-- SECTION 5: MESA/STATION SALES -->
-  <div class="section">
-    <h2 class="section-title">Ventas por Estación (Mesas)</h2>
-    <div class="chart-container">
-      <div class="chart-wrapper" style="height: 300px;">
-        <div class="loading-skeleton" id="chart5Skeleton"></div>
-        <canvas id="mesaSalesChart" style="display: none;"></canvas>
+    <div class="section">
+      <h2 class="section-title">Ventas por Estación (Mesas)</h2>
+      <div class="chart-container">
+        <div class="chart-wrapper" style="height: 300px;">
+          <div class="loading-skeleton" id="chart5Skeleton"></div>
+          <canvas id="mesaSalesChart" style="display: none;"></canvas>
+        </div>
       </div>
     </div>
   </div>
