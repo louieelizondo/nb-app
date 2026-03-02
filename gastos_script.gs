@@ -427,25 +427,32 @@ function updatePrices(body) {
   const costPaqCol = 2;  // C = whole-package cost (CostoPaq)
   const fechaCol = 3;    // D = last price date
 
+  let renamed = 0;
   items.forEach(item => {
     const bdName = (item.bd_name || '').trim().toLowerCase();
     // Use precio_unitario (whole-package price from invoice), NOT precio_base (per-kg/L)
     const newPrice = item.precio_unitario || item.price;
+    const invoiceName = (item.invoice_name || '').trim();
     if (!bdName || !newPrice) return;
 
     for (let i = 1; i < data.length; i++) {
       const cellName = String(data[i][nameCol] || '').trim().toLowerCase();
       if (cellName === bdName) {
-        mp.getRange(i + 1, costPaqCol + 1).setValue(newPrice);  // Col C
-        mp.getRange(i + 1, fechaCol + 1).setValue(new Date());   // Col D = today
+        mp.getRange(i + 1, costPaqCol + 1).setValue(newPrice);  // Col C: Costo x Paquete
+        mp.getRange(i + 1, fechaCol + 1).setValue(new Date());   // Col D: Fecha actualizada
+        // Rename col A to formal invoice name if provided and different
+        if (invoiceName && invoiceName.toLowerCase() !== cellName) {
+          mp.getRange(i + 1, nameCol + 1).setValue(invoiceName); // Col A: nombre formal
+          renamed++;
+        }
         updated++;
         break;
       }
     }
   });
 
-  log('UPDATE_PRICES', updated + ' ingredients updated (CostoPaq col C)');
-  return { ok: true, updated, message: updated + ' prices updated in MATERIA PRIMA' };
+  log('UPDATE_PRICES', updated + ' updated, ' + renamed + ' renamed in MATERIA PRIMA');
+  return { ok: true, updated, renamed, message: updated + ' prices updated, ' + renamed + ' renamed' };
 }
 
 /**

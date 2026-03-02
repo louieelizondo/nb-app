@@ -1245,6 +1245,10 @@ function processFile(file){
   }; r.readAsDataURL(file);
 }
 function resetAll(){
+  // Sync prices + dates + names to MATERIA PRIMA before clearing (even without sending to Portal)
+  const sUrl = getScriptUrl();
+  if(sUrl && currentItems && currentItems.length) syncPricesToMateriaPrima(sUrl);
+
   document.getElementById('captureOptions').style.display='grid';
   document.getElementById('previewSection').style.display='none';
   document.getElementById('resultsSection').style.display='none';
@@ -1887,7 +1891,8 @@ async function syncPricesToMateriaPrima(scriptUrl){
     .filter(it => it._match && it._match.n && it.precio_unitario)
     .map(it => ({
       bd_name: it._match.n,
-      precio_unitario: it.precio_unitario  // whole-package price → writes to CostoPaq (col C)
+      precio_unitario: it.precio_unitario,  // whole-package price → writes to CostoPaq (col C)
+      invoice_name: (it.descripcion || '').trim()  // formal invoice name → renames col A
     }));
   if(!priceItems.length){ console.log('No matched items to sync prices'); return; }
   try {
@@ -1896,7 +1901,7 @@ async function syncPricesToMateriaPrima(scriptUrl){
       body: JSON.stringify({ action: 'update_prices', items: priceItems })
     });
     const data = await resp.json();
-    if(data.ok) console.log(`✅ Prices synced: ${data.updated} ingredients updated`);
+    if(data.ok) console.log(`✅ Prices synced: ${data.updated} updated, ${data.renamed||0} renamed`);
     else console.log('Price sync error:', data.error);
   } catch(e){ console.log('Price sync failed:', e.message); }
 }
