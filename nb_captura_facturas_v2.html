@@ -258,6 +258,39 @@ tr:last-child td { border-bottom: none; }
 .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: #2e6b2e; color: white; padding: 10px 22px; border-radius: 30px; font-size: 13px; font-weight: 600; z-index: 11000; display: none; box-shadow: 0 4px 16px rgba(0,0,0,.25); white-space: nowrap; }
 @media (max-width: 560px) { .capture-options { grid-template-columns: 1fr; } }
 
+/* ══ TABLET (641-1024) ══ */
+@media (min-width: 641px) and (max-width: 1024px) {
+  .container { padding: 20px 20px 80px; }
+  .preview-card img { max-height: 300px; max-width: 350px; }
+  .adj-sheet { max-width: 600px; }
+}
+
+/* ══ DESKTOP (1025+) ══ */
+@media (min-width: 1025px) {
+  .container { max-width: 1200px; padding: 24px 32px 80px; }
+  .topbar { padding: 16px 32px; }
+  .capture-options { grid-template-columns: 1fr 1fr 1fr; max-width: 800px; }
+  .preview-card { max-width: 900px; }
+  .preview-card img { max-height: 320px; max-width: 400px; }
+  .card { padding: 24px; }
+  .filter-bar { gap: 12px; }
+  .adj-sheet { max-width: 700px; border-radius: 16px; }
+  #adjModal { align-items: center; }
+  .gastos-fields { max-width: 800px; }
+  .gastos-summary-grid { max-width: 600px; }
+}
+
+/* ══ SMALL PHONES (≤420px) ══ */
+@media (max-width: 420px) {
+  .topbar { padding: 10px 10px; }
+  .topbar h1, .topbar-sub { font-size: 14px; }
+  .capture-card { padding: 18px 10px; }
+  .capture-card .icon { font-size: 36px; }
+  .capture-card h3 { font-size: 13px; }
+  .filter-chip { padding: 5px 9px; font-size: 10px; }
+  .btn { padding: 7px 14px; font-size: 12px; }
+}
+
 /* ══ ADJUSTMENTS ══ */
 #adjModal { position: fixed; inset: 0; background: rgba(0,0,0,.48); z-index: 12000; display: none; align-items: flex-end; justify-content: center; }
 #adjModal.open { display: flex; }

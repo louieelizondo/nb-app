@@ -185,6 +185,103 @@ body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif
 /* Supplier site button */
 .btn-site { background:var(--gray-bg); color:var(--dark); border:1px solid var(--gray-border) !important; }
 .btn-site:active { background:var(--gray-border); }
+
+/* ═══════════════════════════════════════
+   RESPONSIVE — Tablet (768px+)
+   ═══════════════════════════════════════ */
+@media (min-width: 768px) {
+  .header { padding:16px 24px; }
+  .header h1 { font-size:24px; }
+
+  /* Expand containers */
+  .routes { max-width:700px; flex-direction:row; flex-wrap:wrap; }
+  .route-card { flex:1 1 calc(50% - 6px); min-width:260px; }
+  .section-list { max-width:700px; }
+  .summary-bar .inner { max-width:700px; }
+  .modal { max-width:600px; border-radius:16px; }
+  .modal-overlay { align-items:center; }
+  .pedir-filters { max-width:700px; }
+
+  /* Stepper bigger touch targets */
+  .stepper button { width:42px; height:42px; font-size:22px; }
+  .stepper input { width:56px; height:42px; font-size:17px; }
+
+  /* Section items - show more info */
+  .item-name { font-size:15px; }
+  .item-row { padding:12px 20px; gap:12px; }
+  .section-header { padding:16px 20px; }
+
+  /* Product management view wider */
+  .products-container { max-width:700px !important; }
+}
+
+/* ═══════════════════════════════════════
+   RESPONSIVE — Desktop (1024px+)
+   ═══════════════════════════════════════ */
+@media (min-width: 1024px) {
+  .header { padding:18px 32px; }
+  .header h1 { font-size:26px; }
+  .back-btn { left:20px; font-size:28px; }
+
+  /* Routes: 3-col grid on desktop */
+  .routes { max-width:960px; gap:16px; }
+  .route-card { flex:1 1 calc(33.33% - 12px); min-width:240px; padding:24px; }
+  .route-card .icon { font-size:42px; width:64px; height:64px; }
+  .route-card .info h3 { font-size:18px; }
+  .route-card .count { font-size:28px; }
+
+  /* Section list: 2-col layout for section cards */
+  .section-list { max-width:960px; display:flex; flex-wrap:wrap; gap:12px; }
+  .section-list > .section-card { flex:1 1 calc(50% - 6px); min-width:380px; margin-bottom:0; }
+  .section-list > .all-done { flex:1 1 100%; }
+
+  /* Summary bar wider */
+  .summary-bar .inner { max-width:960px; }
+
+  /* Modal centered and wider */
+  .modal { max-width:700px; border-radius:16px; }
+
+  /* Product management wider */
+  .products-container { max-width:960px !important; }
+
+  /* Pedir filters wider */
+  .pedir-filters { max-width:960px; }
+
+  /* Item rows: more comfortable spacing */
+  .item-row { padding:14px 24px; }
+  .item-name { font-size:16px; }
+  .section-header .loc-name { font-size:17px; }
+}
+
+/* ═══════════════════════════════════════
+   RESPONSIVE — Wide Desktop (1280px+)
+   ═══════════════════════════════════════ */
+@media (min-width: 1280px) {
+  .routes { max-width:1100px; }
+  .section-list { max-width:1100px; }
+  .summary-bar .inner { max-width:1100px; }
+  .products-container { max-width:1100px !important; }
+  .pedir-filters { max-width:1100px; }
+
+  /* Routes: keep 3 but more spacious */
+  .route-card { padding:28px; }
+  .route-card .icon { font-size:48px; width:72px; height:72px; }
+}
+
+/* ═══════════════════════════════════════
+   MOBILE improvements (<480px)
+   ═══════════════════════════════════════ */
+@media (max-width: 480px) {
+  .header { padding:12px; }
+  .header h1 { font-size:18px; }
+  .route-card { padding:14px; gap:12px; }
+  .route-card .icon { font-size:28px; width:44px; height:44px; }
+  .route-card .info h3 { font-size:14px; }
+  .route-card .count { font-size:20px; }
+  .stepper button { width:32px; height:32px; }
+  .stepper input { width:42px; height:32px; font-size:14px; }
+  .section-footer button { padding:8px; font-size:12px; }
+}
 </style>
 </head>
 <body>
@@ -266,7 +363,7 @@ body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif
 
 <!-- View 5: Product Management -->
 <div class="view" id="viewProducts">
-  <div style="padding:12px;max-width:500px;margin:0 auto">
+  <div style="padding:12px;max-width:500px;margin:0 auto" class="products-container">
     <div style="display:flex;gap:8px;margin-bottom:12px">
       <input type="text" id="productSearch" placeholder="Buscar producto..." oninput="renderProductList()" style="flex:1;padding:10px;border:1px solid var(--gray-border);border-radius:8px;font-size:14px">
       <button onclick="openAddProductModal()" style="background:var(--green);color:white;border:none;padding:10px 16px;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;white-space:nowrap">+ Nuevo</button>

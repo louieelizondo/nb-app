@@ -201,11 +201,20 @@
     .positive { color: #2e7d32; font-weight: 600; }
     .negative { color: #e53935; font-weight: 600; }
 
-    /* RESPONSIVE */
+    /* ═══ RESPONSIVE ═══ */
+
+    /* Desktop: side-by-side charts */
+    @media (min-width: 1200px) {
+      .charts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+      .charts-grid > .chart-container { margin-bottom: 0; }
+    }
+
+    /* Tablet */
     @media (max-width: 768px) {
       .topbar {
         flex-direction: column;
         align-items: flex-start;
+        padding: 14px 16px;
       }
       .topbar-controls {
         width: 100%;
@@ -214,22 +223,51 @@
       .topbar-btn {
         flex: 1;
       }
+      .topbar h1 { font-size: 17px; }
       .month-rotator .mr-label { font-size:14px; min-width:140px; }
       .month-picker { right:auto; left:0; }
       .kpi-row {
         grid-template-columns: 1fr 1fr;
       }
+      .payment-grid { grid-template-columns: 1fr !important; }
+      .kpi-card { padding: 16px; }
+      .kpi-value { font-size: 22px; }
       .chart-wrapper { height: 250px; }
+      .chart-container { padding: 16px; }
       table { font-size: 12px; }
       table th, table td { padding: 8px; }
+      /* Monthly table horizontal scroll indicator */
+      .table-container { position: relative; }
+      .table-container::after {
+        content: '→';
+        position: absolute;
+        right: 8px;
+        top: 50%;
+        transform: translateY(-50%);
+        color: #a89c8f;
+        font-size: 18px;
+        pointer-events: none;
+        opacity: 0.5;
+      }
+      .table-container::-webkit-scrollbar { height: 4px; }
+      .table-container::-webkit-scrollbar-thumb { background: #ccc; border-radius: 4px; }
     }
 
+    /* Mobile */
     @media (max-width: 480px) {
       .container { padding: 16px 12px 80px; }
       .kpi-row { grid-template-columns: 1fr; gap: 12px; }
+      .kpi-card { padding: 14px; border-radius: 10px; }
+      .kpi-value { font-size: 24px; }
+      .kpi-label { font-size: 11px; }
       .topbar { padding: 12px 16px; }
       .topbar h1 { font-size: 16px; }
       .logo { width: 36px; height: 36px; font-size: 14px; }
+      .chart-wrapper { height: 200px; }
+      .chart-container { padding: 12px; border-radius: 10px; }
+      .section-title { font-size: 14px; }
+      .table-container { padding: 12px; border-radius: 10px; }
+      table th, table td { padding: 6px 4px; font-size: 11px; }
     }
 
     /* PRINT */
@@ -353,7 +391,7 @@
   <!-- SECTION 2: PAYMENT METHODS PIE -->
   <div class="section">
     <h2 class="section-title">Desglose de Métodos de Pago</h2>
-    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+    <div class="payment-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
       <div class="chart-container">
         <div class="chart-wrapper" style="height: 280px;">
           <div class="loading-skeleton" id="chart2Skeleton"></div>
