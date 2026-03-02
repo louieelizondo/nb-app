@@ -501,8 +501,14 @@
           <div id="ind_faltanteBadge"></div>
         </div>
 
+        <!-- Edit mode banner -->
+        <div id="ind_editBanner" style="display:none; padding:10px 14px; background:#fff3e0; border-left:4px solid #ff9800; border-radius:8px; margin-top:16px; font-size:13px; color:#e65100; display:flex; justify-content:space-between; align-items:center;">
+          <span id="ind_editBannerText">✏️ Modo edición</span>
+          <button class="btn btn-secondary btn-sm" onclick="cancelEdit()">Cancelar</button>
+        </div>
+
         <div style="display:flex; gap:10px; margin-top:20px;">
-          <button class="btn btn-primary" onclick="saveCorteIndividual()">Guardar Corte</button>
+          <button class="btn btn-primary" id="ind_saveBtn" onclick="saveCorteIndividual()">Guardar Corte</button>
           <button class="btn btn-secondary" onclick="resetFormIndividual()">Limpiar</button>
         </div>
       </div>
@@ -776,6 +782,8 @@
     // ═══════════════════════════════════════════════════════════════
 
     const DEFAULT_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxQ7BzFITQnxyndvo2q7Xa1-Sc-yX5S8JGRc1mIbd4ye0rSpN2I2qx1zAjzRqbPXNeL/exec';
+    let loadedCortes = [];
+    let editingCorteId = null;
 
     let config = {
       scriptUrl: DEFAULT_SCRIPT_URL,
@@ -1029,21 +1037,25 @@
         Tarjeta: parseFloat(document.getElementById('ind_tarjeta').value) || 0,
         Transferencias: parseFloat(document.getElementById('ind_transferencias').value) || 0,
         Cashback: parseFloat(document.getElementById('ind_cashback').value) || 0,
-        // StoreCredit removed — consolidated with Cashback
         Retiros: parseFloat(document.getElementById('ind_retiros').value) || 0,
         ...denoms
       };
+
+      // Edit mode: include ID and use update action
+      const isEditing = !!editingCorteId;
+      if (isEditing) corte.id = editingCorteId;
+      const action = isEditing ? 'update_corte_individual' : 'save_corte_individual';
 
       try {
         const resp = await fetch(config.scriptUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'text/plain' },
-          body: JSON.stringify({ action: 'save_corte_individual', corte })
+          body: JSON.stringify({ action, corte })
         });
         const result = await resp.json();
         if (result.ok) {
-          showToast('Corte guardado: ' + corte.Caja, 'success');
-          resetFormIndividual();
+          showToast(isEditing ? '✅ Corte actualizado: ' + corte.Caja : 'Corte guardado: ' + corte.Caja, 'success');
+          cancelEdit();
           await loadTodaysIndividualCortes();
           updateSyncStatus('synced');
         } else {
@@ -1068,6 +1080,7 @@
           return;
         }
 
+        loadedCortes = data.cortes;
         let html = '<table><thead><tr><th>Colaborador</th><th>Caja</th><th>Total Efectivo</th><th>F/S</th><th></th></tr></thead><tbody>';
         data.cortes.forEach(c => {
           const fs = parseFloat(c.FaltanteSobrante) || 0;
@@ -1077,7 +1090,10 @@
             <td>${c.Caja}</td>
             <td>${formatCurrency(parseFloat(c.TotalEfectivo) || 0)}</td>
             <td style="color:${fsColor}; font-weight:700;">${formatCurrency(fs)}</td>
-            <td><button class="btn btn-danger btn-icon" onclick="deleteCorteIndividual('${c.ID}')">✕</button></td>
+            <td style="display:flex;gap:4px;">
+              <button class="btn btn-secondary btn-icon" title="Editar" onclick="editCorteIndividual('${c.ID}')">✏️</button>
+              <button class="btn btn-danger btn-icon" title="Eliminar" onclick="deleteCorteIndividual('${c.ID}')">✕</button>
+            </td>
           </tr>`;
         });
         html += '</tbody></table>';
@@ -1085,6 +1101,46 @@
       } catch (e) {
         console.error('Load error:', e);
       }
+    }
+
+    function editCorteIndividual(id) {
+      const c = loadedCortes.find(x => String(x.ID) === String(id));
+      if (!c) { showToast('No se encontró el corte', 'error'); return; }
+      editingCorteId = id;
+
+      // Pre-fill form fields
+      document.getElementById('ind_colaborador').value = c.Colaborador || '';
+      const cajaEl = document.getElementById('ind_caja');
+      if (cajaEl) cajaEl.value = c.Caja || '';
+      document.getElementById('ind_ventasCaja').value = c.VentasCaja || '';
+      document.getElementById('ind_tarjeta').value = c.Tarjeta || '';
+      document.getElementById('ind_transferencias').value = c.Transferencias || '';
+      document.getElementById('ind_cashback').value = c.Cashback || '';
+      document.getElementById('ind_retiros').value = c.Retiros || '';
+
+      // Pre-fill denominations
+      document.querySelectorAll('#ind_denomGrid input').forEach(inp => {
+        const key = inp.getAttribute('data-key');
+        if (key && c[key] !== undefined) inp.value = c[key];
+      });
+
+      updateIndividualCalcs();
+
+      // Show edit banner
+      const banner = document.getElementById('ind_editBanner');
+      banner.style.display = 'flex';
+      document.getElementById('ind_editBannerText').textContent = `✏️ Editando: ${c.Colaborador} — ${c.Caja}`;
+      document.getElementById('ind_saveBtn').textContent = 'Actualizar Corte';
+
+      // Scroll to form
+      document.querySelector('#tab1 .card').scrollIntoView({ behavior: 'smooth' });
+    }
+
+    function cancelEdit() {
+      editingCorteId = null;
+      document.getElementById('ind_editBanner').style.display = 'none';
+      document.getElementById('ind_saveBtn').textContent = 'Guardar Corte';
+      resetFormIndividual();
     }
 
     async function deleteCorteIndividual(id) {

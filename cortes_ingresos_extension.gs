@@ -308,6 +308,39 @@ function getCortesDia(params) {
   return { cortes: filtered, count: filtered.length, fecha };
 }
 
+function updateCorteIndividual(body) {
+  const c = body.corte || body;
+  const { id } = c;
+  if (!id) throw new Error("Missing corte id");
+  const sheet = getOrCreateTab(CORTES_IND_TAB, CORTES_IND_HEADERS);
+  const data = sheet.getDataRange().getValues();
+  for (let i = 1; i < data.length; i++) {
+    if (String(data[i][0]) === String(id)) {
+      const totalEfectivo = calcTotalEfectivo(c);
+      const ventasCaja = parseFloat(c.VentasCaja) || 0;
+      const tarjeta = parseFloat(c.Tarjeta) || 0;
+      const transferencias = parseFloat(c.Transferencias) || 0;
+      const cashback = parseFloat(c.Cashback) || 0;
+      const retiros = parseFloat(c.Retiros) || 0;
+      const expectedCash = ventasCaja - tarjeta - transferencias + cashback - retiros;
+      const faltanteSobrante = Math.round((totalEfectivo - expectedCash) * 100) / 100;
+      const denoms = getDenomValues(c);
+      const row = [
+        id, c.Fecha || data[i][1], c.Colaborador || "", c.Caja || "",
+        ventasCaja, tarjeta, transferencias, cashback, 0, retiros,
+        ...denoms,
+        totalEfectivo, faltanteSobrante,
+        data[i][CORTES_IND_HEADERS.indexOf("Created_At")],
+        c.Device || "web"
+      ];
+      sheet.getRange(i + 1, 1, 1, row.length).setValues([row]);
+      log("UPDATE_CORTE_IND", id + " | " + c.Colaborador + " | " + c.Caja);
+      return { ok: true, id, totalEfectivo, faltanteSobrante, message: "Corte actualizado" };
+    }
+  }
+  throw new Error("Corte not found: " + id);
+}
+
 function deleteCorteIndividual(body) {
   const { id } = body;
   if (!id) throw new Error('Missing corte id');
