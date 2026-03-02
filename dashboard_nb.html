@@ -250,10 +250,10 @@
 </style>
 <nav class="nb-nav">
   <span class="nav-brand">NB Finance</span>
-  <a href="corte_caja.html" id="nav-corte">Corte de Caja</a>
-  <a href="registro_ingresos.html" id="nav-ingresos">Ingresos</a>
-  <a href="nb_portal_pagos.html" id="nav-pagos">Portal de Pagos</a>
   <a href="dashboard_nb.html" id="nav-dashboard" class="active">Dashboard</a>
+  <a href="registro_ingresos.html" id="nav-ingresos">Ingresos</a>
+  <a href="nb_portal_pagos.html" id="nav-pagos">Gastos</a>
+  <a href="corte_caja.html" id="nav-corte">Cortes de Tienda</a>
 </nav>
 <!-- END NB NAVIGATION BAR -->
 
@@ -434,7 +434,7 @@
       showSkeletons(true);
 
       const [dashboardRes, summaryRes, trendsRes, mesaRes] = await Promise.all([
-        fetch(`${API_URL}?action=get_dashboard_data&year=${year}`),
+        fetch(`${API_URL}?action=get_dashboard_data&year=${year}&month=${month}`),
         fetch(`${API_URL}?action=get_monthly_summary&month=${monthStr}&year=${year}`),
         fetch(`${API_URL}?action=get_payment_trends&year=${year}`),
         fetch(`${API_URL}?action=get_mesa_sales&month=${monthStr}`)

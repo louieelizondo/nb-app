@@ -840,9 +840,10 @@ function getDashboardData(params) {
     };
   }
 
-  // Daily sales for current month
+  // Daily sales for selected month (falls back to current month if not provided)
   const now = new Date();
-  const currentPrefix = year + '-' + String(now.getMonth() + 1).padStart(2, '0');
+  const selectedMonth = params.month ? params.month.padStart(2, '0') : String(now.getMonth() + 1).padStart(2, '0');
+  const currentPrefix = year + '-' + selectedMonth;
   const dailySales = ingresos
     .filter(r => formatDateStr(r.Fecha).startsWith(currentPrefix))
     .map(r => ({
