@@ -632,7 +632,7 @@
         <div class="form-grid">
           <div class="form-group">
             <label>Fecha</label>
-            <input type="date" id="arqueo_fecha" onchange="loadTodaysArqueos()" />
+            <input type="date" id="arqueo_fecha"  />
           </div>
           <div class="form-group">
             <label>Colaborador</label>
@@ -704,9 +704,9 @@
         </div>
       </div>
 
-      <!-- TODAY'S ARQUEOS -->
+      <!-- ARQUEO HISTORY -->
       <div class="card">
-        <h2>Arqueos Registrados Hoy</h2>
+        <h2>Arqueos — Últimos 7 días</h2>
         <div id="arqueo_list" class="tbl-wrap"></div>
       </div>
     </div>
@@ -1625,23 +1625,33 @@ Total:       ${formatCurrency(sobre2)}
     }
 
     async function loadTodaysArqueos() {
-      const fecha = document.getElementById('arqueo_fecha').value;
-      if (!fecha) return;
+      const list = document.getElementById('arqueo_list');
+      list.innerHTML = '<div style="padding:20px;text-align:center;color:#aaa;">Cargando...</div>';
       try {
-        const resp = await fetch(config.scriptUrl + '?action=get_arqueos&fecha=' + fecha);
+        // Calculate startDate = today - 6 days (to show 7 days including today)
+        const today = new Date();
+        const start = new Date(today);
+        start.setDate(today.getDate() - 6);
+        const startDate = start.toISOString().split('T')[0];
+
+        const resp = await fetch(config.scriptUrl + '?action=get_arqueos&startDate=' + startDate);
         const data = await resp.json();
-        const list = document.getElementById('arqueo_list');
 
         if (!data.arqueos || data.arqueos.length === 0) {
-          list.innerHTML = '<div style="padding:20px; text-align:center; color:#ccc;">Sin arqueos registrados para esta fecha</div>';
+          list.innerHTML = '<div style="padding:20px; text-align:center; color:#ccc;">Sin arqueos en los últimos 7 días</div>';
           return;
         }
 
-        let html = '<table><thead><tr><th>Colaborador</th><th>Total Efectivo</th><th>Total General</th><th>F/S vs $12,000</th></tr></thead><tbody>';
-        data.arqueos.forEach(a => {
+        // Sort descending by date
+        const sorted = data.arqueos.slice().sort((a, b) => String(b.Fecha).localeCompare(String(a.Fecha)));
+
+        let html = '<table><thead><tr><th>Fecha</th><th>Colaborador</th><th>Total Efectivo</th><th>Total General</th><th>F/S vs $12,000</th></tr></thead><tbody>';
+        sorted.forEach(a => {
           const fs = parseFloat(a.FaltanteSobrante) || 0;
           const fsColor = fs > 1 ? '#2e7d32' : (fs < -1 ? '#c62828' : '#999');
+          const fechaDisplay = String(a.Fecha || '').slice(0, 10);
           html += `<tr>
+            <td>${fechaDisplay}</td>
             <td>${a.Colaborador}</td>
             <td>${formatCurrency(parseFloat(a.TotalEfectivo) || 0)}</td>
             <td>${formatCurrency(parseFloat(a.TotalGeneral) || 0)}</td>
@@ -1652,6 +1662,7 @@ Total:       ${formatCurrency(sobre2)}
         list.innerHTML = html;
       } catch (e) {
         console.error('Load arqueos error:', e);
+        list.innerHTML = '<div style="padding:20px;text-align:center;color:#c62828;">Error cargando historial</div>';
       }
     }
 
