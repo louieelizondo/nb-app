@@ -1098,7 +1098,7 @@
         const resp = await fetch(config.scriptUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'save_corte_tienda', corte })
+          body: JSON.stringify({ action: 'save_corte_tienda', corte, notifyOwner: true })
         });
         const result = await resp.json();
         if (result.ok) {

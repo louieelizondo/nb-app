@@ -20,7 +20,7 @@
 const LEADER_EMAIL = 'facturacion.nbclub@gmail.com';
 const OWNER_EMAIL = 'le.nbclub@gmail.com';
 const NB_GREEN = '#4CAF50';
-const CORTE_CAJA_APP_URL = 'https://docs.google.com/spreadsheets/d/YOUR_SPREADSHEET_ID/edit#gid=YOUR_SHEET_ID';
+const CORTE_CAJA_APP_URL = 'https://louieelizondo.github.io/nb-app/corte_caja.html';
 
 // ══════════════════════════════════════════════
 // HELPER: Format number as Mexican peso
@@ -125,7 +125,6 @@ function notifyOwnerCorteReady(fecha, pagosRecibidos, faltanteSobrante, opts) {
   try {
     GmailApp.sendEmail(OWNER_EMAIL, subject, '', {
       htmlBody: htmlBody,
-      from: 'noreply@nbclub.com',
       name: 'NB System'
     });
     log('NOTIFY_OWNER_CORTE', fecha + ' | ' + colaborador + ' | To: ' + OWNER_EMAIL);
@@ -215,7 +214,6 @@ function notifyLeaderSobre2Ready(fecha, deposito, sobre2, socios, nominas) {
   try {
     GmailApp.sendEmail(LEADER_EMAIL, subject, '', {
       htmlBody: htmlBody,
-      from: 'noreply@nbclub.com',
       name: 'NB System'
     });
     log('NOTIFY_LEADER_SOBRE2', fecha + ' | Deposito: ' + formatPeso(deposito) + ' | Sobre2: ' + formatPeso(sobre2));
