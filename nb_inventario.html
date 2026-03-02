@@ -1859,6 +1859,33 @@ async function seedProductsToSheet() {
   toast(`✅ ${sent} productos subidos al Sheet`);
 }
 
+async function loadOrdersFromSheet() {
+  const url = getScriptUrl();
+  if (!url) return false;
+  try {
+    const resp = await fetch(url + '?action=list_orders');
+    const data = await resp.json();
+    if (data.orders && data.orders.length > 0) {
+      // Map Sheet format to app format (backend already parses Productos_JSON → items)
+      orders = data.orders.map(o => ({
+        id:          o.ID,
+        supplier:    o.Proveedor,
+        items:       o.items || [],
+        mode:        o.Modo || '',
+        status:      o.Status || 'ordered',
+        ordered_at:  o.Ordenado_at || '',
+        received_at: o.Recibido_at || null,
+        receiver:    o.Recibido_por || null,
+        notes:       o.Notas || ''
+      }));
+      saveOrders(); // cache locally so next load is instant
+      console.log('📦 Orders refreshed from Sheet:', orders.length);
+      return true;
+    }
+  } catch(e) { console.log('Load orders error:', e); }
+  return false;
+}
+
 async function loadProductsFromSheet() {
   const url = getScriptUrl();
   if (!url) return false;
@@ -1966,9 +1993,17 @@ requireNbAuth(function appInit() {
   loadProductsFromCache(); // Load cached products (overrides hardcoded if available)
   init();
   checkStorageSize();
-  // Try refreshing from Sheet in background (non-blocking)
+  // Refresh products + orders from Sheet in background (non-blocking)
   loadProductsFromSheet().then(loaded => {
     if (loaded) { console.log('Products refreshed from Sheet'); renderRoutes(); }
+  });
+  loadOrdersFromSheet().then(loaded => {
+    if (loaded) {
+      renderRoutes(); // update pending order count badge
+      // If "Recibir" view is currently active, refresh it live
+      const recibirView = document.getElementById('viewRecibir');
+      if (recibirView && recibirView.classList.contains('active')) renderRecibir();
+    }
   });
 });
 </script>
