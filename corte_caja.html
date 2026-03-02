@@ -1037,7 +1037,7 @@
       try {
         const resp = await fetch(config.scriptUrl, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'text/plain' },
           body: JSON.stringify({ action: 'save_corte_individual', corte })
         });
         const result = await resp.json();
@@ -1092,7 +1092,7 @@
       try {
         const resp = await fetch(config.scriptUrl, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'text/plain' },
           body: JSON.stringify({ action: 'delete_corte_individual', id })
         });
         const result = await resp.json();
@@ -1220,7 +1220,7 @@
       try {
         const resp = await fetch(config.scriptUrl, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'text/plain' },
           body: JSON.stringify({ action: 'save_corte_tienda', corte, notifyOwner: true })
         });
         const result = await resp.json();
@@ -1605,7 +1605,7 @@ Total:       ${formatCurrency(sobre2)}
       try {
         const resp = await fetch(config.scriptUrl, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'text/plain' },
           body: JSON.stringify({ action: 'save_arqueo', arqueo })
         });
         const result = await resp.json();
