@@ -437,6 +437,7 @@
       <button class="tab-btn" onclick="switchTab('tab2')">2. Corte de Tienda</button>
       <button class="tab-btn" onclick="switchTab('tab3')">3. Comparativo</button>
       <button class="tab-btn" onclick="switchTab('tab4')">4. Preparación Depósito</button>
+      <button class="tab-btn" onclick="switchTab('tab5')">5. Arqueo de Caja</button>
     </div>
 
     <!-- TAB 1: CORTE INDIVIDUAL -->
@@ -623,6 +624,84 @@
       </div>
     </div>
 
+    <!-- TAB 5: ARQUEO DE CAJA CHICA -->
+    <div id="tab5" class="tab-content">
+      <div class="card">
+        <h2>Arqueo de Caja Chica</h2>
+
+        <div class="form-grid">
+          <div class="form-group">
+            <label>Fecha</label>
+            <input type="date" id="arqueo_fecha" onchange="loadTodaysArqueos()" />
+          </div>
+          <div class="form-group">
+            <label>Colaborador</label>
+            <input type="text" id="arqueo_colaborador" placeholder="Nombre del responsable" />
+          </div>
+        </div>
+
+        <h3>Fondos de Caja Chica</h3>
+        <div class="form-grid col3">
+          <div class="form-group">
+            <label>Fondo Caja 1</label>
+            <input type="number" id="arqueo_fondo1" step="0.01" min="0" placeholder="0.00" />
+          </div>
+          <div class="form-group">
+            <label>Fondo Caja 2</label>
+            <input type="number" id="arqueo_fondo2" step="0.01" min="0" placeholder="0.00" />
+          </div>
+          <div class="form-group">
+            <label>Fondo Caja 3</label>
+            <input type="number" id="arqueo_fondo3" step="0.01" min="0" placeholder="0.00" />
+          </div>
+          <div class="form-group">
+            <label>Fondo Repartidor</label>
+            <input type="number" id="arqueo_fondoRepartidor" step="0.01" min="0" placeholder="0.00" />
+          </div>
+          <div class="form-group">
+            <label>Bolsita de Cambio</label>
+            <input type="number" id="arqueo_bolsita" step="0.01" min="0" placeholder="0.00" />
+          </div>
+          <div class="form-group">
+            <label>Gastos a Reponer</label>
+            <input type="number" id="arqueo_gastos" step="0.01" min="0" placeholder="0.00" />
+          </div>
+        </div>
+
+        <div style="margin-top:12px; margin-bottom:8px;">
+          <div style="font-size:14px; font-weight:700; padding:12px; background:#f0f7f0; border-radius:10px; display:flex; justify-content:space-between; border:1px solid #c8e6c9;">
+            <span>Total Caja Chica (fondos):</span>
+            <span id="arqueo_totalCajaChica" style="color:#2e7d32;">$0.00</span>
+          </div>
+        </div>
+
+        <h3>Conteo de Efectivo Físico</h3>
+        <div class="denom-grid" id="arqueo_denomGrid"></div>
+
+        <div style="margin-top:16px;">
+          <div style="font-size:14px; font-weight:700; padding:12px; background:#f9f6f2; border-radius:10px; display:flex; justify-content:space-between;">
+            <span>Total Efectivo Contado:</span>
+            <span id="arqueo_totalEfectivo">$0.00</span>
+          </div>
+        </div>
+
+        <div style="margin-top:12px;">
+          <div id="arqueo_faltanteBadge"></div>
+        </div>
+
+        <div style="display:flex; gap:10px; margin-top:20px;">
+          <button class="btn btn-primary" onclick="saveArqueo()">Guardar Arqueo</button>
+          <button class="btn btn-secondary" onclick="resetArqueo()">Limpiar</button>
+        </div>
+      </div>
+
+      <!-- TODAY'S ARQUEOS -->
+      <div class="card">
+        <h2>Arqueos Registrados Hoy</h2>
+        <div id="arqueo_list" class="tbl-wrap"></div>
+      </div>
+    </div>
+
     <!-- TAB 4: PREPARACION DE DEPOSITO -->
     <div id="tab4" class="tab-content">
       <div class="card">
@@ -752,6 +831,7 @@
       document.getElementById('comp_fecha').value = today;
       document.getElementById('dep_fechaVenta').value = today;
       document.getElementById('dep_fechaDeposito').value = today;
+      document.getElementById('arqueo_fecha').value = today;
     }
 
     function switchTab(tabName) {
@@ -1443,6 +1523,128 @@ Total:       ${formatCurrency(sobre2)}
     }
 
     // ═══════════════════════════════════════════════════════════════
+    // TAB 5: ARQUEO DE CAJA CHICA
+    // ═══════════════════════════════════════════════════════════════
+
+    function initTab5() {
+      createDenomGrid('arqueo_denomGrid', updateArqueoCalcs);
+      ['arqueo_fondo1', 'arqueo_fondo2', 'arqueo_fondo3', 'arqueo_fondoRepartidor', 'arqueo_bolsita', 'arqueo_gastos']
+        .forEach(id => document.getElementById(id).addEventListener('input', updateArqueoCalcs));
+      loadTodaysArqueos();
+    }
+
+    function updateArqueoCalcs() {
+      const fondo1   = parseFloat(document.getElementById('arqueo_fondo1').value) || 0;
+      const fondo2   = parseFloat(document.getElementById('arqueo_fondo2').value) || 0;
+      const fondo3   = parseFloat(document.getElementById('arqueo_fondo3').value) || 0;
+      const fondoRep = parseFloat(document.getElementById('arqueo_fondoRepartidor').value) || 0;
+      const bolsita  = parseFloat(document.getElementById('arqueo_bolsita').value) || 0;
+      const gastos   = parseFloat(document.getElementById('arqueo_gastos').value) || 0;
+      const totalCajaChica = fondo1 + fondo2 + fondo3 + fondoRep + bolsita + gastos;
+      document.getElementById('arqueo_totalCajaChica').innerText = formatCurrency(totalCajaChica);
+
+      const denoms = getDenomValues('arqueo_denomGrid');
+      const totalEfectivo = getTotalEfectivo(denoms);
+      document.getElementById('arqueo_totalEfectivo').innerText = formatCurrency(totalEfectivo);
+
+      const faltanteSobrante = totalEfectivo - totalCajaChica;
+      const badge = document.getElementById('arqueo_faltanteBadge');
+      let badgeClass = 'gray', badgeText = 'Exacto';
+      if (Math.abs(faltanteSobrante) > 0.5) {
+        if (faltanteSobrante > 0) {
+          badgeClass = 'green';
+          badgeText = 'SOBRANTE: ' + formatCurrency(faltanteSobrante);
+        } else {
+          badgeClass = 'red';
+          badgeText = 'FALTANTE: ' + formatCurrency(Math.abs(faltanteSobrante));
+        }
+      }
+      badge.innerHTML = `<div class="badge ${badgeClass}">${badgeText}</div>`;
+    }
+
+    async function saveArqueo() {
+      const fecha       = document.getElementById('arqueo_fecha').value;
+      const colaborador = document.getElementById('arqueo_colaborador').value.trim();
+      if (!fecha)       { showToast('Selecciona una fecha', 'error'); return; }
+      if (!colaborador) { showToast('Ingresa el nombre del colaborador', 'error'); return; }
+
+      updateSyncStatus('pending');
+      const denoms = getDenomValues('arqueo_denomGrid');
+
+      const arqueo = {
+        Fecha:            fecha,
+        Colaborador:      colaborador,
+        Fondo1:           parseFloat(document.getElementById('arqueo_fondo1').value) || 0,
+        Fondo2:           parseFloat(document.getElementById('arqueo_fondo2').value) || 0,
+        Fondo3:           parseFloat(document.getElementById('arqueo_fondo3').value) || 0,
+        FondoRepartidor:  parseFloat(document.getElementById('arqueo_fondoRepartidor').value) || 0,
+        BolsitaCambio:    parseFloat(document.getElementById('arqueo_bolsita').value) || 0,
+        GastosReponer:    parseFloat(document.getElementById('arqueo_gastos').value) || 0,
+        ...denoms
+      };
+
+      try {
+        const resp = await fetch(config.scriptUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'save_arqueo', arqueo })
+        });
+        const result = await resp.json();
+        if (result.ok) {
+          showToast('✅ Arqueo guardado correctamente', 'success');
+          resetArqueo();
+          await loadTodaysArqueos();
+          updateSyncStatus('synced');
+        } else {
+          throw new Error(result.error || 'Error desconocido');
+        }
+      } catch (e) {
+        console.error('Save arqueo error:', e);
+        showToast('Error guardando arqueo: ' + e.message, 'error');
+        updateSyncStatus('error');
+      }
+    }
+
+    async function loadTodaysArqueos() {
+      const fecha = document.getElementById('arqueo_fecha').value;
+      if (!fecha) return;
+      try {
+        const resp = await fetch(config.scriptUrl + '?action=get_arqueos&fecha=' + fecha);
+        const data = await resp.json();
+        const list = document.getElementById('arqueo_list');
+
+        if (!data.arqueos || data.arqueos.length === 0) {
+          list.innerHTML = '<div style="padding:20px; text-align:center; color:#ccc;">Sin arqueos registrados para esta fecha</div>';
+          return;
+        }
+
+        let html = '<table><thead><tr><th>Colaborador</th><th>Total Efectivo</th><th>Total Caja Chica</th><th>F/S</th></tr></thead><tbody>';
+        data.arqueos.forEach(a => {
+          const fs = parseFloat(a.FaltanteSobrante) || 0;
+          const fsColor = fs > 1 ? '#2e7d32' : (fs < -1 ? '#c62828' : '#999');
+          html += `<tr>
+            <td>${a.Colaborador}</td>
+            <td>${formatCurrency(parseFloat(a.TotalEfectivo) || 0)}</td>
+            <td>${formatCurrency(parseFloat(a.TotalCajaChica) || 0)}</td>
+            <td style="color:${fsColor}; font-weight:700;">${formatCurrency(fs)}</td>
+          </tr>`;
+        });
+        html += '</tbody></table>';
+        list.innerHTML = html;
+      } catch (e) {
+        console.error('Load arqueos error:', e);
+      }
+    }
+
+    function resetArqueo() {
+      ['arqueo_fondo1','arqueo_fondo2','arqueo_fondo3','arqueo_fondoRepartidor','arqueo_bolsita','arqueo_gastos']
+        .forEach(id => document.getElementById(id).value = '');
+      document.getElementById('arqueo_colaborador').value = '';
+      document.querySelectorAll('#arqueo_denomGrid input').forEach(i => i.value = '0');
+      updateArqueoCalcs();
+    }
+
+    // ═══════════════════════════════════════════════════════════════
     // INIT
     // ═══════════════════════════════════════════════════════════════
 
@@ -1451,6 +1653,7 @@ Total:       ${formatCurrency(sobre2)}
         loadConfig();
         await initTab1();
         await initTab2();
+        await initTab5();
       });
     });
   </script>
