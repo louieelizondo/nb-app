@@ -351,40 +351,6 @@ tr:last-child td { border-bottom: none; }
 
 <div class="container">
 
-  <!-- ═══ GOOGLE SHEETS SYNC ═══ -->
-  <div class="sync-bar" id="syncBar">
-    <div class="sync-header">
-      <label>📊 Google Sheets (MATERIA PRIMA):</label>
-      <input type="text" id="sheetUrlInput" placeholder="Pega la URL de tu Google Sheet aquí..."
-             onkeydown="if(event.key==='Enter')syncIngredients()">
-      <button class="btn btn-blue btn-small" onclick="syncIngredients()" id="syncBtn">🔄 Sincronizar</button>
-    </div>
-    <div class="sync-detail" id="syncDetail">
-      <span>📦 Ingredientes: <strong id="ingCount">0</strong></span>
-      <span>🏪 Proveedores: <strong id="provCount">0</strong></span>
-      <span>🕐 Último sync: <strong id="syncTime">Nunca</strong></span>
-      <span id="syncStatusText" style="color:#777">Sin configurar — usando base de datos local</span>
-    </div>
-    <div class="sync-note" id="syncNote">
-      ⚠️ El sheet debe estar compartido como <strong>"Cualquier persona con el enlace puede ver"</strong>.
-      En Google Sheets: Compartir → Cambiar a "Cualquier persona con el enlace" → Lector.
-    </div>
-  </div>
-
-  <!-- CLAUDE STATUS (API key now lives server-side in Apps Script) -->
-  <div class="apikey-bar" id="apiKeyBar" style="background:#e8f5e9">
-    <label>🤖 Claude AI:</label>
-    <span id="apiKeyStatus" style="font-size:12px;color:#2e7d32">✅ Vía servidor (key segura)</span>
-  </div>
-
-  <!-- SCRIPT URL -->
-  <div class="apikey-bar" id="scriptUrlBar">
-    <label>📡 Script URL:</label>
-    <input type="text" id="scriptUrlInput" placeholder="https://script.google.com/macros/s/..." style="flex:1;min-width:200px;padding:8px 12px;border:1px solid #ccc;border-radius:8px;font-size:12px;font-family:monospace" />
-    <button class="btn btn-blue btn-small" onclick="saveScriptUrl()">Guardar</button>
-    <span id="scriptUrlStatus" style="font-size:12px;color:#777">No configurada</span>
-  </div>
-
   <!-- CAPTURE OPTIONS -->
   <div id="captureOptions" class="capture-options">
     <div class="capture-card" onclick="openCamera()">
@@ -536,6 +502,41 @@ tr:last-child td { border-bottom: none; }
       <div id="historyList"></div>
       <button class="btn btn-red btn-small" style="margin-top:8px" onclick="clearHistory()">🗑️ Borrar historial</button>
     </div>
+  </div>
+
+  <!-- ═══ CONFIGURACIÓN ═══ -->
+  <!-- GOOGLE SHEETS SYNC -->
+  <div class="sync-bar" id="syncBar">
+    <div class="sync-header">
+      <label>📊 Google Sheets (MATERIA PRIMA):</label>
+      <input type="text" id="sheetUrlInput" placeholder="Pega la URL de tu Google Sheet aquí..."
+             onkeydown="if(event.key==='Enter')syncIngredients()">
+      <button class="btn btn-blue btn-small" onclick="syncIngredients()" id="syncBtn">🔄 Sincronizar</button>
+    </div>
+    <div class="sync-detail" id="syncDetail">
+      <span>📦 Ingredientes: <strong id="ingCount">0</strong></span>
+      <span>🏪 Proveedores: <strong id="provCount">0</strong></span>
+      <span>🕐 Último sync: <strong id="syncTime">Nunca</strong></span>
+      <span id="syncStatusText" style="color:#777">Sin configurar — usando base de datos local</span>
+    </div>
+    <div class="sync-note" id="syncNote">
+      ⚠️ El sheet debe estar compartido como <strong>"Cualquier persona con el enlace puede ver"</strong>.
+      En Google Sheets: Compartir → Cambiar a "Cualquier persona con el enlace" → Lector.
+    </div>
+  </div>
+
+  <!-- CLAUDE STATUS -->
+  <div class="apikey-bar" id="apiKeyBar" style="background:#e8f5e9">
+    <label>🤖 Claude AI:</label>
+    <span id="apiKeyStatus" style="font-size:12px;color:#2e7d32">✅ Vía servidor (key segura)</span>
+  </div>
+
+  <!-- SCRIPT URL -->
+  <div class="apikey-bar" id="scriptUrlBar">
+    <label>📡 Script URL:</label>
+    <input type="text" id="scriptUrlInput" placeholder="https://script.google.com/macros/s/..." style="flex:1;min-width:200px;padding:8px 12px;border:1px solid #ccc;border-radius:8px;font-size:12px;font-family:monospace" />
+    <button class="btn btn-blue btn-small" onclick="saveScriptUrl()">Guardar</button>
+    <span id="scriptUrlStatus" style="font-size:12px;color:#777">No configurada</span>
   </div>
 
 </div>
