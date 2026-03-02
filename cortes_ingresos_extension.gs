@@ -279,7 +279,8 @@ function saveCorteIndividual(body) {
   const denoms = getDenomValues(c);
   const row = [
     id,
-    c.Fecha || formatDateStr(new Date()),
+    // Store as noon-UTC Date so Sheets doesn't flip the day when converting UTC midnight → Mexico City TZ.
+    c.Fecha ? new Date(c.Fecha + 'T12:00:00Z') : new Date(),
     c.Colaborador || '',
     c.Caja || '',
     ventasCaja, tarjeta, transferencias, cashback, storeCredit, retiros,
@@ -304,7 +305,15 @@ function getCortesDia(params) {
   const fecha = params.fecha;
   if (!fecha) throw new Error('Missing fecha parameter');
   const all = sheetToObjects(CORTES_IND_TAB, CORTES_IND_HEADERS);
-  const filtered = all.filter(r => formatDateStr(r.Fecha) === fecha);
+  // Sheets can auto-convert "yyyy-MM-dd" strings to UTC-midnight Date objects.
+  // Using formatDateStr (Mexico City TZ) on UTC midnight gives the PREVIOUS day → mismatch.
+  // Fix: for Date objects, use the UTC date string (which is what the frontend sends).
+  const filtered = all.filter(r => {
+    const val = r.Fecha;
+    if (!val) return false;
+    if (val instanceof Date) return val.toISOString().slice(0, 10) === fecha;
+    return String(val).slice(0, 10) === fecha;
+  });
   return { cortes: filtered, count: filtered.length, fecha };
 }
 

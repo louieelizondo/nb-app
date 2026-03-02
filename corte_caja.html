@@ -1071,7 +1071,7 @@
     async function loadTodaysIndividualCortes() {
       const fecha = document.getElementById('ind_fecha').value;
       try {
-        const resp = await fetch(config.scriptUrl + '?action=get_cortes_dia&fecha=' + fecha);
+        const resp = await fetch(config.scriptUrl + '?action=get_cortes_dia&fecha=' + fecha + '&_t=' + Date.now());
         const data = await resp.json();
         const list = document.getElementById('ind_list');
 
@@ -1185,13 +1185,24 @@
 
     async function loadTodaysCortes() {
       const fecha = document.getElementById('tienda_fecha').value;
+      if (!fecha) {
+        document.getElementById('tienda_summary').innerHTML = '<div style="color:#c62828;">⚠️ Selecciona una fecha primero.</div>';
+        return;
+      }
       updateSyncStatus('pending');
+      document.getElementById('tienda_summary').innerHTML = '<div style="color:#aaa;font-size:12px;">Buscando cortes del ' + fecha + '...</div>';
       try {
-        const resp = await fetch(config.scriptUrl + '?action=get_cortes_dia&fecha=' + fecha);
+        const resp = await fetch(config.scriptUrl + '?action=get_cortes_dia&fecha=' + fecha + '&_t=' + Date.now());
         const data = await resp.json();
 
+        if (data.error) {
+          document.getElementById('tienda_summary').innerHTML = '<div style="color:#c62828;">⚠️ Error del servidor: ' + data.error + '</div>';
+          updateSyncStatus('error');
+          return;
+        }
+
         if (!data.cortes || data.cortes.length === 0) {
-          document.getElementById('tienda_summary').innerHTML = '<div style="color:#999;">Sin cortes individuales para hoy</div>';
+          document.getElementById('tienda_summary').innerHTML = '<div style="color:#888;font-size:13px;">Sin cortes individuales para el <strong>' + fecha + '</strong>. Verifica que los cortes individuales estén guardados con esa misma fecha.</div>';
           updateSyncStatus('ready');
           return;
         }
@@ -1346,7 +1357,7 @@
     async function loadComparativo() {
       const fecha = document.getElementById('comp_fecha').value;
       try {
-        const resp = await fetch(config.scriptUrl + '?action=get_cortes_dia&fecha=' + fecha);
+        const resp = await fetch(config.scriptUrl + '?action=get_cortes_dia&fecha=' + fecha + '&_t=' + Date.now());
         const data = await resp.json();
 
         if (!data.cortes || data.cortes.length === 0) {
