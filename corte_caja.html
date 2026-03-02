@@ -655,8 +655,16 @@
             <input type="number" id="arqueo_fondo3" step="0.01" min="0" placeholder="0.00" />
           </div>
           <div class="form-group">
-            <label>Fondo Repartidor</label>
-            <input type="number" id="arqueo_fondoRepartidor" step="0.01" min="0" placeholder="0.00" />
+            <label>Fondo Caja 4</label>
+            <input type="number" id="arqueo_fondo4" step="0.01" min="0" placeholder="0.00" />
+          </div>
+          <div class="form-group">
+            <label>Fondo Repartidor 1</label>
+            <input type="number" id="arqueo_fondoRepartidor1" step="0.01" min="0" placeholder="0.00" />
+          </div>
+          <div class="form-group">
+            <label>Fondo Repartidor 2</label>
+            <input type="number" id="arqueo_fondoRepartidor2" step="0.01" min="0" placeholder="0.00" />
           </div>
           <div class="form-group">
             <label>Bolsita de Cambio</label>
@@ -668,20 +676,21 @@
           </div>
         </div>
 
-        <div style="margin-top:12px; margin-bottom:8px;">
-          <div style="font-size:14px; font-weight:700; padding:12px; background:#f0f7f0; border-radius:10px; display:flex; justify-content:space-between; border:1px solid #c8e6c9;">
-            <span>Total Caja Chica (fondos):</span>
-            <span id="arqueo_totalCajaChica" style="color:#2e7d32;">$0.00</span>
-          </div>
-        </div>
-
         <h3>Conteo de Efectivo Físico</h3>
         <div class="denom-grid" id="arqueo_denomGrid"></div>
 
-        <div style="margin-top:16px;">
-          <div style="font-size:14px; font-weight:700; padding:12px; background:#f9f6f2; border-radius:10px; display:flex; justify-content:space-between;">
-            <span>Total Efectivo Contado:</span>
-            <span id="arqueo_totalEfectivo">$0.00</span>
+        <div style="margin-top:16px; display:flex; flex-direction:column; gap:8px;">
+          <div style="font-size:13px; padding:10px 12px; background:#f9f6f2; border-radius:8px; display:flex; justify-content:space-between;">
+            <span>Fondos asignados (cajas + repartidores + bolsita + gastos):</span>
+            <span id="arqueo_totalFondos" style="font-weight:600;">$0.00</span>
+          </div>
+          <div style="font-size:13px; padding:10px 12px; background:#f9f6f2; border-radius:8px; display:flex; justify-content:space-between;">
+            <span>Efectivo contado:</span>
+            <span id="arqueo_totalEfectivo" style="font-weight:600;">$0.00</span>
+          </div>
+          <div style="font-size:15px; font-weight:700; padding:12px; background:#f0f7f0; border-radius:10px; display:flex; justify-content:space-between; border:1px solid #c8e6c9;">
+            <span>Total General:</span>
+            <span id="arqueo_totalGeneral" style="color:#2e7d32;">$0.00</span>
           </div>
         </div>
 
@@ -1528,28 +1537,36 @@ Total:       ${formatCurrency(sobre2)}
 
     function initTab5() {
       createDenomGrid('arqueo_denomGrid', updateArqueoCalcs);
-      ['arqueo_fondo1', 'arqueo_fondo2', 'arqueo_fondo3', 'arqueo_fondoRepartidor', 'arqueo_bolsita', 'arqueo_gastos']
+      ['arqueo_fondo1', 'arqueo_fondo2', 'arqueo_fondo3', 'arqueo_fondo4',
+       'arqueo_fondoRepartidor1', 'arqueo_fondoRepartidor2',
+       'arqueo_bolsita', 'arqueo_gastos']
         .forEach(id => document.getElementById(id).addEventListener('input', updateArqueoCalcs));
       loadTodaysArqueos();
     }
 
     function updateArqueoCalcs() {
-      const fondo1   = parseFloat(document.getElementById('arqueo_fondo1').value) || 0;
-      const fondo2   = parseFloat(document.getElementById('arqueo_fondo2').value) || 0;
-      const fondo3   = parseFloat(document.getElementById('arqueo_fondo3').value) || 0;
-      const fondoRep = parseFloat(document.getElementById('arqueo_fondoRepartidor').value) || 0;
-      const bolsita  = parseFloat(document.getElementById('arqueo_bolsita').value) || 0;
-      const gastos   = parseFloat(document.getElementById('arqueo_gastos').value) || 0;
-      const totalCajaChica = fondo1 + fondo2 + fondo3 + fondoRep + bolsita + gastos;
-      document.getElementById('arqueo_totalCajaChica').innerText = formatCurrency(totalCajaChica);
+      const FONDO_ESPERADO = 12000;
+      const fondo1    = parseFloat(document.getElementById('arqueo_fondo1').value) || 0;
+      const fondo2    = parseFloat(document.getElementById('arqueo_fondo2').value) || 0;
+      const fondo3    = parseFloat(document.getElementById('arqueo_fondo3').value) || 0;
+      const fondo4    = parseFloat(document.getElementById('arqueo_fondo4').value) || 0;
+      const fondoRep1 = parseFloat(document.getElementById('arqueo_fondoRepartidor1').value) || 0;
+      const fondoRep2 = parseFloat(document.getElementById('arqueo_fondoRepartidor2').value) || 0;
+      const bolsita   = parseFloat(document.getElementById('arqueo_bolsita').value) || 0;
+      const gastos    = parseFloat(document.getElementById('arqueo_gastos').value) || 0;
+      const totalFondos = fondo1 + fondo2 + fondo3 + fondo4 + fondoRep1 + fondoRep2 + bolsita + gastos;
+      document.getElementById('arqueo_totalFondos').innerText = formatCurrency(totalFondos);
 
       const denoms = getDenomValues('arqueo_denomGrid');
       const totalEfectivo = getTotalEfectivo(denoms);
       document.getElementById('arqueo_totalEfectivo').innerText = formatCurrency(totalEfectivo);
 
-      const faltanteSobrante = totalEfectivo - totalCajaChica;
+      const totalGeneral = totalFondos + totalEfectivo;
+      document.getElementById('arqueo_totalGeneral').innerText = formatCurrency(totalGeneral);
+
+      const faltanteSobrante = totalGeneral - FONDO_ESPERADO;
       const badge = document.getElementById('arqueo_faltanteBadge');
-      let badgeClass = 'gray', badgeText = 'Exacto';
+      let badgeClass = 'gray', badgeText = 'Exacto — $12,000.00';
       if (Math.abs(faltanteSobrante) > 0.5) {
         if (faltanteSobrante > 0) {
           badgeClass = 'green';
@@ -1574,12 +1591,14 @@ Total:       ${formatCurrency(sobre2)}
       const arqueo = {
         Fecha:            fecha,
         Colaborador:      colaborador,
-        Fondo1:           parseFloat(document.getElementById('arqueo_fondo1').value) || 0,
-        Fondo2:           parseFloat(document.getElementById('arqueo_fondo2').value) || 0,
-        Fondo3:           parseFloat(document.getElementById('arqueo_fondo3').value) || 0,
-        FondoRepartidor:  parseFloat(document.getElementById('arqueo_fondoRepartidor').value) || 0,
-        BolsitaCambio:    parseFloat(document.getElementById('arqueo_bolsita').value) || 0,
-        GastosReponer:    parseFloat(document.getElementById('arqueo_gastos').value) || 0,
+        Fondo1:            parseFloat(document.getElementById('arqueo_fondo1').value) || 0,
+        Fondo2:            parseFloat(document.getElementById('arqueo_fondo2').value) || 0,
+        Fondo3:            parseFloat(document.getElementById('arqueo_fondo3').value) || 0,
+        Fondo4:            parseFloat(document.getElementById('arqueo_fondo4').value) || 0,
+        FondoRepartidor1:  parseFloat(document.getElementById('arqueo_fondoRepartidor1').value) || 0,
+        FondoRepartidor2:  parseFloat(document.getElementById('arqueo_fondoRepartidor2').value) || 0,
+        BolsitaCambio:     parseFloat(document.getElementById('arqueo_bolsita').value) || 0,
+        GastosReponer:     parseFloat(document.getElementById('arqueo_gastos').value) || 0,
         ...denoms
       };
 
@@ -1618,14 +1637,14 @@ Total:       ${formatCurrency(sobre2)}
           return;
         }
 
-        let html = '<table><thead><tr><th>Colaborador</th><th>Total Efectivo</th><th>Total Caja Chica</th><th>F/S</th></tr></thead><tbody>';
+        let html = '<table><thead><tr><th>Colaborador</th><th>Total Efectivo</th><th>Total General</th><th>F/S vs $12,000</th></tr></thead><tbody>';
         data.arqueos.forEach(a => {
           const fs = parseFloat(a.FaltanteSobrante) || 0;
           const fsColor = fs > 1 ? '#2e7d32' : (fs < -1 ? '#c62828' : '#999');
           html += `<tr>
             <td>${a.Colaborador}</td>
             <td>${formatCurrency(parseFloat(a.TotalEfectivo) || 0)}</td>
-            <td>${formatCurrency(parseFloat(a.TotalCajaChica) || 0)}</td>
+            <td>${formatCurrency(parseFloat(a.TotalGeneral) || 0)}</td>
             <td style="color:${fsColor}; font-weight:700;">${formatCurrency(fs)}</td>
           </tr>`;
         });
@@ -1637,7 +1656,9 @@ Total:       ${formatCurrency(sobre2)}
     }
 
     function resetArqueo() {
-      ['arqueo_fondo1','arqueo_fondo2','arqueo_fondo3','arqueo_fondoRepartidor','arqueo_bolsita','arqueo_gastos']
+      ['arqueo_fondo1','arqueo_fondo2','arqueo_fondo3','arqueo_fondo4',
+       'arqueo_fondoRepartidor1','arqueo_fondoRepartidor2',
+       'arqueo_bolsita','arqueo_gastos']
         .forEach(id => document.getElementById(id).value = '');
       document.getElementById('arqueo_colaborador').value = '';
       document.querySelectorAll('#arqueo_denomGrid input').forEach(i => i.value = '0');

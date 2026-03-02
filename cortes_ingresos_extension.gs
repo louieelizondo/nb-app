@@ -62,11 +62,11 @@ const CORTE_TIENDA_HEADERS = [
 const ARQUEO_TAB = 'ARQUEO_CAJA';
 const ARQUEO_HEADERS = [
   'ID', 'Fecha', 'Colaborador',
-  'Fondo1', 'Fondo2', 'Fondo3', 'FondoRepartidor', 'BolsitaCambio', 'GastosReponer',
+  'Fondo1', 'Fondo2', 'Fondo3', 'Fondo4', 'FondoRepartidor1', 'FondoRepartidor2', 'BolsitaCambio', 'GastosReponer',
   // Denominations
   'D_1000', 'D_500', 'D_200', 'D_100', 'D_50', 'D_20',
   'D_10', 'D_5', 'D_2', 'D_1', 'D_050',
-  'TotalEfectivo', 'TotalCajaChica', 'FaltanteSobrante',
+  'TotalEfectivo', 'TotalGeneral', 'FaltanteSobrante',
   'Created_At', 'Device'
 ];
 
@@ -423,33 +423,37 @@ function saveArqueo(body) {
   const a = body.arqueo || body;
   const id = a.id || 'AQ' + Date.now();
 
+  const FONDO_ESPERADO = 12000;
   const totalEfectivo = calcTotalEfectivo(a);
-  const fondo1 = parseFloat(a.Fondo1) || 0;
-  const fondo2 = parseFloat(a.Fondo2) || 0;
-  const fondo3 = parseFloat(a.Fondo3) || 0;
-  const fondoRep = parseFloat(a.FondoRepartidor) || 0;
-  const bolsita = parseFloat(a.BolsitaCambio) || 0;
+  const fondo1    = parseFloat(a.Fondo1) || 0;
+  const fondo2    = parseFloat(a.Fondo2) || 0;
+  const fondo3    = parseFloat(a.Fondo3) || 0;
+  const fondo4    = parseFloat(a.Fondo4) || 0;
+  const fondoRep1 = parseFloat(a.FondoRepartidor1) || parseFloat(a.FondoRepartidor) || 0; // backward compat
+  const fondoRep2 = parseFloat(a.FondoRepartidor2) || 0;
+  const bolsita   = parseFloat(a.BolsitaCambio) || 0;
   const gastosRep = parseFloat(a.GastosReponer) || 0;
-  const totalCajaChica = fondo1 + fondo2 + fondo3 + fondoRep + bolsita + gastosRep;
-  const faltanteSobrante = Math.round((totalEfectivo - totalCajaChica) * 100) / 100;
+  const totalFondos  = fondo1 + fondo2 + fondo3 + fondo4 + fondoRep1 + fondoRep2 + bolsita + gastosRep;
+  const totalGeneral = totalFondos + totalEfectivo;
+  const faltanteSobrante = Math.round((totalGeneral - FONDO_ESPERADO) * 100) / 100;
 
   const denoms = getDenomValues(a);
   const row = [
     id,
     a.Fecha || formatDateStr(new Date()),
     a.Colaborador || '',
-    fondo1, fondo2, fondo3, fondoRep, bolsita, gastosRep,
+    fondo1, fondo2, fondo3, fondo4, fondoRep1, fondoRep2, bolsita, gastosRep,
     ...denoms,
-    totalEfectivo, totalCajaChica, faltanteSobrante,
+    totalEfectivo, totalGeneral, faltanteSobrante,
     new Date().toISOString(),
     a.Device || 'web'
   ];
 
   sheet.appendRow(row);
-  log('ARQUEO', id + ' | $' + totalEfectivo + ' vs $' + totalCajaChica + ' | F/S: $' + faltanteSobrante);
+  log('ARQUEO', id + ' | Efectivo: $' + totalEfectivo + ' | Total: $' + totalGeneral + ' / $' + FONDO_ESPERADO + ' | F/S: $' + faltanteSobrante);
   writeAuditInternal('Cortes', 'ARQUEO_CAJA', a.Device || '', a.Colaborador + ' | F/S: $' + faltanteSobrante);
 
-  return { ok: true, id, totalEfectivo, totalCajaChica, faltanteSobrante, message: 'Arqueo registrado' };
+  return { ok: true, id, totalEfectivo, totalGeneral, faltanteSobrante, message: 'Arqueo registrado' };
 }
 
 function getArqueos(params) {
