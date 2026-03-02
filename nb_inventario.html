@@ -212,7 +212,7 @@ body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif
 
   /* Expand containers */
   .routes { max-width:700px; flex-direction:row; flex-wrap:wrap; }
-  .route-card { flex:1 1 calc(50% - 6px); min-width:260px; }
+  .route-card { flex:1 1 calc(33.33% - 8px); min-width:180px; }
   .section-list { max-width:700px; }
   .summary-bar .inner { max-width:700px; }
   .modal { max-width:600px; border-radius:16px; }
@@ -646,7 +646,7 @@ function renderRoutes() {
   // Add Pedir and Recibir cards
   const pendingOrders = orders.filter(o => o.status === 'ordered').length;
   html += `
-    <div style="border-top:2px solid var(--gray-border);margin:8px 0;padding-top:4px"></div>
+    <div style="border-top:2px solid var(--gray-border);margin:8px 0;padding-top:4px;width:100%;flex-basis:100%"></div>
     <div class="route-card cat-pedir" onclick="showPedir()">
       <div class="icon">🛒</div>
       <div class="info">
