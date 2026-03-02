@@ -717,7 +717,7 @@ function getMonthlySummary(params) {
   let monthGastos;
   if (month && month.includes('-')) {
     monthGastos = facturas.filter(r =>
-      String(r.Fecha_Compra).startsWith(month) || String(r.Fecha_Pago).startsWith(month)
+      formatDateStr(r.Fecha_Compra).startsWith(month) || formatDateStr(r.Fecha_Pago).startsWith(month)
     );
   } else {
     monthGastos = facturas;
@@ -801,9 +801,9 @@ function getDashboardData(params) {
   const ingresos = sheetToObjects(INGRESOS_TAB, INGRESOS_HEADERS)
     .filter(r => formatDateStr(r.Fecha).startsWith(year));
 
-  // Monthly gastos
+  // Monthly gastos (use formatDateStr — Sheets returns Date objects, not strings)
   const facturas = sheetToObjects(FACTURAS_TAB, FACTURAS_HEADERS)
-    .filter(r => String(r.Fecha_Compra).startsWith(year));
+    .filter(r => formatDateStr(r.Fecha_Compra).startsWith(year));
 
   // Build monthly data
   const monthly = {};
@@ -811,7 +811,7 @@ function getDashboardData(params) {
     const prefix = year + '-' + String(m).padStart(2, '0');
     const mesName = MESES[m];
     const mIngresos = ingresos.filter(r => formatDateStr(r.Fecha).startsWith(prefix));
-    const mGastos = facturas.filter(r => String(r.Fecha_Compra).startsWith(prefix));
+    const mGastos = facturas.filter(r => formatDateStr(r.Fecha_Compra).startsWith(prefix));
 
     let totalIng = 0, totalGas = 0, totalXFact = 0, totalFact = 0;
     let tarjeta = 0, transferencias = 0, cashback = 0;
