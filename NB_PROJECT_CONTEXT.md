@@ -269,3 +269,274 @@ b6da48a Add Finance Center: nav bar, auth gates, landing page + new apps
 1. **Gastos $0 on Dashboard** — `String(r.Fecha_Compra)` → `formatDateStr(r.Fecha_Compra)` in getDashboardData/getMonthlySummary
 2. **March gastos ghost** — removed `Fecha_Pago` from getMonthlySummary filter (count by purchase date only)
 3. **charts-grid dead code** — CSS existed but no HTML wrapper; wired Sections 4-5 into `.charts-grid` div
+
+---
+
+## 13. DETAILED COLUMN SCHEMAS
+
+### FACTURAS Tab (Expenses)
+| Column | Type | Notes |
+|--------|------|-------|
+| ID | String | Unique identifier |
+| Folio | String | Invoice/receipt number |
+| Proveedor | String | Normalized supplier name |
+| Proveedor_Raw | String | Original supplier name from import |
+| Fecha_Compra | Date | Purchase date (YYYY-MM-DD) |
+| Monto_Factura | Number | Original invoice amount (MXN) |
+| Monto_Pagar | Number | Amount to pay (after adjustments) |
+| Ajustes | Number | Deductions/notes applied |
+| Forma_Pago | String | Payment method (Transferencia, Tarjeta, Efectivo) |
+| Categoria | String | Expense category |
+| Estado | String | Payment status (Pagado, Pendiente) |
+| Fecha_Pago | Date | Payment date (for pending/credit items) |
+| Comprobante | String | CFDI receipt status |
+| Tipo_Documento | String | Document type (Factura, Remisión, etc.) |
+| Version | Number | Conflict detection (integer, starts at 1) |
+
+### INGRESOS Tab (Daily Income — one row per day)
+| Column | Type | Notes |
+|--------|------|-------|
+| ID | String | Format: ING{timestamp} |
+| Fecha | Date | Entry date (YYYY-MM-DD) |
+| DiaSemana | String | Day name (Lunes, Martes...) |
+| VentasDia | Number | Total daily sales (MXN) |
+| PagosRecibidos | Number | Total payments received |
+| Tarjeta | Number | Card payments |
+| Transferencias | Number | Bank transfers |
+| Cashback | Number | Includes StoreCredit |
+| 2ndoSocios | Number | Partner withdrawals |
+| 2ndoNominas | Number | Payroll withdrawals |
+| Sobre2 | Number | = 2ndoSocios + 2ndoNominas |
+| DepositoBBVA | Number | = PagosRecibidos - Sobre2 |
+| Mesa columns | Number | Cocina1/2/3, Casa1/2, Express, Granja, FrutasVerduras, Proveedor, MermasCanastas, Pedidos, Mixto, IvaAVenta |
+| FactClientes | Number | Client invoices |
+| FactGen1-6 | Number | General invoices (6 slots) |
+| FacturasCFDI | String | CFDI invoice references |
+| TotalFacturado | Number | Sum of all invoices |
+| TotalXFacturar | Number | = DepositoBBVA |
+| FaltaFactura | Number | = TotalXFacturar - TotalFacturado |
+| Mes | String | Month name (Enero, Febrero...) |
+| MesNumero | Number | 1-12 |
+
+### CORTES_INDIVIDUALES Tab (Per-Register Cuts)
+| Column | Type | Notes |
+|--------|------|-------|
+| ID | String | Format: CI{timestamp} |
+| Fecha | Date | Cut date |
+| Colaborador | String | Employee name |
+| Caja | String | Register name (Caja 1, Caja 2, etc.) |
+| VentasCaja | Number | Sales recorded in register |
+| Tarjeta, Transferencias, Cashback, StoreCredit | Number | Payment breakdown |
+| Retiros | Number | Employee withdrawals |
+| D_1000...D_050 | Number | 11 denomination counts |
+| TotalEfectivo | Number | Sum of (count × value) |
+| FaltanteSobrante | Number | Variance from expected |
+
+### CORTE_TIENDA Tab (Daily Store Cut)
+| Column | Type | Notes |
+|--------|------|-------|
+| ID | String | Format: CT{timestamp} |
+| Fecha | Date | Cut date |
+| Colaborador | String | Manager name |
+| VentasTotales | Number | Total across all registers |
+| PagosRecibidos | Number | Total payments |
+| Payment breakdown | Number | Tarjeta, Transferencias, Cashback |
+| D_1000...D_050 | Number | Cash denomination counts |
+| TotalEfectivo | Number | Calculated cash total |
+| FaltanteSobrante | Number | Daily variance |
+| Shopify_* columns | Number | Auto-populated from Shopify API |
+| Discrepancia | Number | Manual vs Shopify difference |
+| Sobre2 | Number | From INGRESOS |
+| DepositoAjustado | Number | PagosRecibidos - Sobre2 |
+| Mesa sales | Number | Per-station breakdown |
+
+### ARQUEO_CAJA Tab (Petty Cash)
+| Column | Type | Notes |
+|--------|------|-------|
+| ID | String | Format: AQ{timestamp} |
+| Fecha | Date | Reconciliation date |
+| Fondo1-3 | Number | Cash drawer funds |
+| FondoRepartidor | Number | Delivery cash fund |
+| BolsitaCambio | Number | Change bag |
+| GastosReponer | Number | Expenses to replenish |
+| D_1000...D_050 | Number | Denomination counts |
+| TotalEfectivo | Number | Total counted |
+| TotalCajaChica | Number | Sum of all funds |
+| FaltanteSobrante | Number | Variance |
+
+### TRANSFERENCIAS_LOG Tab
+| Column | Type | Notes |
+|--------|------|-------|
+| ID | String | Format: TR{timestamp} |
+| Fecha | Date | Transfer date |
+| Monto | Number | Amount (MXN) |
+| Concepto | String | Purpose |
+| De_Cuenta | String | From account |
+| A_Cuenta | String | To account |
+| Referencia | String | Reference number |
+
+### CONFIG_CAJAS Tab
+| Column | Type | Notes |
+|--------|------|-------|
+| Caja | String | Register name |
+| Tipo | String | Tienda or Delivery |
+| Activa | Boolean | Is active? |
+| Orden | Number | Display order |
+
+---
+
+## 14. DENOMINATION REFERENCE
+
+Used in CORTES_INDIVIDUALES, CORTE_TIENDA, ARQUEO_CAJA:
+
+| Column | Value (MXN) |
+|--------|-------------|
+| D_1000 | $1,000 bill |
+| D_500 | $500 bill |
+| D_200 | $200 bill |
+| D_100 | $100 bill |
+| D_50 | $50 bill |
+| D_20 | $20 bill |
+| D_10 | $10 coin |
+| D_5 | $5 coin |
+| D_2 | $2 coin |
+| D_1 | $1 coin |
+| D_050 | $0.50 coin |
+
+**Formula:** TotalEfectivo = (D_1000 × 1000) + (D_500 × 500) + ... + (D_050 × 0.50)
+
+---
+
+## 15. INVOICING FORMULA (SAT Compliance)
+
+```
+FOR each month:
+  1. SUM(PagosRecibidos)         = Total payments received
+  2. SUM(Sobre2)                 = Total cash withdrawn (Socios + Nóminas)
+  3. TotalXFacturar              = (1) - (2)
+  4. SUM(FactClientes)           = Client-specific invoices issued
+  5. SUM(FactGen1..6)            = General invoices issued (up to 6)
+  6. TotalFacturado              = (4) + (5)
+  7. FaltaFactura                = (3) - (6) → Must reach $0
+```
+
+At end of month, Louie creates up to 6 general invoices (FactGen1-6) to cover FaltaFactura. Each has a CFDI number tracked in FacturasCFDI column.
+
+---
+
+## 16. SHOPIFY POS INTEGRATION
+
+### Status: Code built, credentials needed
+
+### Setup Required
+1. Shopify Admin → Settings → Apps → Develop apps → Create "NB Sync"
+2. Scopes: `read_orders`, `read_locations`
+3. Copy Admin API access token
+4. In Apps Script Properties: set `SHOPIFY_TOKEN` and `SHOPIFY_STORE`
+5. API endpoint: `https://{store}.myshopify.com/admin/api/2025-01/graphql.json`
+
+### Payment Gateway Mapping
+| Shopify Gateway | NB Category |
+|----------------|-------------|
+| `cash` | Efectivo |
+| `card`, `tarjeta`, `stripe`, `shopify_payments` | Tarjeta |
+| `transfer`, `bank` | Transferencias |
+| `cashback` | Cashback |
+| `store_credit`, `gift_card` | StoreCredit |
+
+### Daily Sync
+- Function: `syncShopifyDaily({fecha: 'YYYY-MM-DD'})`
+- Populates Shopify_* columns in CORTE_TIENDA
+- Can be triggered manually or via Google Cloud Scheduler (11:30 PM daily)
+
+---
+
+## 17. OFFLINE SYNC MECHANISM
+
+### How It Works
+1. Web app stores operations locally (localStorage/IndexedDB)
+2. When online, POSTs to `/doPost` endpoint normally
+3. When offline, queues the operation locally
+4. On reconnect, calls `POST /doPost?action=sync_batch` with batch array
+5. `processSyncBatch()` processes each operation server-side
+6. Results returned for local cleanup
+
+### Supported Batch Operations
+`save_corte_individual`, `save_corte_tienda`, `save_arqueo`, `save_transferencia`, `save_ingreso`
+
+### Status: Patch file ready (`sync_batch_patch.gs`), not yet applied to Código.gs
+
+---
+
+## 18. NOTIFICATION SYSTEM
+
+### Architecture
+- `notification_functions.gs` — separate file for modularity
+- Uses `GmailApp.sendEmail()` with HTML body (green NB branding)
+- First run prompts for Gmail permissions in Apps Script
+
+### Triggers
+| Event | Function | Recipient | Flag |
+|-------|----------|-----------|------|
+| Corte de Tienda saved | `notifyOwnerCorteReady()` | Owner (Louie) | `notifyOwner: true` |
+| Sobre 2 saved | `notifyLeaderSobre2Ready()` | Store leader | `notifyLeader: true` |
+
+### Email Content
+- **Corte notification:** Total cash, faltante/sobrante (red/green), Shopify discrepancy
+- **Sobre 2 notification:** Deposit amount, socios/nóminas breakdown, action items
+
+---
+
+## 19. DAILY WORKFLOW
+
+```
+[Employee] Corte Individual (per register, denomination count)
+     ↓
+[Store Leader] Corte de Tienda (consolidates all registers) → notifies Louie
+     ↓
+[Louie] Registro de Ingresos (reconcile, set Sobre 2, mesa sales, invoicing) → notifies leader
+     ↓
+[Store Leader] Prepares bank deposit + Sobre 2 envelope
+     ↓
+[End of Month] Louie creates general invoices to close FaltaFactura gap
+```
+
+### Mesa Sales = Employee Station Productivity
+The columns Cocina1/2/3, Casa1/2, Express, Granja, etc. in INGRESOS are **sales per workstation**, NOT expenses. Each employee works a specific mesa. This data feeds into: Bono de Productividad Quincenal (biweekly bonus), Reporte de Nómina Semanal (payroll), Bono de Asistencia Mensual (attendance bonus).
+
+---
+
+## 20. FUTURE PHASES
+
+### HR Integration (not yet built)
+- **Bono Productividad Quincenal** — biweekly bonus: mesa sales × % = bono
+- **Reporte de Nómina Semanal** — attendance + bonuses → payroll
+- **Bono Asistencia Mensual** — monthly attendance bonus
+- All currently in Notion, planned migration to Sheets + web apps
+
+### Registers
+- Currently: 3 in-store (Caja 1-3) + 2 delivery (Repartidor 1-2)
+- Planning: add Caja 4, possibly Caja 5
+- Config is dynamic via CONFIG_CAJAS tab
+
+---
+
+## 21. TROUBLESHOOTING
+
+### API Route 404
+- Check case exists in doGet/doPost switch in Código.gs
+- Verify function is defined in cortes_ingresos.gs
+- Test directly from Apps Script editor
+
+### Shopify Sync Returns 0 Orders
+- Check SHOPIFY_TOKEN and SHOPIFY_STORE in Script Properties
+- Verify token has `read_orders` scope
+- Check if orders exist in Shopify for that date
+
+### Date-Related Bugs
+- ALWAYS use `formatDateStr()` — never `String()` on date objects
+- Timezone: `America/Mexico_City`
+
+### Offline Sync Fails
+- Check if processSyncBatch cases exist in Código.gs (patch not yet applied)
+- Verify functions exist in cortes_ingresos.gs
