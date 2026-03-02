@@ -113,9 +113,17 @@ body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif
 .modal .modal-sub { font-size:13px; color:var(--gray); margin-bottom:16px; }
 .modal .store-group { margin-bottom:16px; }
 .modal .store-name { font-size:14px; font-weight:700; color:var(--green); padding:6px 0; border-bottom:2px solid var(--green-bg); margin-bottom:6px; display:flex; align-items:center; gap:6px; }
-.modal .buy-item { font-size:13px; padding:4px 0; display:flex; justify-content:space-between; }
-.modal .buy-item .qty { font-weight:600; color:var(--orange); }
-.modal .close-btn { display:block; width:100%; padding:14px; background:var(--green); color:var(--white); border:none; border-radius:10px; font-size:15px; font-weight:600; cursor:pointer; margin-top:16px; }
+.modal .buy-item { font-size:13px; padding:5px 2px; display:flex; align-items:center; gap:8px; border-bottom:1px solid #f5f5f5; }
+.modal .buy-item .qty { font-weight:600; color:var(--orange); white-space:nowrap; margin-left:auto; }
+.modal .buy-item.excluded { opacity:.35; text-decoration:line-through; }
+.modal .buy-item.not-found { background:#fff8e1; border-radius:6px; padding:5px 6px; }
+.modal .buy-item input[type=checkbox] { width:17px; height:17px; flex-shrink:0; cursor:pointer; accent-color:var(--green); }
+.modal .item-label { flex:1; min-width:0; }
+.modal .nf-badge { font-size:10px; background:#ffe0b2; color:#e65100; padding:1px 5px; border-radius:4px; margin-left:4px; white-space:nowrap; }
+.modal .btn-nf { border:none; background:none; font-size:16px; cursor:pointer; padding:2px 4px; flex-shrink:0; opacity:.6; }
+.modal .btn-nf.active { opacity:1; }
+.modal .btn-completada { display:block; width:100%; padding:14px; background:var(--green); color:var(--white); border:none; border-radius:10px; font-size:15px; font-weight:600; cursor:pointer; margin-top:12px; }
+.modal .close-btn { display:block; width:100%; padding:14px; background:var(--white); color:var(--gray); border:1px solid var(--gray-border); border-radius:10px; font-size:15px; font-weight:600; cursor:pointer; margin-top:8px; }
 .modal .copy-btn { display:block; width:100%; padding:14px; background:var(--white); color:var(--green); border:2px solid var(--green); border-radius:10px; font-size:15px; font-weight:600; cursor:pointer; margin-top:8px; }
 
 /* Views */
@@ -329,6 +337,7 @@ body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif
     <h2>🛒 Lista de Compras</h2>
     <div class="modal-sub" id="summaryDate"></div>
     <div id="summaryContent"></div>
+    <button class="btn-completada" id="btnCompletada" onclick="completarCompra()">✅ Compra completada</button>
     <button class="copy-btn" onclick="copySummary()">📋 Copiar lista</button>
     <button class="close-btn" onclick="closeSummary()">Cerrar</button>
   </div>
@@ -888,41 +897,58 @@ function updateSummaryStats() {
   }
 }
 
-function showSummary() {
-  // Build purchase list grouped by store
-  const storeMap = {};
+// ── Shopping list state ──
+let shoppingItems = []; // [{ idx, name, qty, unit, store }] — rebuilt each time modal opens
+let shoppingExclusions = {}; // { idx: true } — persisted: user decided not to buy this
+let shoppingNotFound = {};   // { idx: true } — session only: couldn't find it at the store
+const SHOPPING_EXCL_KEY = 'nb_shopping_exclusions';
+try { shoppingExclusions = JSON.parse(localStorage.getItem(SHOPPING_EXCL_KEY) || '{}'); } catch(e) {}
+
+function buildShoppingItems() {
+  shoppingItems = [];
   PRODUCTS.forEach((p, i) => {
     if (currentCategory && p.c !== currentCategory) return;
     const current = counts[i] !== undefined ? counts[i] : p.inv;
     const need = p.max > 0 ? Math.max(0, p.max - current) : 0;
-    // Also show items with 0 inventory that might need restocking
-    if (need > 0 || (current === 0 && p.max === 0)) {
-      const store = p.s || 'Sin tienda';
-      if (!storeMap[store]) storeMap[store] = [];
-      if (need > 0) {
-        storeMap[store].push({ name: p.n, qty: need, unit: p.u, forma: p.f });
-      }
+    if (need > 0) {
+      shoppingItems.push({ idx: i, name: p.n, qty: need, unit: p.u, store: p.s || 'Sin tienda' });
     }
   });
+}
 
-  const now = new Date();
-  document.getElementById('summaryDate').textContent =
-    now.toLocaleDateString('es-MX', { weekday:'long', day:'numeric', month:'long', year:'numeric' });
+function renderSummaryContent() {
+  const storeMap = {};
+  shoppingItems.forEach(item => {
+    if (!storeMap[item.store]) storeMap[item.store] = [];
+    storeMap[item.store].push(item);
+  });
+  const storeKeys = Object.keys(storeMap).sort();
 
   let html = '';
-  const storeKeys = Object.keys(storeMap).filter(s => storeMap[s].length > 0).sort();
-
   if (storeKeys.length === 0) {
     html = '<p style="text-align:center;color:var(--gray);padding:20px">No hay productos por comprar con máximos definidos.<br><br>💡 Define máximos en tu lista para generar pedidos automáticos.</p>';
   } else {
+    // Count stats for header
+    const totalItems = shoppingItems.length;
+    const excludedCount = shoppingItems.filter(it => shoppingExclusions[it.idx]).length;
+    const notFoundCount = shoppingItems.filter(it => shoppingNotFound[it.idx] && !shoppingExclusions[it.idx]).length;
+    const toBuyCount = totalItems - excludedCount;
+    html += `<p style="font-size:12px;color:var(--gray);margin-bottom:12px">${toBuyCount} productos · ${excludedCount > 0 ? excludedCount+' omitidos · ' : ''}${notFoundCount > 0 ? notFoundCount+' no encontrados · ' : ''}Toca ☑️ para omitir · 🔍 si no encontraste</p>`;
+
     storeKeys.forEach(store => {
       const items = storeMap[store];
+      const activeCount = items.filter(it => !shoppingExclusions[it.idx]).length;
       html += `<div class="store-group">
-        <div class="store-name">🏪 ${store} <span style="font-weight:400;font-size:12px;color:var(--gray)">(${items.length})</span></div>`;
+        <div class="store-name">🏪 ${store} <span style="font-weight:400;font-size:12px;color:var(--gray)">(${activeCount} de ${items.length})</span></div>`;
       items.forEach(item => {
-        html += `<div class="buy-item">
-          <span>${item.name}</span>
+        const excl = !!shoppingExclusions[item.idx];
+        const nf   = !!shoppingNotFound[item.idx];
+        const nfBadge = nf ? `<span class="nf-badge">🔍 No encontré</span>` : '';
+        html += `<div class="buy-item ${excl ? 'excluded' : ''} ${nf ? 'not-found' : ''}">
+          <input type="checkbox" ${excl ? '' : 'checked'} onchange="toggleShoppingExclusion(${item.idx})">
+          <span class="item-label">${item.name}${nfBadge}</span>
           <span class="qty">${item.qty}${item.unit ? ' '+item.unit : ''}</span>
+          <button class="btn-nf ${nf ? 'active' : ''}" title="${nf ? 'Quitar' : 'No encontré este producto'}" onclick="toggleNotFound(${item.idx})">${nf ? '🔄' : '🔍'}</button>
         </div>`;
       });
       html += '</div>';
@@ -930,6 +956,18 @@ function showSummary() {
   }
 
   document.getElementById('summaryContent').innerHTML = html;
+
+  // Show "Completar" only when there's something to complete (included & found)
+  const hasActionable = shoppingItems.some(it => !shoppingExclusions[it.idx] && !shoppingNotFound[it.idx]);
+  document.getElementById('btnCompletada').style.display = hasActionable ? 'block' : 'none';
+}
+
+function showSummary() {
+  buildShoppingItems();
+  const now = new Date();
+  document.getElementById('summaryDate').textContent =
+    now.toLocaleDateString('es-MX', { weekday:'long', day:'numeric', month:'long', year:'numeric' });
+  renderSummaryContent();
   document.getElementById('summaryModal').classList.add('open');
 }
 
@@ -937,21 +975,59 @@ function closeSummary() {
   document.getElementById('summaryModal').classList.remove('open');
 }
 
+function toggleShoppingExclusion(idx) {
+  if (shoppingExclusions[idx]) {
+    delete shoppingExclusions[idx];
+  } else {
+    shoppingExclusions[idx] = true;
+    delete shoppingNotFound[idx]; // can't mark "not found" if excluded
+  }
+  localStorage.setItem(SHOPPING_EXCL_KEY, JSON.stringify(shoppingExclusions));
+  renderSummaryContent();
+}
+
+function toggleNotFound(idx) {
+  if (shoppingNotFound[idx]) {
+    delete shoppingNotFound[idx];
+  } else {
+    shoppingNotFound[idx] = true;
+    delete shoppingExclusions[idx]; // re-include if was excluded — we still want it
+    localStorage.setItem(SHOPPING_EXCL_KEY, JSON.stringify(shoppingExclusions));
+  }
+  renderSummaryContent();
+}
+
+function completarCompra() {
+  // Set counts to max for all items that are included and were found
+  let updated = 0;
+  shoppingItems.forEach(item => {
+    if (shoppingExclusions[item.idx] || shoppingNotFound[item.idx]) return;
+    counts[item.idx] = PRODUCTS[item.idx].max;
+    updated++;
+  });
+  if (updated > 0) {
+    saveState();
+    updateSummaryStats();
+  }
+  shoppingNotFound = {}; // reset "not found" flags for next trip
+  closeSummary();
+  buildShoppingItems(); // rebuild so summary bar count updates
+  toast(`✅ ${updated} productos marcados como comprados`);
+  if (updated > 0) renderRoutes();
+}
+
 function copySummary() {
   let text = `🛒 Lista de Compras NB\n📅 ${new Date().toLocaleDateString('es-MX')}\n`;
   if (currentCategory) text += `📦 ${currentCategory}\n`;
   text += '\n';
 
+  // Group: only items that are included (not excluded) — not-found items ARE included (still need them)
   const storeMap = {};
-  PRODUCTS.forEach((p, i) => {
-    if (currentCategory && p.c !== currentCategory) return;
-    const current = counts[i] !== undefined ? counts[i] : p.inv;
-    const need = p.max > 0 ? Math.max(0, p.max - current) : 0;
-    if (need > 0) {
-      const store = p.s || 'Sin tienda';
-      if (!storeMap[store]) storeMap[store] = [];
-      storeMap[store].push({ name: p.n, qty: need, unit: p.u });
-    }
+  shoppingItems.forEach(item => {
+    if (shoppingExclusions[item.idx]) return;
+    if (!storeMap[item.store]) storeMap[item.store] = [];
+    const nf = shoppingNotFound[item.idx] ? ' 🔍' : '';
+    storeMap[item.store].push({ name: item.name + nf, qty: item.qty, unit: item.unit });
   });
 
   Object.keys(storeMap).sort().forEach(store => {
