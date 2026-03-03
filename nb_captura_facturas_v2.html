@@ -421,11 +421,6 @@ tr:last-child td { border-bottom: none; }
           <tbody id="resultsBody"></tbody>
         </table>
       </div>
-      <div style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap" class="results-actions">
-        <button class="btn btn-green" onclick="exportCSV()">⬇️ Exportar CSV</button>
-        <button class="btn btn-outline" onclick="saveHistory()">💾 Guardar historial</button>
-        <button class="btn btn-outline btn-small" style="margin-left:auto" onclick="resetAll()">📷 Nueva factura</button>
-      </div>
     </div>
   </div>
 
@@ -2022,17 +2017,16 @@ function enviarGasto(){
     pushToSheetWithRetry(scriptUrl, payload, 3).then(ok => {
       if(ok){
         showToast(`✅ Registrado + enviado al Sheet · $${finalTotal.toFixed(2)} · ${forma}`, 4000);
-        // Sync matched item prices back to MATERIA PRIMA
-        syncPricesToMateriaPrima(scriptUrl);
+        showToast(`✅ Enviado · $${finalTotal.toFixed(2)} · ${forma}`, 2500);
       } else {
-        showToast(`⚠️ Guardado local, Sheet pendiente (reintentará)`, 5000);
+        showToast(`⚠️ Guardado local, Sheet pendiente (reintentará)`, 2500);
       }
+      setTimeout(() => resetAll(), 1600);
     });
   } else {
-    showToast(`✅ Registrado · $${finalTotal.toFixed(2)} · ${forma} · Pago: ${fechaPago}`, 4000);
+    showToast(`✅ Registrado · $${finalTotal.toFixed(2)} · ${forma}`, 2500);
+    setTimeout(() => resetAll(), 1600);
   }
-  document.getElementById('gastoForma').value = '';
-  document.getElementById('gastosPanel').style.display='none';
 }
 
 // ══════════════════════════════════════════════
