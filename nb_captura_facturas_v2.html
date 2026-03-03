@@ -1653,7 +1653,18 @@ function saveHistory(){
   h=h.filter(r=>r.date>=cutStr);
   localStorage.setItem('nb_price_history',JSON.stringify(h)); renderHistory(); showToast('💾 Historial guardado');
 }
-function clearHistory(){if(!confirm('¿Borrar historial?'))return;localStorage.removeItem('nb_price_history');renderHistory();showToast('🗑️ Eliminado');const bar=document.getElementById('storageWarningBar');if(bar)bar.style.display='none';}
+function clearHistory(){
+  if(!confirm('¿Borrar historial de precios y caché de ingredientes? Se recargarán en el siguiente sync.')) return;
+  localStorage.removeItem('nb_price_history');
+  localStorage.removeItem('nb_ingredients_cache');
+  localStorage.removeItem('nb_ingredients_ts');
+  localStorage.removeItem('nb_proveedores_cache');
+  localStorage.removeItem('nb_proveedores_ts');
+  renderHistory();
+  showToast('🗑️ Caché eliminado — sincroniza para recargar ingredientes');
+  const bar=document.getElementById('storageWarningBar');
+  if(bar) bar.style.display='none';
+}
 function renderHistory(){
   const h=JSON.parse(localStorage.getItem('nb_price_history')||'[]');
   document.getElementById('historyCount').textContent='('+h.length+')';
