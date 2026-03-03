@@ -923,11 +923,13 @@ function initializeEventListeners() {
   // TAB 2: SOBRE 2 CALCULATIONS
   document.getElementById('sobre2-fecha').addEventListener('change', loadCorteData);
   document.getElementById('corte-pagosRecibidos').addEventListener('change', updateCorteModified);
-  document.getElementById('corte-tarjeta').addEventListener('change', updateCorteModified);
-  document.getElementById('corte-transferencias').addEventListener('change', updateCorteModified);
-  document.getElementById('corte-cashback').addEventListener('change', updateCorteModified);
-  document.getElementById('corte-totalEfectivo').addEventListener('change', updateCorteModified);
-  document.getElementById('corte-faltanteSobrante').addEventListener('change', updateCorteModified);
+  ['corte-tarjeta','corte-transferencias','corte-cashback',
+   'corte-totalEfectivo','corte-faltanteSobrante'].forEach(id => {
+    document.getElementById(id).addEventListener('change', () => {
+      updateCorteModified();
+      calculateSobre2Totals(); // recalc deposit when corte fields edited
+    });
+  });
 
   ['sobre2-socios', 'sobre2-nominas'].forEach(id => {
     document.getElementById(id).addEventListener('change', calculateSobre2Totals);
@@ -1044,8 +1046,17 @@ async function loadCorteData() {
     document.getElementById('corte-tarjeta').value = corte.Tarjeta || '';
     document.getElementById('corte-transferencias').value = corte.Transferencias || '';
     document.getElementById('corte-cashback').value = corte.Cashback || '';
-    document.getElementById('corte-totalEfectivo').value = corte.TotalEfectivo || '';
-    document.getElementById('corte-faltanteSobrante').value = corte.FaltanteSobrante || '';
+    // TotalEfectivo: compute expected cash from known-good corte fields
+    // (avoids reading a potentially mis-aligned column from older sheet data)
+    const _pr  = parseFloat(corte.PagosRecibidos) || 0;
+    const _tj  = parseFloat(corte.Tarjeta) || 0;
+    const _tr  = parseFloat(corte.Transferencias) || 0;
+    const _cb  = parseFloat(corte.Cashback) || 0;
+    const _expectedCash = _pr - _tj - _tr + _cb;
+    document.getElementById('corte-totalEfectivo').value = _expectedCash.toFixed(2);
+    // FaltanteSobrante: use corte value (correctly aligned in new data; in old data this
+    // field holds the faltante due to the StoreCredit column-shift bug now fixed in GAS)
+    document.getElementById('corte-faltanteSobrante').value = corte.FaltanteSobrante || corte.TotalEfectivo || '';
 
     // Load any existing sobre2
     const ingData = await callAPI('get_ingresos', { fecha });
@@ -1080,7 +1091,12 @@ function calculateSobre2Totals() {
   const sobre2 = socios + nominas;
 
   const pagosRecibidos = parseFloat(document.getElementById('corte-pagosRecibidos').value) || 0;
-  const deposito = pagosRecibidos - sobre2;
+  const tarjeta       = parseFloat(document.getElementById('corte-tarjeta').value) || 0;
+  const transferencias= parseFloat(document.getElementById('corte-transferencias').value) || 0;
+  const cashback      = parseFloat(document.getElementById('corte-cashback').value) || 0;
+
+  // Depósito = PagosRecibidos − Tarjeta − Transferencias − Cashback − Sobre2
+  const deposito = pagosRecibidos - tarjeta - transferencias - cashback - sobre2;
 
   document.getElementById('sobre2-total').textContent = formatPeso(sobre2);
   document.getElementById('deposito-total').textContent = formatPeso(deposito);

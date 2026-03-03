@@ -418,6 +418,7 @@ function saveCorteTienda(body) {
     parseFloat(c.VentasTotales) || 0,
     pagosRecibidos,
     tarjeta, transferencias, cashback,
+    0,   // StoreCredit — deprecated (consolidated into Cashback), kept for column alignment
     ...denoms,
     totalEfectivo, faltanteSobrante,
     shopVentas, shopTarjeta, shopTransf, shopCashback, shopStoreCredit,
