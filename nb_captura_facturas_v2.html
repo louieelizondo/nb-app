@@ -333,6 +333,10 @@ tr:last-child td { border-bottom: none; }
 .gsm-label { font-size: 10px; color: #999; text-transform: uppercase; letter-spacing: .4px; }
 .gsm-value { font-size: 13px; font-weight: 700; color: #1a1a1a; }
 .gsm-value.highlight { color: #2e6b2e; font-size: 16px; }
+.gsm-chips { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
+.gsm-chip { padding: 4px 12px; border-radius: 20px; border: 1.5px solid #c8b89a; background: #fff; font-size: 12px; font-weight: 600; color: #6b5b45; cursor: pointer; transition: all .15s; }
+.gsm-chip:active { transform: scale(.96); }
+.gsm-chip-active { background: #3a7a3a; border-color: #3a7a3a; color: #fff; }
 .btn-gastos { background: #2e6b2e; color: white; padding: 13px 24px; border: none; border-radius: 10px; font-size: 15px; font-weight: 700; cursor: pointer; width: 100%; transition: background 0.15s; }
 .btn-gastos:hover { background: #256025; }
 .btn-gastos:disabled { background: #bbb; cursor: not-allowed; }
@@ -699,6 +703,31 @@ function showToast(msg,dur=2800){
   const t=document.getElementById('toast');
   t.textContent=msg; t.style.display='block';
   setTimeout(()=>t.style.display='none',dur);
+}
+
+// Upload status banner — appears at top of screen, auto-dismisses
+// Separate from toast so it survives resetAll() clearing the main UI
+let _uploadBannerTimer = null;
+function showUploadBanner(msg, dur=0) {
+  let banner = document.getElementById('uploadStatusBanner');
+  if(!banner){
+    banner = document.createElement('div');
+    banner.id = 'uploadStatusBanner';
+    banner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:9999;padding:10px 16px;font-size:14px;font-weight:600;text-align:center;transition:opacity 0.4s';
+    document.body.appendChild(banner);
+  }
+  banner.textContent = msg;
+  banner.style.background = msg.startsWith('✅') ? '#2d6a4f' : msg.startsWith('⚠️') ? '#e07c24' : '#2c3e50';
+  banner.style.color = '#fff';
+  banner.style.opacity = '1';
+  banner.style.display = 'block';
+  if(_uploadBannerTimer) clearTimeout(_uploadBannerTimer);
+  if(dur > 0){
+    _uploadBannerTimer = setTimeout(() => {
+      banner.style.opacity = '0';
+      setTimeout(() => { banner.style.display = 'none'; }, 400);
+    }, dur);
+  }
 }
 function togglePanel(bId,aId){
   const b=document.getElementById(bId),a=document.getElementById(aId);
@@ -1880,15 +1909,32 @@ function updateGastosPanel(){
       }
     }
   }
+  const tipoOpts = ['Factura','Remisión','Ticket','Recibo'];
+  const tipoChips = tipoOpts.map(t => {
+    const active = (lastParsed.tipo_documento || 'Factura') === t ? 'gsm-chip-active' : '';
+    return `<button class="gsm-chip ${active}" onclick="setTipoDoc('${t}')">${t}</button>`;
+  }).join('');
   document.getElementById('gastosSummary').innerHTML = `
     <div class="gsm-item"><span class="gsm-label">Proveedor</span><span class="gsm-value">${sup}</span></div>
     <div class="gsm-item"><span class="gsm-label">Folio</span><span class="gsm-value">${lastParsed.numero_factura||'—'}</span></div>
-    <div class="gsm-item"><span class="gsm-label">Tipo</span><span class="gsm-value">${lastParsed.tipo_documento||'—'}</span></div>
+    <div class="gsm-item" style="grid-column:1/-1">
+      <span class="gsm-label">Tipo documento</span>
+      <div class="gsm-chips" id="tipoDocChips">${tipoChips}</div>
+    </div>
     <div class="gsm-item"><span class="gsm-label">Fecha compra</span><span class="gsm-value">${fechaCompra}</span></div>
     <div class="gsm-item"><span class="gsm-label">Total factura</span><span class="gsm-value">$${currentInvoiceTotal.toFixed(2)}</span></div>
     <div class="gsm-item"><span class="gsm-label">Total a pagar</span><span class="gsm-value highlight">$${finalTotal.toFixed(2)}</span></div>
     <div class="gsm-item" style="grid-column:1/-1"><span class="gsm-label">Crédito</span><span class="gsm-value" style="font-size:12px">${creditLabel}</span></div>
   `;
+}
+
+function setTipoDoc(tipo) {
+  if(!lastParsed) return;
+  lastParsed.tipo_documento = tipo;
+  // Update chip active states
+  document.querySelectorAll('#tipoDocChips .gsm-chip').forEach(btn => {
+    btn.classList.toggle('gsm-chip-active', btn.textContent === tipo);
+  });
 }
 
 async function syncPricesToMateriaPrima(scriptUrl){
@@ -2008,23 +2054,40 @@ function enviarGasto(){
   gastos.push(gasto);
   localStorage.setItem('nb_gastos', JSON.stringify(gastos));
 
-  // Also POST to Apps Script if configured (with retry)
+  // ── #4 INSTANT RESET: clear UI immediately, push GAS in background ──
+  const savedId = gasto.id;
+  const savedTotal = finalTotal;
+  const savedForma = forma;
+  const savedBase64 = currentBase64;  // capture before resetAll() clears it
+  resetAll();   // ← clears screen NOW; user can start next invoice immediately
+
+  // POST to Apps Script in background (with retry)
   const scriptUrl = getScriptUrl();
   if(scriptUrl){
     const payload = {...gasto, action: 'create'};
-    // Send full-res image to Drive (not the compressed thumbnail stored locally)
-    if (currentBase64) payload.foto_full = currentBase64;
-    pushToSheetWithRetry(scriptUrl, payload, 3).then(ok => {
-      if(ok){
-        showToast(`✅ Enviado · $${finalTotal.toFixed(2)} · ${forma}`, 2500);
+    // Send full-res image to Drive (not the thumbnail stored locally)
+    if (savedBase64) payload.foto_full = savedBase64;
+
+    // Non-blocking status banner (won't interrupt next capture)
+    showUploadBanner('⏳ Subiendo factura…');
+
+    pushToSheetWithRetry(scriptUrl, payload, 3).then(result => {
+      if(result && result.ok){
+        // ── #1 STORAGE FIX: strip base64 foto, keep Drive URL only ──
+        try {
+          const gastos = JSON.parse(localStorage.getItem('nb_gastos') || '[]');
+          const idx = gastos.findIndex(g => g.id === savedId);
+          if(idx >= 0){
+            delete gastos[idx].foto;          // remove base64 (saves ~50-200KB per invoice)
+            if(result.foto_url) gastos[idx].foto_url = result.foto_url;
+            localStorage.setItem('nb_gastos', JSON.stringify(gastos));
+          }
+        } catch(e){ console.log('Storage cleanup error:', e); }
+        showUploadBanner(`✅ $${savedTotal.toFixed(2)} · ${savedForma}`, 3500);
       } else {
-        showToast(`⚠️ Guardado local, Sheet pendiente (reintentará)`, 2500);
+        showUploadBanner(`⚠️ Local guardado · reintentará al reabrir`, 5000);
       }
-      setTimeout(() => resetAll(), 1600);
     });
-  } else {
-    showToast(`✅ Registrado · $${finalTotal.toFixed(2)} · ${forma}`, 2500);
-    setTimeout(() => resetAll(), 1600);
   }
 }
 
@@ -2039,7 +2102,7 @@ async function pushToSheetWithRetry(url, payload, maxRetries) {
         body: JSON.stringify(payload)
       });
       const data = await resp.json();
-      if (data.ok) return true;
+      if (data.ok) return data;  // return full response (includes foto_url, id, etc.)
       console.log(`Sheet push attempt ${attempt} failed:`, data.error);
     } catch(e) {
       console.log(`Sheet push attempt ${attempt} error:`, e.message);
@@ -2050,7 +2113,7 @@ async function pushToSheetWithRetry(url, payload, maxRetries) {
   const q = JSON.parse(localStorage.getItem('nb_captura_retry_queue') || '[]');
   q.push({ payload, timestamp: Date.now() });
   localStorage.setItem('nb_captura_retry_queue', JSON.stringify(q));
-  return false;
+  return null;  // null = failed (was false; callers now check result.ok)
 }
 
 function processRetryQueue() {
