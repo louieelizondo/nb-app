@@ -511,7 +511,6 @@ function getArqueos(params) {
   if (params.startDate) {
     filtered = filtered.filter(r => formatDateStr(r.Fecha) >= params.startDate);
   }
-  }
   return { arqueos: filtered, count: filtered.length };
 }
 
@@ -552,7 +551,6 @@ function getTransferencias(params) {
   }
   if (params.startDate) {
     filtered = filtered.filter(r => formatDateStr(r.Fecha) >= params.startDate);
-  }
   }
   return { transferencias: filtered, count: filtered.length };
 }
@@ -650,7 +648,6 @@ function getIngresos(params) {
   }
   if (params.startDate) {
     filtered = filtered.filter(r => formatDateStr(r.Fecha) >= params.startDate);
-  }
   }
   if (params.year) {
     filtered = filtered.filter(r => formatDateStr(r.Fecha).startsWith(params.year));
@@ -1116,7 +1113,6 @@ function getFaltanteHistory(params) {
   if (params.startDate) {
     filtered = filtered.filter(r => formatDateStr(r.Fecha) >= params.startDate);
   }
-  }
 
   // Aggregate by employee
   const byEmployee = {};
@@ -1161,7 +1157,6 @@ function getMesaSales(params) {
   }
   if (params.startDate) {
     filtered = filtered.filter(r => formatDateStr(r.Fecha) >= params.startDate);
-  }
   }
 
   const mesaFields = [
