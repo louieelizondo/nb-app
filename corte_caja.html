@@ -1239,13 +1239,54 @@
         const result = await resp.json();
         if (result.ok) {
           showToast('Corte de tienda guardado. Notificación enviada a Louie.', 'success');
+          updateSyncStatus('synced');
+
+          // Compute small-bill total from what was just saved
+          const SMALL_MAP = { 100:'D_100', 50:'D_50', 20:'D_20', 10:'D_10', 5:'D_5', 2:'D_2', 1:'D_1', 0.5:'D_050' };
+          let _totalSmall = 0;
+          Object.entries(SMALL_MAP).forEach(([v, k]) => { _totalSmall += (corte[k]||0) * parseFloat(v); });
+          const _fecha = corte.Fecha;
+
           document.getElementById('tienda_status').innerHTML = `
-            <div style="padding:12px; background:#fff3e0; border-radius:10px; border-left:4px solid #ff9800;">
-              <div style="font-weight:700; color:#e65100;">Esperando Sobre 2 de Louie...</div>
-              <div style="font-size:12px; color:#e65100; margin-top:4px;">Buscando respuesta...</div>
+            <div style="background:#e3f2fd;padding:14px;border-radius:12px;margin-bottom:10px;">
+              <div style="font-weight:700;color:#1565c0;margin-bottom:6px;">🔄 Paso 2 — Cambio de Billetes</div>
+              <div style="font-size:12px;color:#555;margin-bottom:10px;">
+                Registra los billetes grandes que recibiste a cambio de los pequeños
+                <strong>(total: ${formatCurrency(_totalSmall)})</strong>
+              </div>
+              <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px;">
+                <div>
+                  <label style="font-size:11px;font-weight:700;color:#1565c0;display:block;margin-bottom:4px">× $1000</label>
+                  <input type="number" id="cb_1000" min="0" value="0" inputmode="numeric"
+                    oninput="updateCambioStatusInline(${_totalSmall})"
+                    style="width:100%;padding:8px;border:1.5px solid #90caf9;border-radius:8px;font-size:18px;font-weight:700;text-align:center;box-sizing:border-box">
+                </div>
+                <div>
+                  <label style="font-size:11px;font-weight:700;color:#1565c0;display:block;margin-bottom:4px">× $500</label>
+                  <input type="number" id="cb_500" min="0" value="0" inputmode="numeric"
+                    oninput="updateCambioStatusInline(${_totalSmall})"
+                    style="width:100%;padding:8px;border:1.5px solid #90caf9;border-radius:8px;font-size:18px;font-weight:700;text-align:center;box-sizing:border-box">
+                </div>
+                <div>
+                  <label style="font-size:11px;font-weight:700;color:#1565c0;display:block;margin-bottom:4px">× $200</label>
+                  <input type="number" id="cb_200" min="0" value="0" inputmode="numeric"
+                    oninput="updateCambioStatusInline(${_totalSmall})"
+                    style="width:100%;padding:8px;border:1.5px solid #90caf9;border-radius:8px;font-size:18px;font-weight:700;text-align:center;box-sizing:border-box">
+                </div>
+              </div>
+              <div id="cb_inline_status" style="padding:8px 12px;border-radius:8px;font-size:13px;font-weight:700;background:#fff9c4;color:#f57f17;margin-bottom:10px">
+                Ingresa los billetes recibidos ↑
+              </div>
+              <button class="btn btn-primary btn-sm" onclick="saveCambioData('${_fecha}', ${_totalSmall})">
+                Guardar Cambio ✓
+              </button>
+              <div id="cb_saved_msg" style="margin-top:8px"></div>
+            </div>
+            <div id="sobre2_wait_box" style="padding:12px;background:#fff3e0;border-radius:10px;border-left:4px solid #ff9800;">
+              <div style="font-weight:700;color:#e65100;">⏳ Esperando Sobre 2 de Louie...</div>
+              <div style="font-size:12px;color:#e65100;margin-top:4px;">Te avisamos cuando esté listo.</div>
             </div>
           `;
-          updateSyncStatus('synced');
           startPolling(corte.Fecha);
         } else {
           throw new Error(result.error || 'Unknown error');
@@ -1255,6 +1296,39 @@
         showToast('Error: ' + e.message, 'error');
         updateSyncStatus('error');
       }
+    }
+
+    function updateCambioStatusInline(totalSmall) {
+      const c1000 = parseInt(document.getElementById('cb_1000')?.value) || 0;
+      const c500  = parseInt(document.getElementById('cb_500')?.value)  || 0;
+      const c200  = parseInt(document.getElementById('cb_200')?.value)  || 0;
+      const recibido = c1000*1000 + c500*500 + c200*200;
+      const diff = Math.round((recibido - totalSmall) * 100) / 100;
+      const el = document.getElementById('cb_inline_status');
+      if (!el) return;
+      if (Math.abs(diff) < 0.01) {
+        el.style.background = '#e8f5e9'; el.style.color = '#2e7d32';
+        el.textContent = `✅ Cuadra — ${formatCurrency(recibido)}`;
+      } else if (diff > 0) {
+        el.style.background = '#fff3e0'; el.style.color = '#e65100';
+        el.textContent = `⚠️ ${formatCurrency(recibido)} recibido — sobran ${formatCurrency(diff)}`;
+      } else {
+        el.style.background = '#fce4ec'; el.style.color = '#c62828';
+        el.textContent = `❌ ${formatCurrency(recibido)} recibido — faltan ${formatCurrency(Math.abs(diff))}`;
+      }
+    }
+
+    function saveCambioData(fecha, totalSmall) {
+      const c1000 = parseInt(document.getElementById('cb_1000')?.value) || 0;
+      const c500  = parseInt(document.getElementById('cb_500')?.value)  || 0;
+      const c200  = parseInt(document.getElementById('cb_200')?.value)  || 0;
+      localStorage.setItem('nb_cambio_' + fecha, JSON.stringify({
+        c1000, c500, c200, totalSmall, savedAt: new Date().toISOString()
+      }));
+      const parts = [c1000 && `${c1000}×$1000`, c500 && `${c500}×$500`, c200 && `${c200}×$200`].filter(Boolean);
+      const el = document.getElementById('cb_saved_msg');
+      if (el) el.innerHTML = `<div style="background:#e8f5e9;padding:8px 12px;border-radius:8px;font-size:13px;color:#2e7d32;font-weight:700">✅ Guardado: ${parts.join('  ')}</div>`;
+      showToast('Cambio guardado ✓', 'success');
     }
 
     function startPolling(fecha) {
@@ -1428,10 +1502,9 @@
           denominationCounts[d.value] = parseFloat(tienda[d.key]) || 0;
         });
 
-        // Separate large bills ($200+) from small bills/coins ($100 and below)
         const LARGE = [1000, 500, 200];
         const SMALL = [100, 50, 20, 10, 5, 2, 1, 0.5];
-        const DLABELS = { 1000:'$1000', 500:'$500', 200:'200', 100:'$100', 50:'$50', 20:'$20', 10:'$10', 5:'$5', 2:'$2', 1:'$1', 0.5:'$0.50' };
+        const DLABELS = { 1000:'$1000', 500:'$500', 200:'$200', 100:'$100', 50:'$50', 20:'$20', 10:'$10', 5:'$5', 2:'$2', 1:'$1', 0.5:'$0.50' };
 
         let totalLarge = 0, totalSmall = 0;
         LARGE.forEach(v => { totalLarge += (denominationCounts[v]||0) * v; });
@@ -1460,44 +1533,87 @@
             <div style="display:flex;justify-content:space-between;padding:6px 0;font-weight:700;border-top:2px solid #c8b89a;margin-top:4px"><span>Total a cambiar</span><span>${formatCurrency(totalSmall)}</span></div>
           </div>`;
 
-        // Panel 2: Cambio de billetes
-        allocationHtml += `
-          <div style="background:#e3f2fd;padding:14px;border-radius:10px;margin-bottom:12px;">
-            <div style="font-weight:700;color:#1565c0;margin-bottom:10px;">🔄 Cambio de Billetes — ¿Qué billetes grandes recibiste?</div>
-            <div style="font-size:12px;color:#555;margin-bottom:10px;">Registra los billetes que recibiste a cambio de los billetes pequeños (total esperado: <strong>${formatCurrency(totalSmall)}</strong>)</div>
-            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:10px;">
-              <div>
-                <label style="font-size:12px;font-weight:700;color:#1565c0">× $1000</label>
-                <input type="number" id="cambio_1000" min="0" value="0" oninput="updateCambioTotal()"
-                  style="width:100%;padding:8px;border:1.5px solid #90caf9;border-radius:8px;font-size:16px;font-weight:700;text-align:center">
-              </div>
-              <div>
-                <label style="font-size:12px;font-weight:700;color:#1565c0">× $500</label>
-                <input type="number" id="cambio_500" min="0" value="0" oninput="updateCambioTotal()"
-                  style="width:100%;padding:8px;border:1.5px solid #90caf9;border-radius:8px;font-size:16px;font-weight:700;text-align:center">
-              </div>
-              <div>
-                <label style="font-size:12px;font-weight:700;color:#1565c0">× $200</label>
-                <input type="number" id="cambio_200" min="0" value="0" oninput="updateCambioTotal()"
-                  style="width:100%;padding:8px;border:1.5px solid #90caf9;border-radius:8px;font-size:16px;font-weight:700;text-align:center">
-              </div>
-            </div>
-            <div id="cambio_status" style="padding:8px 12px;border-radius:8px;font-size:13px;font-weight:700;background:#fff9c4;color:#f57f17">
-              Ingresa los billetes del cambio ↑
-            </div>
-          </div>`;
+        // Panel 2: Cambio summary from localStorage (saved in tab2)
+        const cambioSaved = JSON.parse(localStorage.getItem('nb_cambio_' + fecha) || 'null');
+        const available = {};
+        LARGE.forEach(v => { available[v] = denominationCounts[v] || 0; });
+        if (cambioSaved) {
+          available[1000] += cambioSaved.c1000 || 0;
+          available[500]  += cambioSaved.c500  || 0;
+          available[200]  += cambioSaved.c200  || 0;
+          const cambioParts = [
+            cambioSaved.c1000 && `${cambioSaved.c1000}×$1000`,
+            cambioSaved.c500  && `${cambioSaved.c500}×$500`,
+            cambioSaved.c200  && `${cambioSaved.c200}×$200`
+          ].filter(Boolean);
+          allocationHtml += `
+            <div style="background:#e8f5e9;padding:12px;border-radius:10px;margin-bottom:12px;">
+              <div style="font-weight:700;color:#2e7d32;margin-bottom:4px;">✅ Cambio registrado</div>
+              <div style="font-size:13px;color:#555">${cambioParts.join('  &nbsp;|&nbsp;  ') || '— sin cambio —'}</div>
+            </div>`;
+        } else {
+          allocationHtml += `
+            <div style="background:#fff3e0;padding:12px;border-radius:10px;margin-bottom:12px;">
+              <div style="font-weight:700;color:#e65100;margin-bottom:4px;">⚠️ Cambio no registrado</div>
+              <div style="font-size:12px;color:#666">Ve a Corte de Tienda y guarda el cambio de billetes antes de preparar el depósito.</div>
+            </div>`;
+        }
 
-        // Panel 3: Asignación (rendered after user inputs cambio)
+        // Panel 3: Auto-calculated allocation using actual available bills
+        // Fill sobre2 first (prefer $500), then deposit from remainder
+        const sobre2Alloc = {}, depositAlloc = {};
+        LARGE.forEach(v => { sobre2Alloc[v] = 0; depositAlloc[v] = 0; });
+        let tempAvail = {...available};
+
+        let rem2 = Math.round(sobre2 * 100);
+        [500, 1000, 200].forEach(v => {
+          const use = Math.min(Math.floor(rem2 / (v*100)), tempAvail[v]);
+          sobre2Alloc[v] = use; tempAvail[v] -= use; rem2 -= use * v * 100;
+        });
+        let remD = Math.round(depositoAjustado * 100);
+        [500, 1000, 200].forEach(v => {
+          const use = Math.min(Math.floor(remD / (v*100)), tempAvail[v]);
+          depositAlloc[v] = use; tempAvail[v] -= use; remD -= use * v * 100;
+        });
+
+        const sobre2Total  = LARGE.reduce((s,v) => s + sobre2Alloc[v]*v, 0);
+        const depositTotal = LARGE.reduce((s,v) => s + depositAlloc[v]*v, 0);
+        const sobre2Gap  = Math.round((sobre2 - sobre2Total) * 100) / 100;
+        const depositGap = Math.round((depositoAjustado - depositTotal) * 100) / 100;
+
+        const renderRows = (alloc) => LARGE
+          .filter(v => alloc[v] > 0)
+          .map(v => `<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid rgba(0,0,0,.07)">
+            <span>${alloc[v]} × ${DLABELS[v]}</span>
+            <span style="font-weight:700">${formatCurrency(alloc[v]*v)}</span>
+          </div>`).join('') || '<div style="color:#bbb;font-size:13px">— sin billetes suficientes —</div>';
+
+        const gapNote = (gap) => gap > 0.01
+          ? `<div style="color:#e65100;font-size:12px;margin-top:4px">⚠️ Completa con monedas/billetes pequeños: ${formatCurrency(gap)}</div>`
+          : `<div style="color:#2e7d32;font-size:12px;margin-top:4px">✅ Exacto</div>`;
+
         allocationHtml += `
-          <button class="btn btn-primary" onclick="calcularAsignacion()" style="margin-bottom:12px">
-            Calcular Asignación →
-          </button>
-          <div id="dep_asignacion_final"></div>`;
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+            <div style="background:#fff3e0;padding:14px;border-radius:10px;">
+              <div style="font-weight:700;color:#e65100;margin-bottom:8px;">Sobre 2<br><span style="font-size:18px">${formatCurrency(sobre2)}</span></div>
+              ${renderRows(sobre2Alloc)}
+              <div style="font-weight:700;border-top:2px solid #ffcc80;padding-top:6px;margin-top:4px;display:flex;justify-content:space-between">
+                <span>Total</span><span>${formatCurrency(sobre2Total)}</span>
+              </div>
+              ${gapNote(sobre2Gap)}
+            </div>
+            <div style="background:#e8f5e9;padding:14px;border-radius:10px;">
+              <div style="font-weight:700;color:#2e7d32;margin-bottom:8px;">Depósito BBVA<br><span style="font-size:18px">${formatCurrency(depositoAjustado)}</span></div>
+              ${renderRows(depositAlloc)}
+              <div style="font-weight:700;border-top:2px solid #a5d6a7;padding-top:6px;margin-top:4px;display:flex;justify-content:space-between">
+                <span>Total</span><span>${formatCurrency(depositTotal)}</span>
+              </div>
+              ${gapNote(depositGap)}
+            </div>
+          </div>
+          ${LARGE.some(v=>tempAvail[v]>0) ? `<div style="background:#f5f5f5;padding:8px 14px;border-radius:8px;margin-top:10px;font-size:12px;color:#666">Sobrante sin asignar: ${LARGE.filter(v=>tempAvail[v]>0).map(v=>`${tempAvail[v]}×${DLABELS[v]}`).join(', ')}</div>` : ''}`;
 
         document.getElementById('dep_allocation').innerHTML = allocationHtml;
-
-        // Store totals for calcularAsignacion
-        window._depData = { sobre2, depositoAjustado, denominationCounts, totalSmall, totalLarge };
       } catch (e) {
         console.error('Error:', e);
         showToast('Error cargando datos: ' + e.message, 'error');
