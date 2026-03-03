@@ -1384,27 +1384,33 @@
           return;
         }
 
-        const pagosRecibidos = parseFloat(ingreso.PagosRecibidos) || 0;
-        const sobre2 = parseFloat(ingreso.Sobre2) || 0;
-        const depositoAjustado = pagosRecibidos - sobre2;
+        const pagosRecibidos  = parseFloat(ingreso.PagosRecibidos)  || 0;
+        const tarjeta         = parseFloat(ingreso.Tarjeta)         || 0;
+        const transferencias  = parseFloat(ingreso.Transferencias)  || 0;
+        const cashback        = parseFloat(ingreso.Cashback)        || 0;
+        const sobre2          = parseFloat(ingreso.Sobre2)          || 0;
+        // Depósito = PagosRecibidos − Tarjeta − Transferencias − Cashback − Sobre2
+        const depositoAjustado = pagosRecibidos - tarjeta - transferencias - cashback - sobre2;
+
+        const cell = (label, val, highlight=false) => `
+          <div style="background:${highlight?'#e8f5e9':'#f9f6f2'};padding:10px 12px;border-radius:10px;">
+            <div style="font-size:11px;color:${highlight?'#2e7d32':'#999'};font-weight:700;text-transform:uppercase;letter-spacing:.4px">${label}</div>
+            <div style="font-size:${highlight?'20':'17'}px;font-weight:800;color:${highlight?'#2e7d32':'inherit'}">${formatCurrency(val)}</div>
+          </div>`;
 
         const summary = document.getElementById('dep_summary');
         summary.innerHTML = `
-          <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:16px;">
-            <div style="background:#f9f6f2; padding:12px; border-radius:10px;">
-              <div style="font-size:11px; color:#999; font-weight:700;">Pagos Recibidos</div>
-              <div style="font-size:18px; font-weight:800;">${formatCurrency(pagosRecibidos)}</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px;">
+            ${cell('Pagos Recibidos', pagosRecibidos)}
+            ${cell('Sobre 2', sobre2)}
+            ${cell('Tarjeta', tarjeta)}
+            ${cell('Transferencias', transferencias)}
+            ${cell('Cashback', cashback)}
+            <div style="background:#f9f6f2;padding:10px 12px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:12px;color:#aaa">
+              = Pagos − Tarjeta − Trans − CB − Sobre2
             </div>
-            <div style="background:#f9f6f2; padding:12px; border-radius:10px;">
-              <div style="font-size:11px; color:#999; font-weight:700;">Sobre 2</div>
-              <div style="font-size:18px; font-weight:800;">${formatCurrency(sobre2)}</div>
-            </div>
-            <div style="background:#e8f5e9; padding:12px; border-radius:10px; grid-column:1/-1;">
-              <div style="font-size:11px; color:#2e7d32; font-weight:700;">Depósito Ajustado</div>
-              <div style="font-size:20px; font-weight:800; color:#2e7d32;">${formatCurrency(depositoAjustado)}</div>
-            </div>
-          </div>
-        `;
+            <div style="grid-column:1/-1">${cell('Depósito Ajustado', depositoAjustado, true)}</div>
+          </div>`;
 
         // Load tienda corte for bill allocation
         const tiendaResp = await fetch(config.scriptUrl + '?action=get_corte_tienda&fecha=' + fecha);
