@@ -2046,13 +2046,24 @@ function enviarGasto(){
     fecha_pago   : fechaPago,
     credit_days  : creditDays,
     comprobante  : '',
-    foto         : fotoThumb,
+    foto         : '',           // ← no base64 stored locally; Drive URL added after upload
     created_at   : new Date().toISOString()
   };
-  // Save locally
-  const gastos = JSON.parse(localStorage.getItem('nb_gastos')||'[]');
-  gastos.push(gasto);
-  localStorage.setItem('nb_gastos', JSON.stringify(gastos));
+  // Save locally (no photo data — keeps storage lean)
+  try {
+    const gastos = JSON.parse(localStorage.getItem('nb_gastos')||'[]');
+    gastos.push(gasto);
+    localStorage.setItem('nb_gastos', JSON.stringify(gastos));
+  } catch(qe) {
+    console.warn('localStorage full, pruning old gastos...', qe.message);
+    try {
+      // Emergency prune: strip any remaining foto fields from all entries
+      const gastos = JSON.parse(localStorage.getItem('nb_gastos')||'[]');
+      gastos.forEach(g => { delete g.foto; delete g.foto_full; });
+      gastos.push(gasto);
+      localStorage.setItem('nb_gastos', JSON.stringify(gastos));
+    } catch(e2) { console.error('localStorage still full after prune:', e2.message); }
+  }
 
   // ── #4 INSTANT RESET: clear UI immediately, push GAS in background ──
   const savedId = gasto.id;
@@ -2188,6 +2199,16 @@ window.addEventListener('load',()=> requireNbAuth(function appInit(){
   loadCachedIngredients(); // also calls buildSuppliersFromDB inside
   renderMappings(); renderHistory();
   pruneLocalStorage();
+  // One-time migration: strip base64 foto from existing gastos to free storage
+  try {
+    const gastos = JSON.parse(localStorage.getItem('nb_gastos')||'[]');
+    let cleaned = 0;
+    gastos.forEach(g => { if(g.foto && g.foto.length > 100){ delete g.foto; cleaned++; } });
+    if(cleaned > 0){
+      localStorage.setItem('nb_gastos', JSON.stringify(gastos));
+      console.log(`🧹 Cleaned base64 from ${cleaned} existing invoices`);
+    }
+  } catch(e) { console.log('Migration cleanup error:', e); }
   processRetryQueue();
 }));
 </script>
