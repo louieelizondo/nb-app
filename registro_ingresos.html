@@ -1379,26 +1379,33 @@ function startAutoRefresh() {
 
 // API HELPER
 async function callAPI(action, params = {}) {
-  const url = new URL(currentConfig.scriptUrl || DEFAULT_SCRIPT_URL);
-  url.searchParams.append('action', action);
+  const baseUrl = currentConfig.scriptUrl || DEFAULT_SCRIPT_URL;
+  const isWrite = /^(save_|update_|delete_|sync_)/.test(action);
 
-  for (const [key, value] of Object.entries(params)) {
-    if (value === undefined) continue;
-    if (typeof value === 'object') {
-      url.searchParams.append(key, JSON.stringify(value));
-    } else {
-      url.searchParams.append(key, value);
+  if (isWrite) {
+    // Write actions → POST with JSON body
+    const body = JSON.stringify({ action, ...params });
+    const response = await fetch(baseUrl, {
+      method: 'POST',
+      mode: 'cors',
+      body
+    });
+    const data = await response.json();
+    if (!data.ok && data.error) throw new Error(data.error || 'API error');
+    return data;
+  } else {
+    // Read actions → GET with query params
+    const url = new URL(baseUrl);
+    url.searchParams.append('action', action);
+    for (const [key, value] of Object.entries(params)) {
+      if (value === undefined) continue;
+      url.searchParams.append(key, typeof value === 'object' ? JSON.stringify(value) : value);
     }
+    const response = await fetch(url, { method: 'GET', mode: 'cors' });
+    const data = await response.json();
+    if (!data.ok && data.error) throw new Error(data.error || 'API error');
+    return data;
   }
-
-  const response = await fetch(url, { method: 'GET', mode: 'cors' });
-  const data = await response.json();
-
-  if (!data.ok && data.error) {
-    throw new Error(data.error || 'API error');
-  }
-
-  return data;
 }
 </script>
 
