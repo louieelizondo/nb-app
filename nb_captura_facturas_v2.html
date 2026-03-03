@@ -2016,7 +2016,6 @@ function enviarGasto(){
     if (currentBase64) payload.foto_full = currentBase64;
     pushToSheetWithRetry(scriptUrl, payload, 3).then(ok => {
       if(ok){
-        showToast(`✅ Registrado + enviado al Sheet · $${finalTotal.toFixed(2)} · ${forma}`, 4000);
         showToast(`✅ Enviado · $${finalTotal.toFixed(2)} · ${forma}`, 2500);
       } else {
         showToast(`⚠️ Guardado local, Sheet pendiente (reintentará)`, 2500);

@@ -325,11 +325,11 @@ tbody tr.editing { background:#fffde7 !important; }
 
   <div class="filters">
     <div class="chip-group" id="statusFilter">
-      <button class="chip active" onclick="setStatusFilter('Pendiente',this)">Pendientes</button>
+      <button class="chip" onclick="setStatusFilter('Pendiente',this)">Pendientes</button>
       <button class="chip" onclick="setStatusFilter('sin_fecha',this)" style="border-color:#e65100;color:#e65100">📅 Sin fecha</button>
       <button class="chip chip-vencido" onclick="setStatusFilter('Vencido',this)">Vencidos</button>
       <button class="chip" onclick="setStatusFilter('Pagado',this)">Pagados</button>
-      <button class="chip" onclick="setStatusFilter('all',this)">Todos</button>
+      <button class="chip active" onclick="setStatusFilter('all',this)">Todos</button>
     </div>
     <select id="formaFilter" onchange="applyFilters()" style="min-width:140px">
       <option value="">Todas las formas</option>
@@ -426,7 +426,7 @@ tbody tr.editing { background:#fffde7 !important; }
 <script>
 let allGastos = [];
 let filteredGastos = [];
-let currentStatusFilter = 'Pendiente';
+let currentStatusFilter = 'all';
 let editingId = null;
 let selectedIds = new Set();
 const LS_KEY = 'nb_gastos';
@@ -1222,22 +1222,29 @@ async function syncFromSheet(){
       return (now - created) < 48 * 60 * 60 * 1000; // keep only if < 48 hours old
     });
 
+    // Google Sheets returns date cells as Date objects — convert to YYYY-MM-DD string
+    const fmtDate = v => {
+      if (!v) return '';
+      if (v instanceof Date) return v.toISOString().slice(0,10);
+      return String(v).slice(0,10);
+    };
+
     const merged = sheetGastos.map(g => ({
       id           : g.ID || g.id || '',
       folio        : g.Folio || g.folio || '',
       tipo_documento: g.Tipo_Documento || g.tipo_documento || '',
       proveedor    : g.Proveedor || g.proveedor || '',
       proveedor_raw: g.Proveedor_Raw || g.proveedor_raw || '',
-      fecha_compra : (g.Fecha_Compra || g.fecha_compra || '').slice(0,10),
+      fecha_compra : fmtDate(g.Fecha_Compra || g.fecha_compra),
       monto_factura: parseFloat(g.Monto_Factura || g.monto_factura || 0),
       ajustes      : parseFloat(g.Ajustes || g.ajustes || 0),
       monto_pagar  : parseFloat(g.Monto_Pagar || g.monto_pagar || 0),
       forma_pago   : g.Forma_Pago || g.forma_pago || '',
       categoria    : g.Categoria || g.categoria || '',
       estado       : (g.Forma_Pago||g.forma_pago||'').toLowerCase().includes('transferencia')
-        ? (g.Estado || g.estado || 'Pendiente')  // Transferencia: use stored or default Pendiente
-        : 'Pagado',                               // Everything else: always Pagado, no manual pay step
-      fecha_pago   : (g.Fecha_Pago || g.fecha_pago || '').slice(0,10),
+        ? (g.Estado || g.estado || 'Pendiente')
+        : 'Pagado',
+      fecha_pago   : fmtDate(g.Fecha_Pago || g.fecha_pago),
       credit_days  : parseInt(g.Credit_Days || g.credit_days || 0),
       comprobante  : g.Comprobante || g.comprobante || '',
       created_at   : g.Created_At || g.created_at || '',
