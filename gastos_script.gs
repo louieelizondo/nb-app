@@ -75,6 +75,18 @@ function doGet(e) {
       case 'list_products': return jsonResp(listProducts());
       case 'list_orders':   return jsonResp(listOrders());
       case 'health':        return jsonResp({ ok: true, ts: new Date().toISOString() });
+      // Cortes & Ingresos
+      case 'get_cortes_dia':       return jsonResp(getCortesDia(e.parameter));
+      case 'get_corte_tienda':     return jsonResp(getCorteTienda(e.parameter));
+      case 'get_arqueos':          return jsonResp(getArqueos(e.parameter));
+      case 'get_transferencias':   return jsonResp(getTransferencias(e.parameter));
+      case 'get_ingresos':         return jsonResp(getIngresos(e.parameter));
+      case 'get_monthly_summary':  return jsonResp(getMonthlySummary(e.parameter));
+      case 'get_dashboard_data':   return jsonResp(getDashboardData(e.parameter));
+      case 'get_payment_trends':   return jsonResp(getPaymentTrends(e.parameter));
+      case 'get_faltante_history': return jsonResp(getFaltanteHistory(e.parameter));
+      case 'get_mesa_sales':       return jsonResp(getMesaSales(e.parameter));
+      case 'get_config_cajas':     return jsonResp({ cajas: getConfigCajas() });
       default:              return jsonResp({ error: 'Unknown action: ' + action }, 400);
     }
   } catch(err) {
@@ -110,6 +122,18 @@ function doPost(e) {
       case 'update_order':     return jsonResp(updateOrder(body));
       case 'audit':            return jsonResp(writeAudit(body));
       case 'sync_batch':       return jsonResp(processSyncBatch(body));
+      // Cortes & Ingresos
+      case 'save_corte_individual':   return jsonResp(saveCorteIndividual(body));
+      case 'delete_corte_individual': return jsonResp(deleteCorteIndividual(body));
+      case 'save_corte_tienda':       return jsonResp(saveCorteTienda(body));
+      case 'save_arqueo':             return jsonResp(saveArqueo(body));
+      case 'save_transferencia':      return jsonResp(saveTransferencia(body));
+      case 'save_ingreso':            return jsonResp(saveIngreso(body));
+      case 'update_sobre2':           return jsonResp(updateSobre2(body));
+      case 'update_facturacion':      return jsonResp(updateFacturacion(body));
+      case 'update_neto_mensual':     return jsonResp(updateNetoMensual(body));
+      case 'sync_shopify':            return jsonResp(syncShopifyDaily(body));
+      case 'update_config_cajas':     return jsonResp(updateConfigCajas(body));
       default:                 return jsonResp({ error: 'Unknown action: ' + action }, 400);
     }
   } catch(err) {
@@ -852,6 +876,12 @@ function processSyncBatch(body) {
         case 'save_order':     result = saveOrder(op); break;
         case 'update_order':   result = updateOrder(op); break;
         case 'audit':          result = writeAudit(op); break;
+        // Cortes & Ingresos (offline-sync support)
+        case 'save_corte_individual': result = saveCorteIndividual(op); break;
+        case 'save_corte_tienda':     result = saveCorteTienda(op); break;
+        case 'save_arqueo':           result = saveArqueo(op); break;
+        case 'save_transferencia':    result = saveTransferencia(op); break;
+        case 'save_ingreso':          result = saveIngreso(op); break;
         default: result = { ok: false, error: 'Unknown action: ' + op.action };
       }
       // If the inner function returned a conflict, bubble it up as not-ok
