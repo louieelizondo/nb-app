@@ -329,6 +329,7 @@ tbody tr.editing { background:#fffde7 !important; }
       <button class="chip" onclick="setStatusFilter('sin_fecha',this)" style="border-color:#e65100;color:#e65100">📅 Sin fecha</button>
       <button class="chip chip-vencido" onclick="setStatusFilter('Vencido',this)">Vencidos</button>
       <button class="chip" onclick="setStatusFilter('Pagado',this)">Pagados</button>
+      <button class="chip" onclick="setStatusFilter('remision',this)" style="border-color:#6a1b9a;color:#6a1b9a">📋 Remisiones</button>
       <button class="chip active" onclick="setStatusFilter('all',this)">Todos</button>
     </div>
     <select id="formaFilter" onchange="applyFilters()" style="min-width:140px">
@@ -422,33 +423,80 @@ tbody tr.editing { background:#fffde7 !important; }
 </div>
 
 <!-- MANUAL ENTRY MODAL -->
+<style>
+  .man-sup-wrap { position:relative; }
+  .man-sup-list { position:absolute; top:100%; left:0; right:0; background:white; border:2px solid #e0d8cf; border-top:none; border-radius:0 0 10px 10px; max-height:180px; overflow-y:auto; z-index:100; display:none; }
+  .man-sup-item { padding:8px 14px; font-size:13px; cursor:pointer; }
+  .man-sup-item:hover { background:#f5f0ea; }
+  .man-sup-item.create-new { color:#1565c0; font-weight:700; border-top:1px solid #e0d8cf; }
+  .man-create-form { background:#f5f0ea; border-radius:10px; padding:12px; margin-top:8px; display:none; }
+  .man-create-form input, .man-create-form select { margin-bottom:8px; }
+  .man-tipo-row { display:flex; gap:8px; margin-top:6px; }
+  .man-tipo-btn { flex:1; padding:8px 4px; border:2px solid #e0d8cf; border-radius:8px; background:white; font-size:12px; font-weight:700; cursor:pointer; text-align:center; transition:all .15s; }
+  .man-tipo-btn.active { border-color:#2e6b2e; background:#e8f5e9; color:#2e6b2e; }
+  .man-comprobante-wrap { display:none; }
+  #manualComprobanteLabel { font-size:12px; color:#7a6b5d; padding:10px; border:2px dashed #c5b9ad; border-radius:8px; cursor:pointer; text-align:center; display:block; transition:border-color .2s; }
+  #manualComprobanteLabel:hover { border-color:#2e6b2e; }
+  #manualComprobanteFile { display:none; }
+</style>
 <div class="modal-bg" id="manualModal">
-  <div class="modal">
+  <div class="modal" style="max-height:90vh;overflow-y:auto">
     <h3>➕ Entrada Manual</h3>
-    <label>Categoría *</label>
-    <select id="manualCategoria">
-      <option value="">— Seleccionar —</option>
-      <option value="Nómina">Nómina</option>
-      <option value="IMSS">IMSS</option>
-      <option value="Servicios">Servicios</option>
-      <option value="Renta">Renta</option>
-      <option value="Mantenimiento">Mantenimiento</option>
-      <option value="Otro">Otro</option>
-    </select>
-    <label>Descripción *</label>
+
+    <!-- Tipo: Factura / Remisión / Gasto -->
+    <label>Tipo de documento</label>
+    <div class="man-tipo-row">
+      <div class="man-tipo-btn active" id="tipoFacturaBtn" onclick="setManualTipo('Factura')">🧾 Factura</div>
+      <div class="man-tipo-btn" id="tipoRemisionBtn" onclick="setManualTipo('Remisión')">📋 Remisión</div>
+      <div class="man-tipo-btn" id="tipoGastoBtn" onclick="setManualTipo('Gasto')">💸 Gasto</div>
+    </div>
+
+    <!-- Proveedor with live search -->
+    <label>Proveedor *</label>
+    <div class="man-sup-wrap">
+      <input type="text" id="manualProvInput" placeholder="Buscar o escribir proveedor…"
+        autocomplete="off" oninput="manSupSearch()" onfocus="manSupSearch()" onblur="setTimeout(manSupClose,200)">
+      <div class="man-sup-list" id="manSupList"></div>
+    </div>
+    <input type="hidden" id="manualProvNombre">
+
+    <!-- Inline create supplier form -->
+    <div class="man-create-form" id="manCreateForm">
+      <div style="font-size:12px;font-weight:700;color:#1565c0;margin-bottom:8px">✨ Nuevo proveedor</div>
+      <input type="text" id="manNewRFC" placeholder="RFC (opcional)">
+      <div style="display:flex;gap:8px">
+        <input type="number" id="manNewDias" placeholder="Días crédito" style="flex:1;margin-bottom:0" min="0">
+        <select id="manNewFormaPago" style="flex:1;margin-bottom:8px">
+          <option value="Transferencia">Transferencia</option>
+          <option value="Efectivo">Efectivo</option>
+          <option value="Tarjeta crédito">Tarjeta crédito</option>
+          <option value="Cheque">Cheque</option>
+        </select>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:4px">
+        <button class="btn" style="flex:1;background:#1565c0;color:white;font-size:12px;padding:8px" onclick="manSaveNewSupplier()">Guardar</button>
+        <button class="btn btn-undo" style="flex:1;font-size:12px;padding:8px" onclick="manCancelNewSupplier()">Cancelar</button>
+      </div>
+    </div>
+
+    <!-- Descripción optional -->
+    <label>Descripción <span style="color:#bbb;font-weight:400">(opcional)</span></label>
     <input type="text" id="manualDescripcion" placeholder="Ej: Nómina quincena 1 marzo, CFE marzo…">
+
     <label>Monto *</label>
     <input type="number" id="manualMonto" placeholder="0.00" step="0.01" min="0">
+
     <div style="display:flex;gap:12px">
       <div style="flex:1">
         <label>Fecha</label>
         <input type="date" id="manualFecha">
       </div>
       <div style="flex:1">
-        <label>Fecha de pago (si ya se pagó)</label>
-        <input type="date" id="manualFechaPago">
+        <label>Fecha de pago <span style="color:#bbb;font-weight:400">(si ya pagado)</span></label>
+        <input type="date" id="manualFechaPago" oninput="manFechaPagoChanged()">
       </div>
     </div>
+
     <label>Forma de pago</label>
     <select id="manualFormaPago">
       <option value="Transferencia">Transferencia</option>
@@ -457,11 +505,40 @@ tbody tr.editing { background:#fffde7 !important; }
       <option value="Tarjeta débito">Tarjeta débito</option>
       <option value="Cheque">Cheque</option>
     </select>
+
+    <!-- Comprobante — revealed when fecha de pago is filled -->
+    <div class="man-comprobante-wrap" id="manComprobanteWrap">
+      <label>Comprobante de pago</label>
+      <label id="manualComprobanteLabel" for="manualComprobanteFile">
+        📎 <span id="manComprobanteText">Adjuntar PDF o imagen</span>
+      </label>
+      <input type="file" id="manualComprobanteFile" accept="image/*,.pdf" onchange="manComprobanteSelected()">
+    </div>
+
     <label>Notas (opcional)</label>
-    <input type="text" id="manualNotas" placeholder="Referencia, número de pago, etc.">
+    <input type="text" id="manualNotas" placeholder="Referencia, número de folio, etc.">
+
     <div class="modal-actions">
       <button class="btn btn-undo" onclick="closeManualModal()">Cancelar</button>
       <button class="btn btn-pay" onclick="confirmManualEntry()">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<!-- CFDI CONVERSION MODAL -->
+<div class="modal-bg" id="cfdiModal">
+  <div class="modal">
+    <h3>📄 Convertir Remisión a CFDI</h3>
+    <div id="cfdiProvNombre" style="font-size:13px;color:#7a6b5d;margin-bottom:12px"></div>
+    <label>UUID / Folio Fiscal <span style="color:#bbb;font-weight:400">(opcional)</span></label>
+    <input type="text" id="cfdiUUID" placeholder="Ej: A1B2C3D4-E5F6-...">
+    <label>Folio de Factura <span style="color:#bbb;font-weight:400">(opcional)</span></label>
+    <input type="text" id="cfdiFollio" placeholder="Ej: F001-2345">
+    <label>Fecha de emisión CFDI</label>
+    <input type="date" id="cfdiDate">
+    <div class="modal-actions">
+      <button class="btn btn-undo" onclick="closeCfdiModal()">Cancelar</button>
+      <button class="btn btn-pay" style="background:#6a1b9a" onclick="confirmCfdi()">✅ Confirmar CFDI</button>
     </div>
   </div>
 </div>
@@ -799,6 +876,9 @@ function applyFilters(){
       const isTransfer = (g.forma_pago||'').toLowerCase().includes('transferencia');
       if(!isTransfer) return false;
       if(g.fecha_pago && g.fecha_pago !== g.fecha_compra) return false; // has a real date
+    } else if(currentStatusFilter === 'remision'){
+      // Show remisiones pending CFDI conversion
+      if((g.tipo_documento||'') !== 'Remisión' && (g.tipo_documento||'') !== 'Remision') return false;
     } else if(currentStatusFilter !== 'all' && g.estado !== currentStatusFilter) return false;
     if(forma && g.forma_pago !== forma) return false;
     if(year && !(g.fecha_compra||'').startsWith(year) && !(g.fecha_pago||'').startsWith(year)) return false;
@@ -934,6 +1014,12 @@ function renderTable(){
       ? `<span class="date-link" onclick="openDateModal('${g.id}')" title="Click para cambiar fecha">${dateLabel}</span>${hasRealDate ? countdownLabel(g.fecha_pago) : ''}`
       : `${formatDate(g.fecha_pago)}`;
 
+    // Remisión CFDI badge
+    const isRemision = (g.tipo_documento||'') === 'Remisión' || (g.tipo_documento||'') === 'Remision';
+    const cfdiBtn = isRemision && !g.cfdi_recibido
+      ? `<button class="btn" onclick="event.stopPropagation();openCfdiModal('${g.id}')" style="background:#6a1b9a;color:white;font-size:10px;padding:3px 7px;margin-left:4px">📄 CFDI</button>`
+      : (g.cfdi_recibido ? `<span style="font-size:10px;color:#6a1b9a;margin-left:4px">✅ CFDI</span>` : '');
+
     // Desktop actions: pay/undo + foto (NO delete button inline — delete is via selection)
     const actions = !isPaid
       ? `<button class="btn btn-pay" onclick="openPayModal('${g.id}')">💰 Pagar</button>`
@@ -958,7 +1044,7 @@ function renderTable(){
             <div>
               <strong style="font-size:15px">${g.proveedor||g.proveedor_raw||'—'}</strong>
               ${g.credit_days?`<span style="font-size:10px;color:#999;margin-left:6px">⏳ ${g.credit_days}d</span>`:''}
-              <div style="font-size:11px;color:#aaa;margin-top:1px">${g.tipo_documento||''} ${g.folio?'#'+g.folio:''}</div>
+              <div style="font-size:11px;color:#aaa;margin-top:1px">${g.tipo_documento||''} ${g.folio?'#'+g.folio:''}${g.cfdi_recibido?` <span style="color:#6a1b9a">✅ CFDI</span>`:''}</div>
             </div>
             <div style="text-align:right">
               <strong style="font-size:17px;color:#2d2319">$${(g.monto_pagar||0).toLocaleString('es-MX',{minimumFractionDigits:2})}</strong>
@@ -968,6 +1054,7 @@ function renderTable(){
           <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
             ${estadoBadge}
             <span class="fp-chip ${fpClass}" style="font-size:10px">${fpIcons[fpKey]} ${g.forma_pago}</span>
+            ${isRemision && !g.cfdi_recibido?`<button class="btn" onclick="event.stopPropagation();openCfdiModal('${g.id}')" style="background:#6a1b9a;color:white;font-size:10px;padding:3px 7px">📄 CFDI</button>`:''}
             ${hasFoto(g)?`<button class="btn-foto" onclick="event.stopPropagation();openFoto('${g.id}')" style="font-size:10px;padding:3px 6px">📷</button>`:''}
           </div>
           <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px">
@@ -1028,7 +1115,7 @@ function renderTable(){
         <strong>${g.proveedor||g.proveedor_raw||'—'}</strong>
         ${g.credit_days?`<div style="font-size:10px;color:#999">⏳ ${g.credit_days} días crédito</div>`:''}
       </td>
-      <td style="font-size:12px;color:#7a6b5d">${g.tipo_documento||''} ${g.folio?'#'+g.folio:''}</td>
+      <td style="font-size:12px;color:#7a6b5d">${g.tipo_documento||''} ${g.folio?'#'+g.folio:''}${g.cfdi_recibido?' ✅':''}</td>
       <td style="font-size:11px;color:#999">${formatDate(g.fecha_compra)}</td>
       <td>
         <strong style="font-size:15px">$${(g.monto_pagar||0).toLocaleString('es-MX',{minimumFractionDigits:2})}</strong>
@@ -1037,7 +1124,7 @@ function renderTable(){
       <td><span class="fp-chip ${fpClass}">${fpIcons[fpKey]} ${g.forma_pago}</span></td>
       <td style="font-size:11px;color:#7a6b5d">${g.categoria||'—'}</td>
       <td>${estadoBadge}${compRef}</td>
-      <td style="white-space:nowrap">${actions}${fotoBtn}</td>
+      <td style="white-space:nowrap">${actions}${cfdiBtn}${fotoBtn}</td>
       ${mobileCard}
     </tr>${editRow}`;
   }).join('');
@@ -1348,15 +1435,140 @@ async function pushDateToSheet(id, fechaPago, estado){
 }
 
 // ── Manual Entry ──
+let _manualTipo = 'Factura';
+let _manComprobanteData = null; // base64 string or filename
+
+function setManualTipo(tipo) {
+  _manualTipo = tipo;
+  ['Factura','Remisión','Gasto'].forEach(t => {
+    const btn = document.getElementById('tipo' + t.replace('ó','o') + 'Btn');
+    if (btn) btn.classList.toggle('active', t === tipo);
+  });
+}
+
+// Proveedor search in manual modal
+let _manualProveedoresList = [];
+function manLoadProveedores() {
+  try {
+    const cached = localStorage.getItem('nb_proveedores_cache');
+    if (cached) {
+      const obj = JSON.parse(cached);
+      _manualProveedoresList = Object.values(obj).map(v => v.name || v).filter(Boolean).sort();
+    }
+  } catch(e) {}
+  // Also grab any names directly from allGastos
+  const fromGastos = [...new Set(allGastos.map(g => g.proveedor).filter(Boolean))];
+  const all = [...new Set([..._manualProveedoresList, ...fromGastos])].sort();
+  _manualProveedoresList = all;
+}
+
+function manSupSearch() {
+  const q = (document.getElementById('manualProvInput').value || '').toLowerCase().trim();
+  const list = document.getElementById('manSupList');
+  const matches = q
+    ? _manualProveedoresList.filter(s => s.toLowerCase().includes(q))
+    : _manualProveedoresList.slice(0, 12);
+  let html = matches.map(s =>
+    `<div class="man-sup-item" onmousedown="manSupSelect('${s.replace(/'/g,"\\'")}')">
+      ${s}
+    </div>`
+  ).join('');
+  // Always show create new at bottom
+  const label = document.getElementById('manualProvInput').value.trim();
+  html += `<div class="man-sup-item create-new" onmousedown="manSupCreateNew()">
+    ➕ ${label ? `Crear "${label}"` : 'Crear nuevo proveedor'}
+  </div>`;
+  list.innerHTML = html;
+  list.style.display = 'block';
+}
+
+function manSupClose() {
+  const list = document.getElementById('manSupList');
+  if (list) list.style.display = 'none';
+}
+
+function manSupSelect(name) {
+  document.getElementById('manualProvInput').value = name;
+  document.getElementById('manualProvNombre').value = name;
+  manSupClose();
+  document.getElementById('manCreateForm').style.display = 'none';
+}
+
+function manSupCreateNew() {
+  const name = document.getElementById('manualProvInput').value.trim();
+  if (!name) { showToast('Escribe el nombre primero', 'error'); return; }
+  document.getElementById('manualProvNombre').value = name;
+  document.getElementById('manNewRFC').value = '';
+  document.getElementById('manNewDias').value = '';
+  document.getElementById('manNewFormaPago').value = 'Transferencia';
+  document.getElementById('manCreateForm').style.display = 'block';
+  manSupClose();
+}
+
+function manSaveNewSupplier() {
+  const name = document.getElementById('manualProvInput').value.trim();
+  const rfc = document.getElementById('manNewRFC').value.trim();
+  const dias = parseInt(document.getElementById('manNewDias').value) || 0;
+  const forma = document.getElementById('manNewFormaPago').value;
+  if (!name) { showToast('Nombre requerido', 'error'); return; }
+  // Save to proveedores cache
+  try {
+    const cached = localStorage.getItem('nb_proveedores_cache');
+    const obj = cached ? JSON.parse(cached) : {};
+    const key = name.toLowerCase().replace(/\s+/g,'_');
+    obj[key] = { name, rfc, creditDays: dias, formaPago: forma };
+    localStorage.setItem('nb_proveedores_cache', JSON.stringify(obj));
+    if (!_manualProveedoresList.includes(name)) _manualProveedoresList.push(name);
+  } catch(e) {}
+  document.getElementById('manualProvNombre').value = name;
+  document.getElementById('manCreateForm').style.display = 'none';
+  showToast('✅ Proveedor guardado: ' + name);
+  // Push to script if connected
+  const scriptUrl = getScriptUrl();
+  if (scriptUrl) {
+    enqueueSync({ action: 'add_proveedor', nombre: name, rfc, dias_credito: dias, forma_pago: forma });
+  }
+}
+
+function manCancelNewSupplier() {
+  document.getElementById('manCreateForm').style.display = 'none';
+}
+
+function manFechaPagoChanged() {
+  const val = document.getElementById('manualFechaPago').value;
+  const wrap = document.getElementById('manComprobanteWrap');
+  if (wrap) wrap.style.display = val ? 'block' : 'none';
+}
+
+function manComprobanteSelected() {
+  const file = document.getElementById('manualComprobanteFile').files[0];
+  if (!file) return;
+  const label = document.getElementById('manComprobanteText');
+  label.textContent = file.name;
+  // Read as base64 for local storage
+  const reader = new FileReader();
+  reader.onload = e => { _manComprobanteData = e.target.result; };
+  reader.readAsDataURL(file);
+}
+
 function openManualModal() {
+  _manualTipo = 'Factura';
+  _manComprobanteData = null;
+  setManualTipo('Factura');
+  manLoadProveedores();
   const today = new Date().toISOString().slice(0,10);
   document.getElementById('manualFecha').value = today;
   document.getElementById('manualFechaPago').value = '';
-  document.getElementById('manualCategoria').value = '';
+  document.getElementById('manualProvInput').value = '';
+  document.getElementById('manualProvNombre').value = '';
   document.getElementById('manualDescripcion').value = '';
   document.getElementById('manualMonto').value = '';
   document.getElementById('manualNotas').value = '';
   document.getElementById('manualFormaPago').value = 'Transferencia';
+  document.getElementById('manCreateForm').style.display = 'none';
+  document.getElementById('manComprobanteWrap').style.display = 'none';
+  const ct = document.getElementById('manComprobanteText');
+  if (ct) ct.textContent = 'Adjuntar PDF o imagen';
   document.getElementById('manualModal').classList.add('open');
 }
 
@@ -1365,7 +1577,7 @@ function closeManualModal() {
 }
 
 function confirmManualEntry() {
-  const categoria = document.getElementById('manualCategoria').value;
+  const proveedor = (document.getElementById('manualProvNombre').value || document.getElementById('manualProvInput').value).trim();
   const descripcion = document.getElementById('manualDescripcion').value.trim();
   const monto = parseFloat(document.getElementById('manualMonto').value) || 0;
   const fecha = document.getElementById('manualFecha').value;
@@ -1373,8 +1585,7 @@ function confirmManualEntry() {
   const formaPago = document.getElementById('manualFormaPago').value;
   const notas = document.getElementById('manualNotas').value.trim();
 
-  if (!categoria) { showToast('Selecciona una categoría', 'error'); return; }
-  if (!descripcion) { showToast('La descripción es obligatoria', 'error'); return; }
+  if (!proveedor) { showToast('El proveedor es obligatorio', 'error'); return; }
   if (!monto || monto <= 0) { showToast('El monto debe ser mayor a cero', 'error'); return; }
   if (!fecha) { showToast('La fecha es obligatoria', 'error'); return; }
 
@@ -1383,10 +1594,11 @@ function confirmManualEntry() {
   const newEntry = {
     id,
     folio: id,
-    tipo_documento: 'Manual',
-    proveedor: descripcion,
-    proveedor_raw: descripcion,
-    categoria,
+    tipo_documento: _manualTipo,
+    proveedor,
+    proveedor_raw: proveedor,
+    categoria: _manualTipo,
+    descripcion: descripcion || null,
     fecha_compra: fecha,
     monto_factura: monto,
     monto_pagar: monto,
@@ -1395,7 +1607,8 @@ function confirmManualEntry() {
     fecha_pago: fechaPago || fecha,
     fecha_pago_real: yaFuePagado ? fechaPago : null,
     credit_days: 0,
-    comprobante: notas,
+    comprobante: _manComprobanteData || notas || '',
+    notas,
     created_at: new Date().toISOString(),
     _manual: true
   };
@@ -1405,13 +1618,50 @@ function confirmManualEntry() {
   buildYearFilter();
   applyFilters();
   closeManualModal();
-  showToast('✅ Entrada registrada: ' + descripcion);
+  showToast('✅ Entrada registrada: ' + proveedor + (descripcion ? ' · ' + descripcion : ''));
 
   // Push to sheet if connected
   const scriptUrl = getScriptUrl();
   if (scriptUrl) {
     enqueueSync({ action: 'create', gasto: newEntry });
   }
+}
+
+// ── Remisión → CFDI Tracking ──
+let _cfdiTargetId = null;
+
+function openCfdiModal(id) {
+  _cfdiTargetId = id;
+  const g = allGastos.find(x => x.id === id);
+  if (!g) return;
+  document.getElementById('cfdiProvNombre').textContent = g.proveedor + (g.folio ? ' · #' + g.folio : '');
+  document.getElementById('cfdiUUID').value = g.cfdi_uuid || '';
+  document.getElementById('cfdiFollio').value = g.cfdi_folio || '';
+  document.getElementById('cfdiDate').value = new Date().toISOString().slice(0,10);
+  document.getElementById('cfdiModal').classList.add('open');
+}
+
+function closeCfdiModal() {
+  document.getElementById('cfdiModal').classList.remove('open');
+  _cfdiTargetId = null;
+}
+
+function confirmCfdi() {
+  const g = allGastos.find(x => x.id === _cfdiTargetId);
+  if (!g) return;
+  g.cfdi_uuid  = document.getElementById('cfdiUUID').value.trim();
+  g.cfdi_folio = document.getElementById('cfdiFollio').value.trim();
+  g.cfdi_fecha = document.getElementById('cfdiDate').value;
+  g.cfdi_recibido = true;
+  // Keep as Remisión for history but mark converted
+  g._cfdi_convertido = true;
+  if (g.cfdi_folio) g.folio = g.cfdi_folio; // update visible folio
+  saveGastos();
+  applyFilters();
+  closeCfdiModal();
+  showToast('✅ CFDI registrado: ' + g.proveedor);
+  const scriptUrl = getScriptUrl();
+  if (scriptUrl) enqueueSync({ action: 'update_factura', id: g.id, cfdi_uuid: g.cfdi_uuid, cfdi_folio: g.cfdi_folio, cfdi_fecha: g.cfdi_fecha, cfdi_recibido: true });
 }
 
 // ── Init ──
@@ -1444,6 +1694,7 @@ document.addEventListener('click', e => {
   if(e.target.id === 'dateModal') closeDateModal();
   if(e.target.id === 'fotoModal') closeFotoModal();
   if(e.target.id === 'manualModal') closeManualModal();
+  if(e.target.id === 'cfdiModal') closeCfdiModal();
 });
 </script>
 </body>

@@ -365,9 +365,15 @@ body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif
     <h2>📦 Recibir Pedido</h2>
     <div id="receiveModalInfo"></div>
     <label>Recibido por</label>
-    <select id="receiverSelect" style="width:100%;padding:10px;border:1px solid var(--gray-border);border-radius:8px;font-size:14px;margin-bottom:8px">
-      <option value="">— Seleccionar —</option>
-    </select>
+    <div style="position:relative">
+      <input type="text" id="receiverInput" placeholder="Escribe el nombre…"
+        autocomplete="off" oninput="recSuggest()" onfocus="recSuggest()"
+        onblur="setTimeout(()=>document.getElementById('recSuggestBox').style.display='none',180)"
+        style="width:100%;padding:10px;border:1px solid var(--gray-border);border-radius:8px;font-size:14px;margin-bottom:4px;box-sizing:border-box">
+      <div id="recSuggestBox" style="display:none;position:absolute;top:100%;left:0;right:0;background:white;border:1px solid var(--gray-border);border-radius:8px;max-height:160px;overflow-y:auto;z-index:50;box-shadow:0 4px 12px rgba(0,0,0,.1)"></div>
+    </div>
+    <!-- Recent names chips -->
+    <div id="recRecentChips" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px"></div>
     <label>📷 Foto de factura (opcional)</label>
     <input type="file" id="receivePhoto" accept="image/*" capture="environment" style="font-size:13px;padding:6px 0;margin-bottom:8px">
     <label>Notas (opcional)</label>
@@ -947,7 +953,7 @@ function renderSummaryContent() {
         html += `<div class="buy-item ${excl ? 'excluded' : ''} ${nf ? 'not-found' : ''}">
           <input type="checkbox" ${excl ? '' : 'checked'} onchange="toggleShoppingExclusion(${item.idx})">
           <span class="item-label">${item.name}${nfBadge}</span>
-          <span class="qty">${item.qty}${item.unit ? ' '+item.unit : ''}</span>
+          <span class="qty">${item.qty}${item.unit ? `<span style="font-size:10px;background:#e3f2fd;color:#1565c0;border-radius:4px;padding:1px 5px;margin-left:4px;font-weight:600">${item.unit}</span>` : ''}</span>
           <button class="btn-nf ${nf ? 'active' : ''}" title="${nf ? 'Quitar' : 'No encontré este producto'}" onclick="toggleNotFound(${item.idx})">${nf ? '🔄' : '🔍'}</button>
         </div>`;
       });
@@ -1672,15 +1678,47 @@ function openReceiveModal(orderId) {
       <div style="font-size:12px;color:var(--gray);margin-top:4px">${order.items.length} productos · Ordenado ${timeAgo(order.ordered_at)}</div>
     </div>`;
 
-  // Populate receivers dropdown
-  const sel = document.getElementById('receiverSelect');
-  sel.innerHTML = '<option value="">— Seleccionar —</option>' +
-    receivers.map(r => `<option value="${r}">${r}</option>`).join('') +
-    '<option value="__other__">+ Otro nombre</option>';
+  // Populate receiver input with recent names
+  document.getElementById('receiverInput').value = '';
+  document.getElementById('recSuggestBox').style.display = 'none';
+  // Build recent chips (names used in last 30 days)
+  const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+  const recentNames = [...new Set(
+    orders.filter(o => o.status === 'received' && o.received_at >= cutoff && o.receiver)
+          .sort((a,b) => b.received_at.localeCompare(a.received_at))
+          .map(o => o.receiver)
+  )].slice(0, 8);
+  const chipsEl = document.getElementById('recRecentChips');
+  chipsEl.innerHTML = recentNames.length
+    ? recentNames.map(n => `<button onclick="recPickName('${n.replace(/'/g,"\\'")}')"
+        style="padding:4px 10px;border:1px solid var(--gray-border);border-radius:20px;background:white;font-size:12px;cursor:pointer">${n}</button>`).join('')
+    : '<span style="font-size:12px;color:var(--gray)">Sin historial reciente</span>';
 
   document.getElementById('receivePhoto').value = '';
   document.getElementById('receiveNotes').value = '';
   document.getElementById('receiveModal').classList.add('open');
+}
+
+function recPickName(name) {
+  document.getElementById('receiverInput').value = name;
+  document.getElementById('recSuggestBox').style.display = 'none';
+}
+
+function recSuggest() {
+  const q = (document.getElementById('receiverInput').value || '').toLowerCase().trim();
+  const box = document.getElementById('recSuggestBox');
+  const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+  const recent = [...new Set(
+    orders.filter(o => o.status === 'received' && o.received_at >= cutoff && o.receiver)
+          .map(o => o.receiver)
+  )];
+  const allKnown = [...new Set([...recent, ...receivers])];
+  const matches = q ? allKnown.filter(n => n.toLowerCase().includes(q)) : allKnown;
+  if (!matches.length) { box.style.display = 'none'; return; }
+  box.innerHTML = matches.map(n =>
+    `<div style="padding:8px 12px;font-size:13px;cursor:pointer" onmousedown="recPickName('${n.replace(/'/g,"\\'")}');event.preventDefault()">${n}</div>`
+  ).join('');
+  box.style.display = 'block';
 }
 function closeReceiveModal() { document.getElementById('receiveModal').classList.remove('open'); receivingOrderId = null; }
 
@@ -1688,14 +1726,13 @@ async function confirmReceive() {
   const order = orders.find(o => o.id === receivingOrderId);
   if (!order) return;
 
-  let receiver = document.getElementById('receiverSelect').value;
-  if (receiver === '__other__') {
-    receiver = prompt('Nombre de quien recibe:');
-    if (receiver && !receivers.includes(receiver)) {
-      receivers.push(receiver);
-    }
+  let receiver = (document.getElementById('receiverInput').value || '').trim();
+  if (!receiver) { toast('Escribe quién recibe'); return; }
+  // Add to known receivers if new
+  if (!receivers.includes(receiver)) {
+    receivers.push(receiver);
+    saveReceivers();
   }
-  if (!receiver) { toast('Selecciona quién recibe'); return; }
 
   order.status = 'received';
   order.received_at = new Date().toISOString();

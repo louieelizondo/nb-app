@@ -426,7 +426,10 @@ tr:last-child td { border-bottom: none; }
   <!-- RESULTS -->
   <div id="resultsSection" style="display:none">
     <div class="card">
-      <div class="card-title">📋 Resultados <span class="count-badge" id="resultsCount">0</span></div>
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
+        <div class="card-title" style="margin-bottom:0">📋 Resultados <span class="count-badge" id="resultsCount">0</span></div>
+        <button class="btn btn-outline btn-small" id="addPage2Btn" style="display:none;border-color:#1565c0;color:#1565c0" onclick="addPage2()">📄➕ Agregar Página 2</button>
+      </div>
       <div class="stats-row" id="statsRow"></div>
 
       <!-- FILTER BAR -->
@@ -1440,8 +1443,63 @@ function resetAll(){
   document.getElementById('adjustSection').style.display='none';
   document.getElementById('fileInput').value='';
   document.getElementById('gastosPanel').style.display='none';
+  const p2btn = document.getElementById('addPage2Btn'); if(p2btn) p2btn.style.display='none';
+  _page2Mode = false;
   currentBase64=null; currentItems=[]; currentAdjustments=[]; adjNextId=0; currentInvoiceTotal=0; lastParsed=null;
   ssClose(); supClose();
+}
+
+// ══════════════════════════════════════════════
+// TWO-PAGE INVOICE SUPPORT
+// ══════════════════════════════════════════════
+let _page2Mode = false; // true while we're appending page 2
+
+function addPage2() {
+  _page2Mode = true;
+  showToast('📄 Captura la página 2 de la factura', 3000);
+  // Re-open camera / file selector
+  openCamera();
+}
+
+// Called after parsing completes — if in page2 mode, merge rather than replace
+function mergeOrReplaceItems(parsed) {
+  if (_page2Mode && currentItems.length > 0) {
+    _page2Mode = false;
+    const page1Count = currentItems.length;
+    // Add a visual separator item
+    currentItems.push({ _pageSeparator: true, descripcion: '─── Página 2 ───' });
+    const newItems = (parsed.items || []).map(it => ({
+      ...it,
+      _match: findMatch(it.descripcion),
+      _page: 2
+    }));
+    currentItems.push(...newItems);
+    // Update total
+    currentInvoiceTotal += (parsed.total || 0);
+    // Re-render the table
+    renderResultsTable();
+    showToast(`✅ Página 2 agregada: ${newItems.length} productos más`, 3000);
+    document.getElementById('resultsSection').scrollIntoView({ behavior: 'smooth' });
+    return true; // merged
+  }
+  return false; // normal replace
+}
+
+function renderResultsTable() {
+  document.getElementById('resultsBody').innerHTML = currentItems.map((it, i) => {
+    if (it._pageSeparator) {
+      return `<tr><td colspan="8" style="text-align:center;font-size:11px;color:#bbb;padding:6px 0;border-top:2px dashed #e0e0e0;border-bottom:2px dashed #e0e0e0;background:#fafafa">${it.descripcion}</td></tr>`;
+    }
+    const m = it._match;
+    const bc = m ? (m.p || '') : '';
+    const fp = it.precio_base || it.precio_unitario || 0;
+    const ub = it.unidad_base || it.unidad || '';
+    const cls = m?.matchType === 'learned' ? 'corr-trigger learned' : 'corr-trigger';
+    const need = !m || ['fuzzy', 'contains', 'none'].includes(m.matchType);
+    const lbl = need ? '✏️ Corregir' : (m?.matchType === 'learned' ? '📚 Cambiar' : '✓ OK');
+    return `<tr id="row_${i}">${buildRowInner(i, it, m, chHTML(fp, bc), fp, bc, ub, cls, lbl)}</tr>`;
+  }).join('');
+  document.getElementById('resultsCount').textContent = currentItems.filter(it => !it._pageSeparator).length;
 }
 
 // ══════════════════════════════════════════════
@@ -1830,6 +1888,13 @@ Responde ÚNICAMENTE con JSON válido (sin texto antes ni después, sin markdown
 // RENDER
 // ══════════════════════════════════════════════
 function renderResults(parsed){
+  // If we're adding page 2, merge instead of replacing
+  if (_page2Mode) {
+    if (mergeOrReplaceItems(parsed)) {
+      updateGastosPanel();
+      return;
+    }
+  }
   // Reset adjustments & invoice total
   lastParsed = parsed;
   currentAdjustments = []; adjNextId = 0;
@@ -1871,6 +1936,7 @@ function renderResults(parsed){
   }).join('');
   document.getElementById('resultsSection').style.display='block';
   document.getElementById('adjustSection').style.display='block';
+  document.getElementById('addPage2Btn').style.display = 'inline-flex';
   renderAdjList();
   updateGastosPanel();
   document.getElementById('resultsSection').scrollIntoView({behavior:'smooth'});
