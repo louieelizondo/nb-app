@@ -1370,6 +1370,9 @@
       const saveBtn = document.getElementById('cb3_save_btn');
       if (saveBtn) { saveBtn.textContent = '✅ Sobre 2 guardado'; saveBtn.style.background = '#2e7d32'; saveBtn.disabled = true; }
       showToast('Sobre 2 guardado ✓', 'success');
+      // Auto-render deposit prep inline in Tab 2
+      const depSection = document.getElementById('dep_inline_section');
+      if (depSection) loadDepositoData(fecha, depSection);
     }
 
     function startPolling(fecha) {
@@ -1384,19 +1387,15 @@
             const sobre2Val = parseFloat(ingreso.Sobre2) || 0;
             window._sobre2Data = { fecha, sobre2Val };
 
-            // Keep cambio panel status if already saved
+            // Leave cambio panel intact — only update sobre2_wait_box
             const cambioSaved = JSON.parse(localStorage.getItem('nb_cambio_' + fecha) || 'null');
-            const cambioSummary = cambioSaved
-              ? `<div style="background:#e8f5e9;padding:10px 12px;border-radius:8px;margin-bottom:12px;font-size:13px;color:#2e7d32;font-weight:700;">✅ Cambio guardado — ${formatCurrency(cambioSaved.total)}</div>`
-              : `<div style="background:#fff3e0;padding:10px 12px;border-radius:8px;margin-bottom:12px;font-size:13px;color:#e65100;font-weight:700;">⚠️ Guarda el cambio de billetes antes de continuar</div>`;
-
-            document.getElementById('tienda_status').innerHTML = `
-              ${cambioSummary}
+            const waitBox = document.getElementById('sobre2_wait_box');
+            if (!waitBox) return;
+            waitBox.innerHTML = `
+              ${!cambioSaved ? '<div style="background:#fff3e0;padding:10px 12px;border-radius:8px;margin-bottom:10px;font-size:13px;color:#e65100;font-weight:700;">⚠️ Guarda el cambio de billetes antes de continuar</div>' : ''}
               <div style="background:#e8f5e9;padding:16px;border-radius:12px;">
                 <div style="font-weight:700;color:#2e7d32;font-size:15px;margin-bottom:4px;">💰 Sobre 2 recibido: ${formatCurrency(sobre2Val)}</div>
-                <div style="font-size:12px;color:#444;margin-bottom:14px;">
-                  Cuenta los billetes que van al sobre 2.
-                </div>
+                <div style="font-size:12px;color:#444;margin-bottom:14px;">Cuenta los billetes que van al sobre 2.</div>
                 <div class="denom-grid" id="cb3_container"></div>
                 <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;background:#fff;border-radius:8px;margin:10px 0;">
                   <span style="font-weight:700;font-size:14px;">Total Sobre 2:</span>
@@ -1409,9 +1408,7 @@
                   Guardar Sobre 2 ✓
                 </button>
               </div>
-              <button class="btn btn-secondary btn-sm" style="margin-top:10px;" onclick="switchTab('tab4')">
-                Ir a Preparación de Depósito →
-              </button>
+              <div id="dep_inline_section" style="margin-top:16px;"></div>
             `;
             createDenomGrid('cb3_container', updateSobre2Counter);
             updateSobre2Counter();
@@ -1510,8 +1507,8 @@
     // TAB 4: DEPOSITO
     // ═══════════════════════════════════════════════════════════════
 
-    async function loadDepositoData() {
-      const fecha = document.getElementById('dep_fechaVenta').value;
+    async function loadDepositoData(fechaParam, inlineContainer) {
+      const fecha = fechaParam || document.getElementById('dep_fechaVenta').value;
       try {
         const resp = await fetch(config.scriptUrl + '?action=get_ingresos&fecha=' + fecha);
         const data = await resp.json();
@@ -1535,7 +1532,7 @@
             <div style="font-size:11px;color:${hl?'#2e7d32':'#999'};font-weight:700;text-transform:uppercase;letter-spacing:.4px">${label}</div>
             <div style="font-size:${hl?'20':'17'}px;font-weight:800;color:${hl?'#2e7d32':'inherit'}">${formatCurrency(val)}</div>
           </div>`;
-        document.getElementById('dep_summary').innerHTML = `
+        const summaryHtml = `
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px;">
             ${cell('Pagos Recibidos', pagosRecibidos)}
             ${cell('Tarjeta', tarjeta)}
@@ -1544,6 +1541,7 @@
             ${cell('Sobre 2', sobre2)}
             <div style="grid-column:1/-1">${cell('Depósito BBVA', depositoAjustado, true)}</div>
           </div>`;
+        if (!inlineContainer) document.getElementById('dep_summary').innerHTML = summaryHtml;
 
         // ── LOAD COUNTERS FROM LOCALSTORAGE ──────────────────────
         const cambio = JSON.parse(localStorage.getItem('nb_cambio_'  + fecha) || 'null');
@@ -1570,7 +1568,7 @@
 
         const noDataWarning = (label) => `<tr><td colspan="3" style="padding:10px;text-align:center;color:#e65100;font-size:12px;">⚠️ ${label} — Ve a Corte de Tienda.</td></tr>`;
 
-        document.getElementById('dep_allocation').innerHTML = `
+        const allocationHtml = `
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;">
             <div>
               <table style="width:100%;border-collapse:collapse;border:1px solid #ccc;">
@@ -1621,6 +1619,21 @@
 
         // Store for print
         window._depositoPrintData = { fecha, depositDenoms, sobre2Denoms, depositTotal, sobre2Total, sobre2, s2Data, depositoAjustado };
+
+        if (inlineContainer) {
+          inlineContainer.innerHTML = `
+            <hr style="margin:16px 0;border-color:#ddd;">
+            <h3 style="margin-bottom:12px;">📋 Preparación de Depósito</h3>
+            ${summaryHtml}
+            <h3 style="margin:16px 0 12px;">Asignación de Billetes</h3>
+            ${allocationHtml}
+            <div style="display:flex;gap:10px;margin-top:16px;">
+              <button class="btn btn-primary" onclick="printDepositTicket()">Imprimir Bolsa Depósito</button>
+              <button class="btn btn-primary" onclick="printSobre2Ticket()">Imprimir Sobre 2</button>
+            </div>`;
+        } else {
+          document.getElementById('dep_allocation').innerHTML = allocationHtml;
+        }
 
         return; // early exit
       } catch (e) {
