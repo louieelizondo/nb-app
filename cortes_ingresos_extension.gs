@@ -385,7 +385,7 @@ function saveCorteTienda(body) {
   const cashback = parseFloat(c.Cashback) || 0;
   const storeCredit = parseFloat(c.StoreCredit) || 0;
   const expectedCash = pagosRecibidos - tarjeta - transferencias - storeCredit - cashback;
-  const faltanteSobrante = Math.round((totalEfectivo - expectedCash) * 100) / 100;
+  const faltanteSobrante = Math.round((expectedCash - totalEfectivo) * 100) / 100;
 
   // Shopify values (auto-populated or 0)
   const shopVentas = parseFloat(c.Shopify_VentasTotales) || 0;
@@ -603,7 +603,7 @@ function saveIngreso(body) {
   }
   const facturasCFDI = ing.FacturasCFDI || '';
   const totalFacturado = factClientes + factGens.reduce((s, v) => s + v, 0);
-  const totalXFacturar = pagosRecibidos - sobre2;
+  const totalXFacturar = pagosRecibidos - sobre2 - cashback;
   const faltaFactura = totalXFacturar - totalFacturado;
 
   const now = new Date().toISOString();
@@ -683,11 +683,12 @@ function updateSobre2(body) {
   sheet.getRange(rowNum, headers.indexOf('Sobre2') + 1).setValue(sobre2);
 
   const pagosRecibidos = parseFloat(sheet.getRange(rowNum, headers.indexOf('PagosRecibidos') + 1).getValue()) || 0;
+  const cashbackStored = parseFloat(sheet.getRange(rowNum, headers.indexOf('Cashback') + 1).getValue()) || 0;
   const depositoBBVA = pagosRecibidos - sobre2;
   sheet.getRange(rowNum, headers.indexOf('DepositoBBVA') + 1).setValue(depositoBBVA);
 
   // Recalc TotalXFacturar and FaltaFactura
-  const totalXFacturar = pagosRecibidos - sobre2;
+  const totalXFacturar = pagosRecibidos - sobre2 - cashbackStored;
   sheet.getRange(rowNum, headers.indexOf('TotalXFacturar') + 1).setValue(totalXFacturar);
 
   const totalFacturado = parseFloat(sheet.getRange(rowNum, headers.indexOf('TotalFacturado') + 1).getValue()) || 0;

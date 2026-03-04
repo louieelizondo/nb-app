@@ -984,18 +984,18 @@
       const retiros = parseFloat(document.getElementById('ind_retiros').value) || 0;
 
       const expectedCash = ventasCaja - tarjeta - transferencias - cashback - retiros;
-      const faltanteSobrante = totalEfectivo - expectedCash;
+      const faltanteSobrante = expectedCash - totalEfectivo;
 
       const badge = document.getElementById('ind_faltanteBadge');
       let badgeClass = 'gray';
       let badgeText = 'Exacto';
       if (Math.abs(faltanteSobrante) > 0.5) {
         if (faltanteSobrante > 0) {
-          badgeClass = 'green';
-          badgeText = 'SOBRANTE: ' + formatCurrency(faltanteSobrante);
-        } else {
           badgeClass = 'red';
-          badgeText = 'FALTANTE: ' + formatCurrency(Math.abs(faltanteSobrante));
+          badgeText = 'FALTANTE: ' + formatCurrency(faltanteSobrante);
+        } else {
+          badgeClass = 'green';
+          badgeText = 'SOBRANTE: ' + formatCurrency(Math.abs(faltanteSobrante));
         }
       }
       badge.innerHTML = `<div class="badge ${badgeClass}">${badgeText}</div>`;
@@ -1190,18 +1190,18 @@
       const transferencias = parseFloat(document.getElementById('tienda_transferencias').value) || 0;
       const cashback = parseFloat(document.getElementById('tienda_cashback').value) || 0;
       const expectedCash = pagosRecibidos - tarjeta - transferencias - cashback;
-      const faltanteSobrante = totalEfectivo - expectedCash;
+      const faltanteSobrante = expectedCash - totalEfectivo;
 
       const badge = document.getElementById('tienda_faltanteBadge');
       let badgeClass = 'gray';
       let badgeText = 'Exacto';
       if (Math.abs(faltanteSobrante) > 0.5) {
         if (faltanteSobrante > 0) {
-          badgeClass = 'green';
-          badgeText = 'SOBRANTE: ' + formatCurrency(faltanteSobrante);
-        } else {
           badgeClass = 'red';
-          badgeText = 'FALTANTE: ' + formatCurrency(Math.abs(faltanteSobrante));
+          badgeText = 'FALTANTE: ' + formatCurrency(faltanteSobrante);
+        } else {
+          badgeClass = 'green';
+          badgeText = 'SOBRANTE: ' + formatCurrency(Math.abs(faltanteSobrante));
         }
       }
       badge.innerHTML = `<div class="badge ${badgeClass}">${badgeText}</div>`;
