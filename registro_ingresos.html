@@ -528,24 +528,20 @@
 
 <!-- TABS -->
 <div class="tabs">
-  <button class="tab-btn active" data-tab="tab-pendientes">Pendientes</button>
-  <button class="tab-btn" data-tab="tab-sobre2">Sobre 2 + Depósito</button>
+  <button class="tab-btn active" data-tab="tab-sobre2">Sobre 2 + Depósito</button>
   <button class="tab-btn" data-tab="tab-ventas">Ventas por Mesa</button>
   <button class="tab-btn" data-tab="tab-facturacion">Facturación</button>
   <button class="tab-btn" data-tab="tab-historial">Historial</button>
 </div>
 
-<!-- TAB 1: PENDIENTES -->
-<div id="tab-pendientes" class="tab-content active">
+<!-- TAB 1: SOBRE 2 + DEPÓSITO (includes pendientes at top) -->
+<div id="tab-sobre2" class="tab-content active">
   <div class="card">
-    <h2>Días Pendientes de Sobre 2</h2>
-    <p style="color: #7a6b5d; font-size: 13px; margin-bottom: 18px;">Fechas con Corte de Tienda guardado pero sin Sobre 2 aún</p>
+    <h2>Pendientes de Sobre 2</h2>
+    <p style="color: #7a6b5d; font-size: 13px; margin-bottom: 14px;">Fechas con Corte de Tienda guardado pero sin Sobre 2 aún — toca para cargar</p>
     <div id="pendientes-list"></div>
   </div>
-</div>
 
-<!-- TAB 2: SOBRE 2 + DEPÓSITO -->
-<div id="tab-sobre2" class="tab-content">
   <div class="card">
     <h2>Sobre 2 & Depósito BBVA</h2>
 
@@ -910,15 +906,28 @@ function showToast(message, type = 'success') {
 }
 
 function initializeEventListeners() {
-  // TAB NAVIGATION
+  // TAB NAVIGATION — persists across refresh
+  function switchToTab(tabId) {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+    const btn = document.querySelector(`.tab-btn[data-tab="${tabId}"]`);
+    const content = document.getElementById(tabId);
+    if (btn) btn.classList.add('active');
+    if (content) content.classList.add('active');
+    localStorage.setItem('nb_ingreso_active_tab', tabId);
+  }
+
   document.querySelectorAll('.tab-btn').forEach(btn => {
     btn.addEventListener('click', function() {
-      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-      document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-      this.classList.add('active');
-      document.getElementById(this.dataset.tab).classList.add('active');
+      switchToTab(this.dataset.tab);
     });
   });
+
+  // Restore last active tab on load
+  const savedTab = localStorage.getItem('nb_ingreso_active_tab');
+  if (savedTab && document.getElementById(savedTab)) {
+    switchToTab(savedTab);
+  }
 
   // TAB 2: SOBRE 2 CALCULATIONS
   document.getElementById('sobre2-fecha').addEventListener('change', loadCorteData);
@@ -1371,7 +1380,7 @@ function startAutoRefresh() {
   // Refresh pendientes every 60 seconds
   setInterval(() => {
     const activeTab = document.querySelector('.tab-btn.active');
-    if (activeTab && activeTab.dataset.tab === 'tab-pendientes') {
+    if (activeTab && activeTab.dataset.tab === 'tab-sobre2') {
       loadPendientes();
     }
   }, 60000);

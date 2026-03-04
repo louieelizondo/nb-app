@@ -356,12 +356,13 @@
 
     /* PRINT STYLES */
     @media print {
-      body { background: white; }
-      .topbar, .tabs, .btn, .tbl-wrap { display: none; }
-      .print-ticket {
-        page-break-after: always;
-        margin-bottom: 20px;
-      }
+      body { background: white !important; color: #000 !important; }
+      .topbar, .tabs, .container > .card:not(#printArea *), .btn, .tbl-wrap { display: none !important; }
+      #printArea { display: block !important; }
+      * { color: #000 !important; background: white !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      table { border-collapse: collapse !important; }
+      th, td { border: 1px solid #000 !important; }
+      thead tr { background: #eee !important; }
     }
 
     /* RECEIPT STYLE */
@@ -553,6 +554,10 @@
             <label>Transferencias</label>
             <input type="number" id="tienda_transferencias" step="0.01" />
           </div>
+          <div class="form-group">
+            <label>Cashback (ingresar positivo)</label>
+            <input type="number" id="tienda_cashback" step="0.01" />
+          </div>
         </div>
         <h3>Conteo de Efectivo</h3>
         <div class="denom-grid" id="tienda_denomGrid"></div>
@@ -561,13 +566,6 @@
           <div style="font-size:14px; font-weight:700; padding:12px; background:#f9f6f2; border-radius:10px; display:flex; justify-content:space-between;">
             <span>Total Efectivo:</span>
             <span id="tienda_totalEfectivo">$0.00</span>
-          </div>
-        </div>
-
-        <div class="form-grid col3" style="margin-top:12px;">
-          <div class="form-group">
-            <label>Cashback</label>
-            <input type="number" id="tienda_cashback" step="0.01" />
           </div>
         </div>
 
@@ -1193,7 +1191,7 @@
       const tarjeta = parseFloat(document.getElementById('tienda_tarjeta').value) || 0;
       const transferencias = parseFloat(document.getElementById('tienda_transferencias').value) || 0;
       const cashback = parseFloat(document.getElementById('tienda_cashback').value) || 0;
-      const expectedCash = pagosRecibidos - tarjeta - transferencias + cashback;
+      const expectedCash = pagosRecibidos - tarjeta - transferencias - cashback;
       const faltanteSobrante = totalEfectivo - expectedCash;
 
       const badge = document.getElementById('tienda_faltanteBadge');
@@ -1241,52 +1239,44 @@
           showToast('Corte de tienda guardado. Notificación enviada a Louie.', 'success');
           updateSyncStatus('synced');
 
-          // Compute small-bill total from what was just saved
-          const SMALL_MAP = { 100:'D_100', 50:'D_50', 20:'D_20', 10:'D_10', 5:'D_5', 2:'D_2', 1:'D_1', 0.5:'D_050' };
-          let _totalSmall = 0;
-          Object.entries(SMALL_MAP).forEach(([v, k]) => { _totalSmall += (corte[k]||0) * parseFloat(v); });
-          const _fecha = corte.Fecha;
+          // Store corte data globally for counter functions
+          window._cambioData = { fecha: corte.Fecha, totalOriginal: totalEfectivo, corte };
 
           document.getElementById('tienda_status').innerHTML = `
-            <div style="background:#e3f2fd;padding:14px;border-radius:12px;margin-bottom:10px;">
-              <div style="font-weight:700;color:#1565c0;margin-bottom:6px;">🔄 Paso 2 — Cambio de Billetes</div>
-              <div style="font-size:12px;color:#555;margin-bottom:10px;">
-                Registra los billetes grandes que recibiste a cambio de los pequeños
-                <strong>(total: ${formatCurrency(_totalSmall)})</strong>
+            <div id="cambio_panel" style="background:#e3f2fd;padding:16px;border-radius:12px;margin-bottom:12px;">
+              <div style="font-weight:700;color:#1565c0;font-size:15px;margin-bottom:4px;">🔄 Paso 2 — Cambio de Billetes</div>
+              <div style="font-size:12px;color:#444;margin-bottom:14px;">
+                Ajusta el conteo con los billetes que tienes en mano tras el cambio.<br>
+                El total debe cuadrar exacto con: <strong>${formatCurrency(totalEfectivo)}</strong>
               </div>
-              <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px;">
-                <div>
-                  <label style="font-size:11px;font-weight:700;color:#1565c0;display:block;margin-bottom:4px">× $1000</label>
-                  <input type="number" id="cb_1000" min="0" value="0" inputmode="numeric"
-                    oninput="updateCambioStatusInline(${_totalSmall})"
-                    style="width:100%;padding:8px;border:1.5px solid #90caf9;border-radius:8px;font-size:18px;font-weight:700;text-align:center;box-sizing:border-box">
-                </div>
-                <div>
-                  <label style="font-size:11px;font-weight:700;color:#1565c0;display:block;margin-bottom:4px">× $500</label>
-                  <input type="number" id="cb_500" min="0" value="0" inputmode="numeric"
-                    oninput="updateCambioStatusInline(${_totalSmall})"
-                    style="width:100%;padding:8px;border:1.5px solid #90caf9;border-radius:8px;font-size:18px;font-weight:700;text-align:center;box-sizing:border-box">
-                </div>
-                <div>
-                  <label style="font-size:11px;font-weight:700;color:#1565c0;display:block;margin-bottom:4px">× $200</label>
-                  <input type="number" id="cb_200" min="0" value="0" inputmode="numeric"
-                    oninput="updateCambioStatusInline(${_totalSmall})"
-                    style="width:100%;padding:8px;border:1.5px solid #90caf9;border-radius:8px;font-size:18px;font-weight:700;text-align:center;box-sizing:border-box">
-                </div>
+              <div class="denom-grid" id="cb2_container"></div>
+              <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;background:#fff;border-radius:8px;margin:10px 0;">
+                <span style="font-weight:700;font-size:14px;">Total en mano:</span>
+                <span id="cb2_total" style="font-weight:900;font-size:18px;">$0.00</span>
               </div>
-              <div id="cb_inline_status" style="padding:8px 12px;border-radius:8px;font-size:13px;font-weight:700;background:#fff9c4;color:#f57f17;margin-bottom:10px">
-                Ingresa los billetes recibidos ↑
+              <div id="cb2_status" style="padding:8px 12px;border-radius:8px;font-size:13px;font-weight:700;background:#fff9c4;color:#f57f17;margin-bottom:10px;">
+                Edita el conteo de billetes ↑
               </div>
-              <button class="btn btn-primary btn-sm" onclick="saveCambioData('${_fecha}', ${_totalSmall})">
+              <button id="cb2_save_btn" class="btn btn-primary btn-sm" disabled onclick="saveCambioAllDenoms()">
                 Guardar Cambio ✓
               </button>
-              <div id="cb_saved_msg" style="margin-top:8px"></div>
             </div>
             <div id="sobre2_wait_box" style="padding:12px;background:#fff3e0;border-radius:10px;border-left:4px solid #ff9800;">
               <div style="font-weight:700;color:#e65100;">⏳ Esperando Sobre 2 de Louie...</div>
               <div style="font-size:12px;color:#e65100;margin-top:4px;">Te avisamos cuando esté listo.</div>
             </div>
           `;
+
+          // Populate Counter 2 with existing createDenomGrid, then pre-fill corte values
+          createDenomGrid('cb2_container', updateCambioCounter);
+          DENOMINATIONS.forEach(d => {
+            const inp = document.querySelector('#cb2_container input[data-key="' + d.key + '"]');
+            if (inp) {
+              inp.value = corte[d.key] || 0;
+              updateDenomCalc(inp.closest('.denom-item'), d.value);
+            }
+          });
+          updateCambioCounter();
           startPolling(corte.Fecha);
         } else {
           throw new Error(result.error || 'Unknown error');
@@ -1298,37 +1288,90 @@
       }
     }
 
-    function updateCambioStatusInline(totalSmall) {
-      const c1000 = parseInt(document.getElementById('cb_1000')?.value) || 0;
-      const c500  = parseInt(document.getElementById('cb_500')?.value)  || 0;
-      const c200  = parseInt(document.getElementById('cb_200')?.value)  || 0;
-      const recibido = c1000*1000 + c500*500 + c200*200;
-      const diff = Math.round((recibido - totalSmall) * 100) / 100;
-      const el = document.getElementById('cb_inline_status');
-      if (!el) return;
+    function updateCambioCounter() {
+      if (!window._cambioData) return;
+      const denoms = getDenomValues('cb2_container');
+      const total = getTotalEfectivo(denoms);
+      const orig = window._cambioData.totalOriginal;
+      const diff = Math.round((total - orig) * 100) / 100;
+
+      const totalEl = document.getElementById('cb2_total');
+      if (totalEl) totalEl.textContent = formatCurrency(total);
+
+      const statusEl = document.getElementById('cb2_status');
+      const saveBtn  = document.getElementById('cb2_save_btn');
+      if (!statusEl) return;
+
       if (Math.abs(diff) < 0.01) {
-        el.style.background = '#e8f5e9'; el.style.color = '#2e7d32';
-        el.textContent = `✅ Cuadra — ${formatCurrency(recibido)}`;
+        statusEl.style.background = '#e8f5e9'; statusEl.style.color = '#2e7d32';
+        statusEl.textContent = '✅ Cuadra exacto — ' + formatCurrency(total);
+        if (saveBtn) saveBtn.disabled = false;
       } else if (diff > 0) {
-        el.style.background = '#fff3e0'; el.style.color = '#e65100';
-        el.textContent = `⚠️ ${formatCurrency(recibido)} recibido — sobran ${formatCurrency(diff)}`;
+        statusEl.style.background = '#fff3e0'; statusEl.style.color = '#e65100';
+        statusEl.textContent = '⚠️ Sobran ' + formatCurrency(diff) + ' — ajusta el conteo';
+        if (saveBtn) saveBtn.disabled = true;
       } else {
-        el.style.background = '#fce4ec'; el.style.color = '#c62828';
-        el.textContent = `❌ ${formatCurrency(recibido)} recibido — faltan ${formatCurrency(Math.abs(diff))}`;
+        statusEl.style.background = '#fce4ec'; statusEl.style.color = '#c62828';
+        statusEl.textContent = '❌ Faltan ' + formatCurrency(Math.abs(diff)) + ' — ajusta el conteo';
+        if (saveBtn) saveBtn.disabled = true;
       }
     }
 
-    function saveCambioData(fecha, totalSmall) {
-      const c1000 = parseInt(document.getElementById('cb_1000')?.value) || 0;
-      const c500  = parseInt(document.getElementById('cb_500')?.value)  || 0;
-      const c200  = parseInt(document.getElementById('cb_200')?.value)  || 0;
-      localStorage.setItem('nb_cambio_' + fecha, JSON.stringify({
-        c1000, c500, c200, totalSmall, savedAt: new Date().toISOString()
-      }));
-      const parts = [c1000 && `${c1000}×$1000`, c500 && `${c500}×$500`, c200 && `${c200}×$200`].filter(Boolean);
-      const el = document.getElementById('cb_saved_msg');
-      if (el) el.innerHTML = `<div style="background:#e8f5e9;padding:8px 12px;border-radius:8px;font-size:13px;color:#2e7d32;font-weight:700">✅ Guardado: ${parts.join('  ')}</div>`;
+    function saveCambioAllDenoms() {
+      if (!window._cambioData) return;
+      const { fecha, totalOriginal } = window._cambioData;
+      const denoms = getDenomValues('cb2_container');
+      const total  = getTotalEfectivo(denoms);
+      const diff   = Math.round((total - totalOriginal) * 100) / 100;
+      if (Math.abs(diff) >= 0.01) {
+        showToast('El total no cuadra — ajusta el conteo primero', 'error');
+        return;
+      }
+      localStorage.setItem('nb_cambio_' + fecha, JSON.stringify({ denoms, total, totalOriginal, savedAt: new Date().toISOString() }));
+      window._cambioData.saved = true;
+      const saveBtn = document.getElementById('cb2_save_btn');
+      if (saveBtn) { saveBtn.textContent = '✅ Cambio guardado'; saveBtn.style.background = '#2e7d32'; saveBtn.disabled = true; }
       showToast('Cambio guardado ✓', 'success');
+    }
+
+    function updateSobre2Counter() {
+      if (!window._sobre2Data) return;
+      const denoms   = getDenomValues('cb3_container');
+      const total    = getTotalEfectivo(denoms);
+      const expected = window._sobre2Data.sobre2Val;
+      const diff     = Math.round((total - expected) * 100) / 100;
+
+      const totalEl = document.getElementById('cb3_total');
+      if (totalEl) totalEl.textContent = formatCurrency(total);
+
+      const statusEl = document.getElementById('cb3_status');
+      const saveBtn  = document.getElementById('cb3_save_btn');
+      if (!statusEl) return;
+
+      if (Math.abs(diff) < 0.01) {
+        statusEl.style.background = '#e8f5e9'; statusEl.style.color = '#2e7d32';
+        statusEl.textContent = '✅ Cuadra exacto con Sobre 2';
+        if (saveBtn) saveBtn.disabled = false;
+      } else if (diff > 0) {
+        statusEl.style.background = '#fff3e0'; statusEl.style.color = '#e65100';
+        statusEl.textContent = '⚠️ Sobran ' + formatCurrency(diff);
+        if (saveBtn) saveBtn.disabled = false; // allow save even if not exact
+      } else {
+        statusEl.style.background = '#fff9c4'; statusEl.style.color = '#f57f17';
+        statusEl.textContent = 'Faltan ' + formatCurrency(Math.abs(diff)) + ' para completar el sobre';
+        if (saveBtn) saveBtn.disabled = false;
+      }
+    }
+
+    function saveSobre2Denoms() {
+      if (!window._sobre2Data) return;
+      const { fecha, sobre2Val } = window._sobre2Data;
+      const denoms = getDenomValues('cb3_container');
+      const total  = getTotalEfectivo(denoms);
+      localStorage.setItem('nb_sobre2_' + fecha, JSON.stringify({ denoms, total, sobre2Val, savedAt: new Date().toISOString() }));
+      const saveBtn = document.getElementById('cb3_save_btn');
+      if (saveBtn) { saveBtn.textContent = '✅ Sobre 2 guardado'; saveBtn.style.background = '#2e7d32'; saveBtn.disabled = true; }
+      showToast('Sobre 2 guardado ✓', 'success');
     }
 
     function startPolling(fecha) {
@@ -1340,17 +1383,40 @@
           const data = await resp.json();
           const ingreso = data.ingresos?.[0];
           if (ingreso && ingreso.Sobre2 > 0) {
+            const sobre2Val = parseFloat(ingreso.Sobre2) || 0;
+            window._sobre2Data = { fecha, sobre2Val };
+
+            // Keep cambio panel status if already saved
+            const cambioSaved = JSON.parse(localStorage.getItem('nb_cambio_' + fecha) || 'null');
+            const cambioSummary = cambioSaved
+              ? `<div style="background:#e8f5e9;padding:10px 12px;border-radius:8px;margin-bottom:12px;font-size:13px;color:#2e7d32;font-weight:700;">✅ Cambio guardado — ${formatCurrency(cambioSaved.total)}</div>`
+              : `<div style="background:#fff3e0;padding:10px 12px;border-radius:8px;margin-bottom:12px;font-size:13px;color:#e65100;font-weight:700;">⚠️ Guarda el cambio de billetes antes de continuar</div>`;
+
             document.getElementById('tienda_status').innerHTML = `
-              <div style="padding:12px; background:#e8f5e9; border-radius:10px; border-left:4px solid #2e7d32;">
-                <div style="font-weight:700; color:#2e7d32;">¡Sobre 2 recibido!</div>
-                <div style="font-size:12px; color:#2e7d32; margin-top:4px;">
-                  Sobre 2: ${formatCurrency(parseFloat(ingreso.Sobre2) || 0)}
+              ${cambioSummary}
+              <div style="background:#e8f5e9;padding:16px;border-radius:12px;">
+                <div style="font-weight:700;color:#2e7d32;font-size:15px;margin-bottom:4px;">💰 Sobre 2 recibido: ${formatCurrency(sobre2Val)}</div>
+                <div style="font-size:12px;color:#444;margin-bottom:14px;">
+                  Cuenta los billetes que van al sobre 2.
                 </div>
-                <button class="btn btn-primary btn-sm" style="margin-top:8px;" onclick="switchTab('tab4')">
-                  Ir a Preparación de Depósito →
+                <div class="denom-grid" id="cb3_container"></div>
+                <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;background:#fff;border-radius:8px;margin:10px 0;">
+                  <span style="font-weight:700;font-size:14px;">Total Sobre 2:</span>
+                  <span id="cb3_total" style="font-weight:900;font-size:18px;">$0.00</span>
+                </div>
+                <div id="cb3_status" style="padding:8px 12px;border-radius:8px;font-size:13px;font-weight:700;background:#fff9c4;color:#f57f17;margin-bottom:10px;">
+                  Cuenta los billetes del sobre ↑
+                </div>
+                <button id="cb3_save_btn" class="btn btn-primary btn-sm" onclick="saveSobre2Denoms()">
+                  Guardar Sobre 2 ✓
                 </button>
               </div>
+              <button class="btn btn-secondary btn-sm" style="margin-top:10px;" onclick="switchTab('tab4')">
+                Ir a Preparación de Depósito →
+              </button>
             `;
+            createDenomGrid('cb3_container', updateSobre2Counter);
+            updateSobre2Counter();
             return;
           }
         } catch (e) {}
@@ -1463,8 +1529,107 @@
         const transferencias  = parseFloat(ingreso.Transferencias)  || 0;
         const cashback        = parseFloat(ingreso.Cashback)        || 0;
         const sobre2          = parseFloat(ingreso.Sobre2)          || 0;
-        // Depósito = PagosRecibidos − Tarjeta − Transferencias − Cashback − Sobre2
         const depositoAjustado = pagosRecibidos - tarjeta - transferencias - cashback - sobre2;
+
+        // ── RESUMEN ──────────────────────────────────────────────
+        const cell = (label, val, hl=false) => `
+          <div style="background:${hl?'#e8f5e9':'#f9f6f2'};padding:10px 12px;border-radius:10px;">
+            <div style="font-size:11px;color:${hl?'#2e7d32':'#999'};font-weight:700;text-transform:uppercase;letter-spacing:.4px">${label}</div>
+            <div style="font-size:${hl?'20':'17'}px;font-weight:800;color:${hl?'#2e7d32':'inherit'}">${formatCurrency(val)}</div>
+          </div>`;
+        document.getElementById('dep_summary').innerHTML = `
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px;">
+            ${cell('Pagos Recibidos', pagosRecibidos)}
+            ${cell('Tarjeta', tarjeta)}
+            ${cell('Transferencias', transferencias)}
+            ${cell('Cashback', cashback)}
+            ${cell('Sobre 2', sobre2)}
+            <div style="grid-column:1/-1">${cell('Depósito BBVA', depositoAjustado, true)}</div>
+          </div>`;
+
+        // ── LOAD COUNTERS FROM LOCALSTORAGE ──────────────────────
+        const cambio = JSON.parse(localStorage.getItem('nb_cambio_'  + fecha) || 'null');
+        const s2Data = JSON.parse(localStorage.getItem('nb_sobre2_' + fecha) || 'null');
+
+        const depositDenoms = cambio?.denoms || null;
+        const sobre2Denoms  = s2Data?.denoms || null;
+        const depositTotal  = cambio?.total ?? depositoAjustado;
+        const sobre2Total   = s2Data?.total ?? sobre2;
+
+        const renderDenomTable = (denoms) => {
+          let rows = '';
+          DENOMINATIONS.forEach(d => {
+            const qty = (denoms && denoms[d.key]) || 0;
+            const tot = qty * d.value;
+            rows += `<tr>
+              <td style="text-align:center;font-weight:700;background:#c8e6c9;padding:6px;">${qty}</td>
+              <td style="padding:6px;">${d.label}</td>
+              <td style="text-align:right;font-weight:700;background:#ffcdd2;padding:6px;">${formatCurrency(tot)}</td>
+            </tr>`;
+          });
+          return rows;
+        };
+
+        const noDataWarning = (label) => `<tr><td colspan="3" style="padding:10px;text-align:center;color:#e65100;font-size:12px;">⚠️ ${label} — Ve a Corte de Tienda.</td></tr>`;
+
+        document.getElementById('dep_allocation').innerHTML = `
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;">
+            <div>
+              <table style="width:100%;border-collapse:collapse;border:1px solid #ccc;">
+                <thead>
+                  <tr style="background:#1b5e20;color:white;">
+                    <th colspan="3" style="padding:10px;text-align:center;font-size:15px;font-weight:900;">DEPOSITO</th>
+                  </tr>
+                  <tr style="background:#e0e0e0;">
+                    <th style="padding:6px;text-align:center;">Cantidad</th>
+                    <th style="padding:6px;">Tipo de Moneda</th>
+                    <th style="padding:6px;text-align:right;">Totales</th>
+                  </tr>
+                </thead>
+                <tbody>${cambio ? renderDenomTable(depositDenoms) : noDataWarning('Cambio no guardado')}</tbody>
+                <tfoot>
+                  <tr style="background:#e8f5e9;font-weight:900;">
+                    <td colspan="2" style="padding:10px;text-align:right;font-size:14px;">TOTAL</td>
+                    <td style="padding:10px;text-align:right;color:#1b5e20;font-size:17px;">${formatCurrency(depositTotal)}</td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+            <div>
+              <table style="width:100%;border-collapse:collapse;border:1px solid #ccc;">
+                <thead>
+                  <tr style="background:#1b5e20;color:white;">
+                    <th colspan="3" style="padding:10px;text-align:center;font-size:15px;font-weight:900;">Sobre 2</th>
+                  </tr>
+                  <tr style="background:#e0e0e0;">
+                    <th style="padding:6px;text-align:center;">Cantidad</th>
+                    <th style="padding:6px;">Tipo de Moneda</th>
+                    <th style="padding:6px;text-align:right;">Totales</th>
+                  </tr>
+                </thead>
+                <tbody>${s2Data ? renderDenomTable(sobre2Denoms) : noDataWarning('Sobre 2 no guardado')}</tbody>
+                <tfoot>
+                  <tr style="background:#e8f5e9;font-weight:900;">
+                    <td colspan="2" style="padding:10px;text-align:right;font-size:14px;">TOTAL</td>
+                    <td style="padding:10px;text-align:right;color:#1b5e20;font-size:17px;">${formatCurrency(sobre2Total)}</td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          </div>
+          <div style="padding:12px;border-radius:8px;text-align:center;font-weight:700;font-size:14px;${Math.abs(depositTotal + sobre2Total - depositoAjustado - sobre2) < 0.5 ? 'background:#e8f5e9;color:#2e7d32;' : 'background:#fff3e0;color:#e65100;'}">
+            ${Math.abs(depositTotal + sobre2Total - depositoAjustado - sobre2) < 0.5 ? '✅ Los totales cuadran' : '⚠️ Verifica los conteos — los totales no coinciden'}
+          </div>`;
+
+        // Store for print
+        window._depositoPrintData = { fecha, depositDenoms, sobre2Denoms, depositTotal, sobre2Total, sobre2, s2Data, depositoAjustado };
+
+        return; // early exit — skip the old allocation code below
+
+        // ── LEGACY (unreachable, kept for reference) ─────────────
+        const _unused_pagosRecibidos  = parseFloat(ingreso.PagosRecibidos)  || 0;
+        const _unused_sobre2          = parseFloat(ingreso.Sobre2)          || 0;
+        const _unused_depositoAjustado = _unused_pagosRecibidos - _unused_sobre2;
 
         const cell = (label, val, highlight=false) => `
           <div style="background:${highlight?'#e8f5e9':'#f9f6f2'};padding:10px 12px;border-radius:10px;">
@@ -1722,35 +1887,74 @@
     }
 
     function printDepositTicket() {
-      const fecha = document.getElementById('dep_fechaVenta').value;
+      if (!window._depositoPrintData) { showToast('Carga los datos primero', 'error'); return; }
+      const { fecha, depositDenoms, sobre2Denoms, depositTotal, sobre2Total } = window._depositoPrintData;
       const fechaDeposito = document.getElementById('dep_fechaDeposito').value;
-      const pagosRecibidos = 15235; // Example
-      const sobre2 = 4000; // Example
+
+      const renderPrintRows = (denoms) => {
+        if (!denoms) return '<tr><td colspan="3" style="text-align:center;">— sin datos —</td></tr>';
+        let rows = '';
+        DENOMINATIONS.forEach(d => {
+          const qty = denoms[d.key] || 0;
+          if (qty === 0) return;
+          const tot = qty * d.value;
+          const qtyStr  = String(qty).padStart(3, ' ');
+          const totStr  = formatCurrency(tot).padStart(10, ' ');
+          rows += `<tr>
+            <td style="text-align:center;padding:3px 6px;font-weight:900;">${qty}</td>
+            <td style="padding:3px 6px;">${d.label}</td>
+            <td style="text-align:right;padding:3px 6px;font-weight:900;">${formatCurrency(tot)}</td>
+          </tr>`;
+        });
+        return rows || '<tr><td colspan="3" style="text-align:center;color:#555;">— ninguno —</td></tr>';
+      };
 
       const html = `
-        <div style="font-family:monospace; max-width:400px; margin:20px auto; text-align:center;">
-          <pre>
-═══════════════════════════════════
-  BOLSA DE DEPÓSITO
-═══════════════════════════════════
-Cuenta: 0118685134
-Nombre: Natural Balance
-Fecha Ref: ${fecha}
-Fecha Dep: ${fechaDeposito}
-───────────────────────────────────
-Total: ${formatCurrency(pagosRecibidos - sobre2)}
-───────────────────────────────────
-12 × $1,000  = $12,000
- 4 × $500    =  $2,000
- 6 × $200    =  $1,200
- 0 × $100    =      $0
- 1 × $50     =     $50
- 0 × $20     =      $0
-───────────────────────────────────
-         Subtotal: $15,250
-         Sobrante:    -$15
-═══════════════════════════════════
-          </pre>
+        <div style="font-family:'Courier New',Courier,monospace;color:#000;max-width:680px;margin:0 auto;padding:12px;">
+          <div style="text-align:center;font-size:18px;font-weight:900;border-top:3px solid #000;border-bottom:3px solid #000;padding:8px 0;margin-bottom:12px;letter-spacing:2px;">
+            NATURAL BALANCE
+          </div>
+          <div style="display:flex;gap:4px;margin-bottom:6px;font-size:13px;">
+            <span style="font-weight:700;">Fecha venta:</span> ${fecha}
+            &nbsp;&nbsp;&nbsp;
+            <span style="font-weight:700;">Fecha depósito:</span> ${fechaDeposito}
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:12px;">
+            <div>
+              <div style="font-size:15px;font-weight:900;border-bottom:2px solid #000;padding-bottom:4px;margin-bottom:8px;">DEPOSITO BBVA</div>
+              <div style="font-size:12px;margin-bottom:8px;font-weight:700;">Cta: 0118685134</div>
+              <table style="width:100%;border-collapse:collapse;">
+                <thead>
+                  <tr style="border-bottom:1px solid #000;">
+                    <th style="text-align:center;padding:3px 6px;">Cant.</th>
+                    <th style="padding:3px 6px;">Denominación</th>
+                    <th style="text-align:right;padding:3px 6px;">Total</th>
+                  </tr>
+                </thead>
+                <tbody>${renderPrintRows(depositDenoms)}</tbody>
+              </table>
+              <div style="border-top:2px solid #000;margin-top:6px;padding-top:6px;font-size:16px;font-weight:900;display:flex;justify-content:space-between;">
+                <span>TOTAL</span><span>${formatCurrency(depositTotal)}</span>
+              </div>
+            </div>
+            <div>
+              <div style="font-size:15px;font-weight:900;border-bottom:2px solid #000;padding-bottom:4px;margin-bottom:8px;">SOBRE 2</div>
+              <div style="font-size:12px;margin-bottom:8px;">&nbsp;</div>
+              <table style="width:100%;border-collapse:collapse;">
+                <thead>
+                  <tr style="border-bottom:1px solid #000;">
+                    <th style="text-align:center;padding:3px 6px;">Cant.</th>
+                    <th style="padding:3px 6px;">Denominación</th>
+                    <th style="text-align:right;padding:3px 6px;">Total</th>
+                  </tr>
+                </thead>
+                <tbody>${renderPrintRows(sobre2Denoms)}</tbody>
+              </table>
+              <div style="border-top:2px solid #000;margin-top:6px;padding-top:6px;font-size:16px;font-weight:900;display:flex;justify-content:space-between;">
+                <span>TOTAL</span><span>${formatCurrency(sobre2Total)}</span>
+              </div>
+            </div>
+          </div>
         </div>
       `;
 
@@ -1760,30 +1964,8 @@ Total: ${formatCurrency(pagosRecibidos - sobre2)}
     }
 
     function printSobre2Ticket() {
-      const fecha = document.getElementById('dep_fechaVenta').value;
-      const sobre2 = 4000; // Example
-
-      const html = `
-        <div style="font-family:monospace; max-width:400px; margin:20px auto; text-align:center;">
-          <pre>
-═══════════════════════════════════
-  SOBRE 2
-═══════════════════════════════════
-Fecha: ${fecha}
-───────────────────────────────────
-2do Socios:  $2,500
-2do Nóminas: $1,500
-Total:       ${formatCurrency(sobre2)}
-───────────────────────────────────
-8 × $500 = ${formatCurrency(sobre2)}
-═══════════════════════════════════
-          </pre>
-        </div>
-      `;
-
-      const printArea = document.getElementById('printArea');
-      printArea.innerHTML = html;
-      window.print();
+      // Now combined into printDepositTicket — kept as alias
+      printDepositTicket();
     }
 
     // ═══════════════════════════════════════════════════════════════
