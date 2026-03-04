@@ -82,6 +82,54 @@ body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif
 .minmax-field input::-webkit-outer-spin-button, .minmax-field input::-webkit-inner-spin-button { -webkit-appearance:none; }
 .minmax-save { background:var(--green); color:white; border:none; border-radius:6px; padding:10px 16px; font-size:16px; font-weight:700; cursor:pointer; flex-shrink:0; }
 
+/* ── Gestionar Productos: collapsible categories ── */
+.prod-cat-card { background:var(--white); border-radius:var(--radius); margin-bottom:8px; box-shadow:var(--shadow); overflow:hidden; }
+.prod-cat-header { padding:11px 14px; display:flex; align-items:center; gap:10px; cursor:pointer; user-select:none; }
+.prod-cat-card.open .prod-cat-header { border-bottom:2px solid var(--green-bg); }
+.prod-cat-header .cat-chevron { font-size:13px; color:var(--gray); transition:transform .2s; flex-shrink:0; }
+.prod-cat-card.open .cat-chevron { transform:rotate(180deg); }
+.prod-cat-header .cat-name { font-size:13px; font-weight:700; color:var(--green); flex:1; }
+.prod-cat-header .cat-count { font-size:11px; color:var(--gray); background:var(--gray-bg); padding:2px 8px; border-radius:10px; }
+.prod-cat-body { display:none; }
+.prod-cat-card.open .prod-cat-body { display:block; }
+
+/* ── Product row (compact) ── */
+.prod-row { display:flex; align-items:center; gap:8px; padding:9px 12px; border-bottom:1px solid #f0f0f0; transition:background .1s; }
+.prod-row:last-of-type { border-bottom:none; }
+.prod-row.editing { background:#f6fbf8; }
+.prod-row.dimmed { opacity:.4; }
+.prod-active-btn { background:none; border:none; font-size:17px; cursor:pointer; padding:0; width:24px; flex-shrink:0; }
+.prod-info { flex:1; min-width:0; }
+.prod-name-text { font-size:13px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.prod-meta-text { font-size:10px; color:var(--gray); margin-top:2px; display:flex; flex-wrap:wrap; gap:3px; align-items:center; }
+.prod-badge { padding:1px 5px; border-radius:4px; font-size:10px; font-weight:600; white-space:nowrap; }
+.prod-badge-green { background:var(--green-bg); color:var(--green); }
+.prod-badge-blue { background:#e3f2fd; color:#1565c0; }
+.prod-badge-orange { background:#fff3e0; color:#e65100; }
+.prod-badge-gray { background:var(--gray-bg); color:var(--gray); }
+.prod-edit-btn { background:none; border:none; font-size:15px; cursor:pointer; padding:5px 6px; flex-shrink:0; border-radius:7px; transition:all .15s; }
+.prod-edit-btn:hover, .prod-edit-btn.active { background:var(--green-bg); }
+
+/* ── Inline edit panel ── */
+.prod-inline-edit { display:none; background:#f4faf6; border-top:2px solid var(--green); padding:12px 14px 16px; }
+.prod-inline-edit.open { display:block; }
+.pie-row { display:flex; gap:8px; margin-bottom:8px; }
+.pie-field { display:flex; flex-direction:column; gap:4px; flex:1; min-width:0; }
+.pie-field label { font-size:9px; font-weight:800; color:var(--gray); text-transform:uppercase; letter-spacing:.5px; }
+.pie-field input, .pie-field select { padding:8px 10px; border:1.5px solid var(--gray-border); border-radius:8px; font-size:13px; background:white; width:100%; box-sizing:border-box; }
+.pie-field input:focus, .pie-field select:focus { border-color:var(--green); outline:none; box-shadow:0 0 0 2px rgba(45,106,79,.12); }
+.pie-num input { font-size:17px; font-weight:700; text-align:center; padding:7px 4px; }
+.pie-more-btn { font-size:11px; color:var(--green); cursor:pointer; padding:4px 0 6px; display:flex; align-items:center; gap:4px; user-select:none; font-weight:600; }
+.pie-more-chevron { font-size:10px; transition:transform .2s; display:inline-block; }
+.pie-more-open .pie-more-chevron { transform:rotate(180deg); }
+.pie-extra { display:none; padding-top:8px; border-top:1px dashed var(--gray-border); margin-top:2px; }
+.pie-extra.open { display:block; }
+.pie-actions { display:flex; gap:8px; margin-top:10px; }
+.pie-cancel-btn { flex:1; padding:11px; background:white; border:1.5px solid var(--gray-border); border-radius:9px; font-size:13px; cursor:pointer; font-weight:600; color:var(--gray); }
+.pie-save-btn { flex:2; padding:11px; background:var(--green); border:none; border-radius:9px; font-size:13px; font-weight:700; color:white; cursor:pointer; }
+.pie-save-btn:active { background:var(--green-light); }
+.pie-save-btn.saving { opacity:.6; }
+
 /* Stepper */
 .stepper { display:flex; align-items:center; gap:0; flex-shrink:0; }
 .stepper button { width:36px; height:36px; border:none; background:var(--gray-bg); color:var(--dark); font-size:20px; font-weight:600; cursor:pointer; display:flex; align-items:center; justify-content:center; }
@@ -1954,6 +2002,9 @@ const PRODUCTS_CACHE_KEY = 'nb_inventario_products';
 const PRODUCTS_CACHE_TS = 'nb_inventario_products_ts';
 let productFilter = 'all';
 let productSeasonFilter = '';
+let expandedProdIdx = null;
+let collapsedProdCats = new Set();
+try { collapsedProdCats = new Set(JSON.parse(sessionStorage.getItem('nb_prod_cats') || '[]')); } catch(e) {}
 
 function showProducts() {
   showView('viewProducts');
@@ -2008,32 +2059,213 @@ function renderProductList() {
     grouped[p.c].push(p);
   });
 
-  let html = `<div style="font-size:12px;color:var(--gray);margin-bottom:8px">${list.length} productos</div>`;
+  const searching = !!search;
+  // Auto-expand all categories when searching
+  if (searching) Object.keys(grouped).forEach(c => collapsedProdCats.delete(c));
+
+  let html = `<div style="font-size:11px;color:var(--gray);margin-bottom:8px;padding:0 2px">${list.length} producto${list.length!==1?'s':''}</div>`;
 
   Object.keys(grouped).sort().forEach(cat => {
-    html += `<div style="font-size:13px;font-weight:600;color:var(--green);padding:8px 0 4px;border-bottom:1px solid var(--gray-border)">${cat} (${grouped[cat].length})</div>`;
+    const isOpen = !collapsedProdCats.has(cat);
+    const catId = 'prodcat-' + cat.replace(/[^a-zA-Z0-9]/g,'_');
+    html += `<div class="prod-cat-card${isOpen?' open':''}" id="${catId}">
+      <div class="prod-cat-header" onclick="toggleProdCat('${cat.replace(/'/g,"\\'")}')">
+        <span class="cat-chevron">▾</span>
+        <span class="cat-name">${cat}</span>
+        <span class="cat-count">${grouped[cat].length}</span>
+      </div>
+      <div class="prod-cat-body">`;
+
     grouped[cat].forEach(p => {
       const isActive = p.active !== false;
-      const tags = [
-        p.temporada && p.temporada !== 'Siempre' ? `<span style="background:#e8f5e9;color:#2e7d32;padding:1px 5px;border-radius:4px;font-size:10px">${p.temporada}</span>` : '',
-        p.tags ? p.tags.split(',').map(t => `<span style="background:#e3f2fd;color:#1565c0;padding:1px 5px;border-radius:4px;font-size:10px">${t.trim()}</span>`).join(' ') : '',
-        p.variantes ? `<span style="background:#f3e5f5;color:#7b1fa2;padding:1px 5px;border-radius:4px;font-size:10px">📎 ${p.variantes}</span>` : ''
-      ].filter(Boolean).join(' ');
+      const isEditing = expandedProdIdx === p.idx;
 
-      html += `
-        <div style="display:flex;align-items:center;gap:8px;padding:8px 4px;border-bottom:1px solid #f5f5f5;${!isActive?'opacity:.5':''}">
-          <button onclick="toggleProductActive(${p.idx})" style="background:none;border:none;font-size:20px;cursor:pointer;padding:0;width:28px">${isActive ? '✅' : '⬜'}</button>
-          <div style="flex:1;min-width:0">
-            <div style="font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${p.n}</div>
-            <div style="font-size:11px;color:var(--gray)">${p.l} · ${p.s||'—'} ${p.u?'· '+p.u:''}</div>
-            ${tags ? `<div style="margin-top:2px;display:flex;gap:3px;flex-wrap:wrap">${tags}</div>` : ''}
-          </div>
-          <button onclick="editProduct(${p.idx})" style="background:none;border:none;font-size:16px;cursor:pointer;padding:4px">✏️</button>
-        </div>`;
+      // Compact meta badges
+      const metaParts = [];
+      if (p.l) metaParts.push(`<span class="prod-badge prod-badge-gray">${p.l}</span>`);
+      if (p.s) metaParts.push(`<span>${p.s}</span>`);
+      if (p.inv > 0 || p.max > 0) metaParts.push(`<span class="prod-badge prod-badge-green">↕ ${p.inv}–${p.max}</span>`);
+      if (p.u) metaParts.push(`<span class="prod-badge prod-badge-blue">${p.u}</span>`);
+      if (p.pu) metaParts.push(`<span class="prod-badge prod-badge-orange">📦 ${p.pu}</span>`);
+
+      html += `<div class="prod-row${isEditing?' editing':''}${!isActive?' dimmed':''}">
+        <button class="prod-active-btn" onclick="toggleProductActive(${p.idx})" title="${isActive?'Desactivar':'Activar'}">${isActive?'✅':'⬜'}</button>
+        <div class="prod-info">
+          <div class="prod-name-text">${p.n}</div>
+          <div class="prod-meta-text">${metaParts.join('')}</div>
+        </div>
+        <button class="prod-edit-btn${isEditing?' active':''}" onclick="openInlineEdit(${p.idx})" title="Editar">✏️</button>
+      </div>`;
+
+      // Inline edit panel (rendered inline, hidden until opened)
+      html += `<div class="prod-inline-edit${isEditing?' open':''}" id="pie-${p.idx}">` + buildInlineEditHTML(p) + `</div>`;
     });
+
+    html += `</div></div>`; // close prod-cat-body + prod-cat-card
   });
 
   document.getElementById('productListContent').innerHTML = html;
+  // After render, scroll open editor into view
+  if (expandedProdIdx !== null) {
+    const el = document.getElementById('pie-' + expandedProdIdx);
+    if (el) setTimeout(() => el.scrollIntoView({ behavior:'smooth', block:'nearest' }), 50);
+  }
+}
+
+function buildInlineEditHTML(p) {
+  const i = p.idx;
+  const esc = v => String(v||'').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+  const cats = ['Insumos / Clubs','Envases y Limpieza','Mercado Abastos + Carnes','Materia Prima','Bebidas','Otros'];
+  const catOpts = cats.map(c => `<option value="${esc(c)}"${p.c===c?' selected':''}>${c}</option>`).join('');
+  const locs = ['Cocina','Almacén','Cuarto Frio Materia Prima','Cuarto Frio Ventas','Congelador (Himalaya)','Congelador (ataúd)','Producción','Tienda','Comedor','Oficina','Proveedores','Granja','Casa 1'];
+  const locOpts = locs.map(l => `<option value="${esc(l)}"${p.l===l?' selected':''}>${l}</option>`).join('');
+  const temps = ['Siempre','Primavera','Verano','Otoño','Invierno'];
+  const tempOpts = temps.map(t => `<option value="${t}"${(p.temporada||'Siempre')===t?' selected':''}>${t}</option>`).join('');
+  const formas = ['Ir a tienda','Pedido domicilio'];
+  const formaOpts = formas.map(f => `<option value="${esc(f)}"${(p.f||'Ir a tienda')===f?' selected':''}>${f}</option>`).join('');
+
+  return `
+    <div class="pie-row">
+      <div class="pie-field" style="flex:3">
+        <label>Nombre</label>
+        <input type="text" id="pie-n-${i}" value="${esc(p.n)}" placeholder="Nombre del producto">
+      </div>
+    </div>
+    <div class="pie-row">
+      <div class="pie-field pie-num">
+        <label>Mínimo</label>
+        <input type="number" id="pie-min-${i}" value="${p.inv||0}" step="0.5" min="0">
+      </div>
+      <div class="pie-field pie-num">
+        <label>Máximo</label>
+        <input type="number" id="pie-max-${i}" value="${p.max||0}" step="0.5" min="0">
+      </div>
+      <div class="pie-field" style="flex:2">
+        <label>Ud. conteo</label>
+        <input type="text" id="pie-u-${i}" value="${esc(p.u)}" placeholder="kg, lt, pz">
+      </div>
+      <div class="pie-field" style="flex:2">
+        <label>Ud. compra</label>
+        <input type="text" id="pie-pu-${i}" value="${esc(p.pu)}" placeholder="Caja 5kg">
+      </div>
+    </div>
+    <div class="pie-row">
+      <div class="pie-field">
+        <label>Tienda / Proveedor</label>
+        <input type="text" id="pie-s-${i}" value="${esc(p.s)}" placeholder="COSTCO">
+      </div>
+      <div class="pie-field">
+        <label>Entrega</label>
+        <select id="pie-f-${i}">${formaOpts}</select>
+      </div>
+    </div>
+    <div class="pie-more-btn" id="pie-more-btn-${i}" onclick="togglePieMore(${i})">
+      <span class="pie-more-chevron">▾</span> Más detalles (categoría, ubicación, temporada…)
+    </div>
+    <div class="pie-extra" id="pie-extra-${i}">
+      <div class="pie-row">
+        <div class="pie-field">
+          <label>Categoría</label>
+          <select id="pie-c-${i}">${catOpts}</select>
+        </div>
+        <div class="pie-field">
+          <label>Ubicación</label>
+          <select id="pie-l-${i}">${locOpts}</select>
+        </div>
+      </div>
+      <div class="pie-row">
+        <div class="pie-field">
+          <label>Temporada</label>
+          <select id="pie-temp-${i}">${tempOpts}</select>
+        </div>
+        <div class="pie-field">
+          <label>Tags</label>
+          <input type="text" id="pie-tags-${i}" value="${esc(p.tags)}" placeholder="Navidad, Cuaresma">
+        </div>
+      </div>
+      <div class="pie-row">
+        <div class="pie-field">
+          <label>Variantes</label>
+          <input type="text" id="pie-var-${i}" value="${esc(p.variantes)}" placeholder="Rojo, Azul">
+        </div>
+      </div>
+    </div>
+    <div class="pie-actions">
+      <button class="pie-cancel-btn" onclick="closeInlineEdit()">✕ Cancelar</button>
+      <button class="pie-save-btn" id="pie-save-${i}" onclick="saveInlineEdit(${i})">💾 Guardar</button>
+    </div>`;
+}
+
+// ── Category collapse ──
+function toggleProdCat(cat) {
+  if (collapsedProdCats.has(cat)) {
+    collapsedProdCats.delete(cat);
+  } else {
+    // Close any open inline editor in this category before collapsing
+    if (expandedProdIdx !== null) {
+      const p = PRODUCTS[expandedProdIdx];
+      if (p && p.c === cat) { expandedProdIdx = null; }
+    }
+    collapsedProdCats.add(cat);
+  }
+  try { sessionStorage.setItem('nb_prod_cats', JSON.stringify([...collapsedProdCats])); } catch(e) {}
+  renderProductList();
+}
+
+// ── Inline editor open/close ──
+function openInlineEdit(idx) {
+  if (expandedProdIdx === idx) { closeInlineEdit(); return; }
+  expandedProdIdx = idx;
+  renderProductList();
+}
+
+function closeInlineEdit() {
+  expandedProdIdx = null;
+  renderProductList();
+}
+
+// ── Toggle "Más detalles" section ──
+function togglePieMore(idx) {
+  const btn = document.getElementById('pie-more-btn-' + idx);
+  const extra = document.getElementById('pie-extra-' + idx);
+  if (!btn || !extra) return;
+  const isOpen = extra.classList.contains('open');
+  extra.classList.toggle('open', !isOpen);
+  btn.classList.toggle('pie-more-open', !isOpen);
+}
+
+// ── Save inline edit ──
+async function saveInlineEdit(idx) {
+  const g = id => { const el = document.getElementById(id); return el ? el.value : ''; };
+  const name = g('pie-n-' + idx).trim();
+  if (!name) { toast('Nombre requerido'); return; }
+
+  const btn = document.getElementById('pie-save-' + idx);
+  if (btn) { btn.textContent = '⏳'; btn.classList.add('saving'); btn.disabled = true; }
+
+  const oldId = PRODUCTS[idx].id;
+  Object.assign(PRODUCTS[idx], {
+    n:         name,
+    inv:       parseFloat(g('pie-min-' + idx))  || 0,
+    max:       parseFloat(g('pie-max-' + idx))  || 0,
+    u:         g('pie-u-'    + idx).trim(),
+    pu:        g('pie-pu-'   + idx).trim(),
+    s:         g('pie-s-'    + idx).trim(),
+    f:         g('pie-f-'    + idx),
+    c:         g('pie-c-'    + idx),
+    l:         g('pie-l-'    + idx),
+    temporada: g('pie-temp-' + idx),
+    tags:      g('pie-tags-' + idx).trim(),
+    variantes: g('pie-var-'  + idx).trim(),
+  });
+  if (oldId) PRODUCTS[idx].id = oldId;
+
+  saveProductsToCache();
+  await pushProductToSheet(PRODUCTS[idx], true);
+
+  expandedProdIdx = null;
+  renderProductList();
+  toast('✅ ' + name + ' guardado');
 }
 
 function toggleProductActive(idx) {
