@@ -1604,7 +1604,7 @@
         const transferencias  = parseFloat(ingreso.Transferencias)  || 0;
         const cashback        = parseFloat(ingreso.Cashback)        || 0;
         const sobre2          = parseFloat(ingreso.Sobre2)          || 0;
-        const depositoAjustado = pagosRecibidos - tarjeta - transferencias - cashback - sobre2;
+        const depositoAjustado = Math.round(pagosRecibidos - tarjeta - transferencias - cashback - sobre2);
 
         // ── RESUMEN ──────────────────────────────────────────────
         const cell = (label, val, hl=false) => `
