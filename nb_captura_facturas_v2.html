@@ -108,6 +108,20 @@ tr:last-child td { border-bottom: none; }
 .sup-item.sup-create { color: #1565C0; border-top: 1px solid #f0f0f0; font-style: italic; }
 .sup-footer { padding: 8px 12px; border-top: 1px solid #f0f0f0; display: flex; justify-content: flex-end; background: #fafafa; }
 
+/* CREATE SUPPLIER / INGREDIENT INLINE FORM */
+.create-form { padding: 12px 14px; border-top: 2px solid #e3f2fd; background: #f3f9ff; display: none; }
+.create-form.open { display: block; }
+.create-form h5 { font-size: 12px; font-weight: 800; color: #1565C0; margin-bottom: 10px; }
+.create-form label { font-size: 11px; font-weight: 700; color: #555; display: block; margin: 8px 0 3px; }
+.create-form input, .create-form select { width: 100%; padding: 6px 10px; border: 1.5px solid #cce0f0; border-radius: 7px; font-size: 13px; background: white; }
+.create-form input:focus, .create-form select:focus { border-color: #1565C0; outline: none; }
+.create-form-row { display: flex; gap: 8px; }
+.create-form-row .cf-half { flex: 1; }
+.create-form-actions { display: flex; gap: 8px; margin-top: 12px; justify-content: flex-end; }
+.btn-cf-save { background: #1565C0; color: white; border: none; border-radius: 8px; padding: 7px 16px; font-size: 12px; font-weight: 700; cursor: pointer; }
+.btn-cf-cancel { background: none; border: 1.5px solid #ccc; border-radius: 8px; padding: 7px 12px; font-size: 12px; color: #777; cursor: pointer; }
+.cf-saving { opacity: .6; pointer-events: none; }
+
 /* PROVEEDORES PANEL */
 .prov-row { display: flex; align-items: center; gap: 8px; padding: 6px 12px; background: #f8f8f8; border-radius: 8px; margin-bottom: 5px; }
 .prov-name { flex: 1; font-size: 13px; font-weight: 600; }
@@ -137,6 +151,22 @@ tr:last-child td { border-bottom: none; }
 .corr-trigger { display: inline-flex; align-items: center; gap: 5px; padding: 7px 14px; border-radius: 9px; cursor: pointer; font-size: 12px; font-weight: 600; border: 1.5px dashed #bdbdbd; color: #555; background: white; transition: all 0.15s; }
 .corr-trigger:hover { border-color: #2e6b2e; color: #2e6b2e; background: #f1f8f1; }
 .corr-trigger.learned { border-style: solid; border-color: #7986cb; color: #3949ab; background: #e8eaf6; }
+
+/* Inline editable cells */
+.editable-cell { cursor: pointer; position: relative; }
+.editable-cell:hover { background: #f9fdf9 !important; }
+.cell-edit-hint { font-size: 10px; color: #ccc; margin-left: 4px; opacity: 0; transition: opacity .15s; pointer-events: none; }
+.editable-cell:hover .cell-edit-hint { opacity: 1; }
+.cell-inline-edit { display: flex; gap: 4px; align-items: center; flex-wrap: wrap; }
+.cell-inline-edit input, .cell-inline-edit select { padding: 3px 6px; border: 1.5px solid #2e6b2e; border-radius: 5px; font-size: 12px; min-width: 60px; }
+.cell-inline-edit input:focus, .cell-inline-edit select:focus { outline: none; box-shadow: 0 0 0 2px rgba(46,107,46,.15); }
+.cell-save-btn  { background: #2e6b2e; color: white; border: none; border-radius: 5px; padding: 3px 8px; font-size: 11px; font-weight: 700; cursor: pointer; }
+.cell-cancel-btn { background: none; border: 1.5px solid #ccc; border-radius: 5px; padding: 3px 6px; font-size: 11px; cursor: pointer; color: #777; }
+
+/* Supplier chip edit button */
+.sup-matched { cursor: default; }
+.sup-edit-btn { background: none; border: none; cursor: pointer; font-size: 11px; padding: 2px 4px; border-radius: 4px; color: #aaa; margin-left: 2px; }
+.sup-edit-btn:hover { color: #2e6b2e; background: #e8f5e9; }
 
 /* FILTER BAR */
 .filter-bar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 14px; }
@@ -581,6 +611,35 @@ tr:last-child td { border-bottom: none; }
     <div class="ss-stats" id="ssStats"></div>
   </div>
   <div id="ssListWrap"><div id="ssList"></div></div>
+  <!-- CREATE INGREDIENT FORM -->
+  <div class="create-form" id="ssCreateForm">
+    <h5>➕ Nuevo Ingrediente en MATERIA PRIMA</h5>
+    <label>Nombre *</label>
+    <input id="cfIngNombre" type="text" placeholder="Nombre del ingrediente">
+    <div class="create-form-row">
+      <div class="cf-half">
+        <label>Unidad</label>
+        <select id="cfIngUnidad">
+          <option value="KG">KG</option>
+          <option value="L">L</option>
+          <option value="PZA">PZA</option>
+          <option value="CAJA">CAJA</option>
+          <option value="BOLSA">BOLSA</option>
+          <option value="LT">LT</option>
+        </select>
+      </div>
+      <div class="cf-half">
+        <label>Precio paquete</label>
+        <input id="cfIngPrecio" type="number" placeholder="0.00" step="0.01" min="0">
+      </div>
+    </div>
+    <label>Categoría</label>
+    <input id="cfIngCategoria" type="text" placeholder="Ej: Lácteos, Carnes, Verduras…">
+    <div class="create-form-actions">
+      <button class="btn-cf-cancel" onclick="ssCreateFormClose()">Cancelar</button>
+      <button class="btn-cf-save" id="cfIngSaveBtn" onclick="ssCreateFormSave()">Guardar</button>
+    </div>
+  </div>
   <div class="ss-footer">
     <span class="hint">↑↓ navegar · Enter seleccionar · Esc cerrar</span>
     <button class="btn btn-outline btn-xs" onclick="ssClose()">Cancelar</button>
@@ -597,8 +656,37 @@ tr:last-child td { border-bottom: none; }
            oninput="supFilter(this.value)" onkeydown="supKeydown(event)">
   </div>
   <div id="supListWrap"><div id="supList"></div></div>
+  <!-- CREATE SUPPLIER FORM (shown when ➕ Crear is clicked) -->
+  <div class="create-form" id="supCreateForm">
+    <h5>➕ Nuevo Proveedor</h5>
+    <label>Nombre *</label>
+    <input id="cfSupNombre" type="text" placeholder="Nombre comercial">
+    <div class="create-form-row">
+      <div class="cf-half">
+        <label>RFC</label>
+        <input id="cfSupRFC" type="text" placeholder="RFC123456ABC" style="text-transform:uppercase">
+      </div>
+      <div class="cf-half">
+        <label>Días de crédito</label>
+        <input id="cfSupCredito" type="number" placeholder="0" min="0">
+      </div>
+    </div>
+    <label>Forma de pago</label>
+    <select id="cfSupFormaPago">
+      <option value="">— Seleccionar —</option>
+      <option>Transferencia</option>
+      <option>Tarjeta crédito</option>
+      <option>Tarjeta débito</option>
+      <option>Efectivo</option>
+      <option>Cheque</option>
+    </select>
+    <div class="create-form-actions">
+      <button class="btn-cf-cancel" onclick="supCreateFormClose()">Cancelar</button>
+      <button class="btn-cf-save" id="cfSupSaveBtn" onclick="supCreateFormSave()">Guardar</button>
+    </div>
+  </div>
   <div class="sup-footer">
-    <button class="btn btn-outline btn-xs" onclick="supClose()">Cancelar</button>
+    <button class="btn btn-outline btn-xs" onclick="supClose()">Cerrar</button>
   </div>
 </div>
 
@@ -1129,6 +1217,10 @@ function getSortedIngredients(invoiceDesc) {
 // ══════════════════════════════════════════════
 function ssOpen(rowIdx, anchorEl, invoiceDesc, currentBdName) {
   ssActiveRow=rowIdx; ssHighlighted=-1;
+  _ssCurrentInvoiceDesc = invoiceDesc;
+  // Pre-fill price from the current item if available
+  const item = currentItems[rowIdx];
+  _ssCurrentInvoicePrice = item ? (item.precio_unitario || item.precio_base || 0) : 0;
   ssAllItems = getSortedIngredients(invoiceDesc);
   const portal = document.getElementById('ssPortal');
   const rect   = anchorEl.getBoundingClientRect();
@@ -1171,7 +1263,13 @@ function ssRenderList(items, selectedName) {
   ssFiltered = items;
   const list=document.getElementById('ssList'), stats=document.getElementById('ssStats');
   const topN=items.filter(i=>i._score>=0.35).length;
-  if (!items.length) { list.innerHTML='<div class="ss-empty">Sin resultados.</div>'; stats.textContent=''; return; }
+  const q = (document.getElementById('ssInput').value||'').trim();
+  if (!items.length) {
+    list.innerHTML = '<div class="ss-empty">Sin resultados.</div>'
+      + `<div class="sup-item sup-create" style="padding:10px 14px;color:#1565C0;font-style:italic;border-top:1px solid #f0f0f0;cursor:pointer" onmousedown="ssOpenCreateForm()">➕ Crear ingrediente "${q||_ssCurrentInvoiceDesc}"</div>`;
+    stats.textContent='';
+    return;
+  }
   stats.textContent=items.length+' ingredientes · '+topN+' coincidencias';
   let html='', shownSep=false;
   items.forEach((ing,idx)=>{
@@ -1187,6 +1285,9 @@ function ssRenderList(items, selectedName) {
       ${isTop?`<span class="item-score">${pct}%</span>`:''}
     </div>`;
   });
+  // Always show "create new" at the bottom
+  html += `<div class="ss-sep" style="padding:4px 14px 0">Nueva entrada</div>`;
+  html += `<div class="sup-item sup-create" style="padding:9px 14px;color:#1565C0;font-style:italic;cursor:pointer" onmousedown="ssOpenCreateForm()">➕ Crear ingrediente${q?' "'+q+'"':''}</div>`;
   list.innerHTML=html; ssHighlighted=-1;
 }
 
@@ -1196,6 +1297,65 @@ function ssFilter(q) {
 }
 
 function ssPick(idx) { const item=ssFiltered[idx]; if(item&&ssCallback) ssCallback(item.n); }
+
+// ── Create ingredient from unmatched line item ──
+let _ssCurrentInvoiceDesc = '';
+let _ssCurrentInvoicePrice = 0;
+
+function ssOpenCreateForm() {
+  const q = document.getElementById('ssInput').value.trim();
+  document.getElementById('ssListWrap').style.display = 'none';
+  document.getElementById('ssCreateForm').classList.add('open');
+  document.getElementById('cfIngNombre').value = q || _ssCurrentInvoiceDesc;
+  document.getElementById('cfIngPrecio').value = _ssCurrentInvoicePrice || '';
+  document.getElementById('cfIngCategoria').value = '';
+  setTimeout(() => document.getElementById('cfIngNombre').focus(), 50);
+}
+
+function ssCreateFormClose() {
+  document.getElementById('ssCreateForm').classList.remove('open');
+  document.getElementById('ssListWrap').style.display = '';
+}
+
+async function ssCreateFormSave() {
+  const nombre = document.getElementById('cfIngNombre').value.trim();
+  if (!nombre) { showToast('El nombre es obligatorio', 'error'); return; }
+  const unidad = document.getElementById('cfIngUnidad').value;
+  const precio = parseFloat(document.getElementById('cfIngPrecio').value) || 0;
+  const categoria = document.getElementById('cfIngCategoria').value.trim();
+  const btn = document.getElementById('cfIngSaveBtn');
+  btn.textContent = 'Guardando…'; btn.classList.add('cf-saving');
+
+  // Add to local DB immediately so it can be picked right away
+  const newIng = { n: nombre, c: precio, p: '', u: unidad, cat: categoria, _score: 0 };
+  INGREDIENTS_DB.unshift(newIng);
+
+  // Try to push to Apps Script → MATERIA PRIMA sheet
+  const scriptUrl = getScriptUrl();
+  if (scriptUrl) {
+    try {
+      await fetch(scriptUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain' },
+        body: JSON.stringify({
+          action: 'add_ingredient',
+          ingredient: { Nombre: nombre, Unidad: unidad, CostoPaq: precio, Categoria: categoria }
+        })
+      });
+      showToast('✅ Ingrediente guardado en MATERIA PRIMA: ' + nombre);
+    } catch (err) {
+      showToast('⚠️ Guardado localmente, verifica conexión', 'warn');
+    }
+  } else {
+    showToast('✅ Ingrediente creado: ' + nombre);
+  }
+
+  btn.textContent = 'Guardar'; btn.classList.remove('cf-saving');
+  document.getElementById('ssCreateForm').classList.remove('open');
+  document.getElementById('ssListWrap').style.display = '';
+  if (ssCallback) ssCallback(nombre);
+  ssClose();
+}
 
 function ssHighlight(idx) {
   ssHighlighted=idx;
@@ -1431,12 +1591,64 @@ function supFilter(q){
 function supPick(idx){ const s=supFiltered[idx]; if(s&&supCallback) supCallback(s); }
 
 function supCreateNew(){
-  const name=document.getElementById('supInput').value.trim();
-  if(!name)return;
-  const extras=getExtraSuppliers();
-  if(!extras.find(e=>normalize(e)===normalize(name))){extras.push(name);localStorage.setItem(SUPPLIER_EXTRA_KEY,JSON.stringify(extras));}
+  // Open the inline create form instead of immediately saving
+  const name = document.getElementById('supInput').value.trim();
+  if (!name) return;
+  document.getElementById('supListWrap').style.display = 'none';
+  document.getElementById('cfSupNombre').value = name;
+  document.getElementById('cfSupRFC').value = '';
+  document.getElementById('cfSupCredito').value = '';
+  document.getElementById('cfSupFormaPago').value = '';
+  document.getElementById('supCreateForm').classList.add('open');
+  setTimeout(() => document.getElementById('cfSupRFC').focus(), 50);
+}
+
+function supCreateFormClose() {
+  document.getElementById('supCreateForm').classList.remove('open');
+  document.getElementById('supListWrap').style.display = '';
+}
+
+async function supCreateFormSave() {
+  const nombre = document.getElementById('cfSupNombre').value.trim();
+  if (!nombre) { showToast('El nombre es obligatorio', 'error'); return; }
+  const rfc = document.getElementById('cfSupRFC').value.trim().toUpperCase();
+  const credito = parseInt(document.getElementById('cfSupCredito').value) || 0;
+  const formaPago = document.getElementById('cfSupFormaPago').value;
+  const btn = document.getElementById('cfSupSaveBtn');
+  btn.textContent = 'Guardando…'; btn.classList.add('cf-saving');
+
+  // Save locally first (always works)
+  const extras = getExtraSuppliers();
+  if (!extras.find(e => normalize(e) === normalize(nombre))) {
+    extras.push(nombre);
+    localStorage.setItem(SUPPLIER_EXTRA_KEY, JSON.stringify(extras));
+  }
   buildSuppliersFromDB();
-  if(supCallback) supCallback(name);
+
+  // Try to push to Apps Script → PROVEEDORES sheet
+  const scriptUrl = getScriptUrl();
+  if (scriptUrl) {
+    try {
+      await fetch(scriptUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain' },
+        body: JSON.stringify({
+          action: 'add_proveedor',
+          proveedor: { Nombre: nombre, RFC: rfc, DiasCredito: credito, FormaPago: formaPago }
+        })
+      });
+      showToast('✅ Proveedor guardado en Sheet: ' + nombre);
+    } catch (err) {
+      showToast('⚠️ Guardado localmente, verifica conexión', 'warn');
+    }
+  } else {
+    showToast('✅ Proveedor guardado: ' + nombre);
+  }
+
+  if (supCallback) supCallback(nombre);
+  document.getElementById('supCreateForm').classList.remove('open');
+  document.getElementById('supListWrap').style.display = '';
+  supClose();
 }
 
 function supKeydown(e){
@@ -1453,7 +1665,7 @@ function renderSupplierChip(){
   if(!currentSupplier||currentSupplier==='—'){chip.outerHTML=`<div id="supChip" class="stat-chip">🏪 <strong>—</strong></div>`;return;}
   if(m){
     const icon=m.matchType==='learned'?'📚':m.matchType==='exact'?'✓':'≈';
-    chip.outerHTML=`<div id="supChip" class="stat-chip sup-chip sup-matched" title="Match: ${m.matchType}">🏪 ${icon} <strong>${m.name}</strong></div>`;
+    chip.outerHTML=`<div id="supChip" class="stat-chip sup-chip sup-matched" title="Match: ${m.matchType}">🏪 ${icon} <strong>${m.name}</strong><button class="sup-edit-btn" title="Editar proveedor" onclick="openSupplierEdit()">✏️</button></div>`;
   } else {
     chip.outerHTML=`<div id="supChip" class="stat-chip sup-chip sup-none" onclick="openSupplierAssign(this,'${sup.replace(/'/g,"\\'")}')">🏪 <strong>${sup}</strong><span class="sup-assign-tag">Asignar</span></div>`;
   }
@@ -1522,10 +1734,10 @@ function buildRowInner(i,item,m,ch,fp,bc,ub,cls,lbl){
   const fpLabel = item.precio_base && item.precio_base !== item.precio_unitario
     ? `$${fp.toFixed(2)}/${ub} <span style="font-size:10px;color:#aaa">(unit: $${(item.precio_unitario||0).toFixed(2)})</span>`
     : `$${fp.toFixed(2)}${ub?'/'+ub:''}`;
-  return `<td><strong>${item.descripcion}</strong></td>
+  return `<td class="editable-cell" title="Click para editar" onclick="startCellEdit(${i},'desc',this)"><strong>${item.descripcion}</strong><span class="cell-edit-hint">✏️</span></td>
 <td>${bdCell}</td>
-<td data-label="Cantidad">${item.cantidad||'—'} ${item.unidad||''}</td>
-<td data-label="Precio Factura">${fpLabel}</td>
+<td class="editable-cell" data-label="Cantidad" title="Click para editar" onclick="startCellEdit(${i},'qty',this)">${item.cantidad||'—'} ${item.unidad||''}<span class="cell-edit-hint">✏️</span></td>
+<td class="editable-cell" data-label="Precio Factura" title="Click para editar precio" onclick="startCellEdit(${i},'price',this)">${fpLabel}<span class="cell-edit-hint">✏️</span></td>
 <td data-label="Precio BD">${bc>0?'$'+bc.toFixed(2)+(ub?'/'+ub:''):'—'}</td>
 <td data-label="Cambio">${ch}</td>
 <td data-label="Match">${badgeHTML(m?m.matchType:'none',m?m.score:0)}</td>
@@ -1643,7 +1855,7 @@ function renderResults(parsed){
     supChipHTML=`<div id="supChip" class="stat-chip">🏪 <strong>—</strong></div>`;
   } else if(currentSupMatch){
     const icon=currentSupMatch.matchType==='learned'?'📚':currentSupMatch.matchType==='exact'?'✓':'≈';
-    supChipHTML=`<div id="supChip" class="stat-chip sup-chip sup-matched" title="Match: ${currentSupMatch.matchType}">🏪 ${icon} <strong>${currentSupMatch.name}</strong></div>`;
+    supChipHTML=`<div id="supChip" class="stat-chip sup-chip sup-matched" title="Match: ${currentSupMatch.matchType}">🏪 ${icon} <strong>${currentSupMatch.name}</strong><button class="sup-edit-btn" title="Editar proveedor" onclick="openSupplierEdit()">✏️</button></div>`;
   } else {
     supChipHTML=`<div id="supChip" class="stat-chip sup-chip sup-none" onclick="openSupplierAssign(this,'${currentSupplier.replace(/'/g,"\\'")}')">🏪 <strong>${currentSupplier}</strong><span class="sup-assign-tag">Asignar</span></div>`;
   }
@@ -1724,6 +1936,96 @@ function exportCSV(){
 // ══════════════════════════════════════════════
 function getPrefNames(){ try{return JSON.parse(localStorage.getItem('nb_pref_names')||'{}')}catch{return{}} }
 function getDisplayName(bdName){ const p=getPrefNames(); return p[normalize(bdName)]||bdName; }
+
+// ══════════════════════════════════════════════
+// INLINE CELL EDITING
+// ══════════════════════════════════════════════
+function startCellEdit(idx, field, tdEl) {
+  // Prevent re-triggering if already in edit mode
+  if (tdEl.querySelector('input')) return;
+  const item = currentItems[idx]; if (!item) return;
+  tdEl.classList.remove('editable-cell'); // stop hover re-trigger while editing
+
+  let html = '';
+  if (field === 'desc') {
+    html = `<div class="cell-inline-edit">
+      <input id="cei_${idx}_${field}" value="${item.descripcion.replace(/"/g,'&quot;')}" style="min-width:140px;flex:1"
+        onkeydown="if(event.key==='Enter'){event.preventDefault();saveCellEdit(${idx},'${field}',this.closest('td'));}
+                   if(event.key==='Escape')rerenderRow(${idx});">
+      <button class="cell-save-btn" onclick="saveCellEdit(${idx},'${field}',this.closest('td'))">✓</button>
+      <button class="cell-cancel-btn" onclick="rerenderRow(${idx})">✕</button>
+    </div>`;
+  } else if (field === 'qty') {
+    html = `<div class="cell-inline-edit">
+      <input id="cei_${idx}_qty" type="number" value="${item.cantidad||0}" step="0.001" style="width:70px"
+        onkeydown="if(event.key==='Enter'){event.preventDefault();saveCellEdit(${idx},'${field}',this.closest('td'));}
+                   if(event.key==='Escape')rerenderRow(${idx});">
+      <select id="cei_${idx}_unit" style="width:70px">
+        ${['KG','L','PZA','CAJA','BOLSA','g','ml','LT'].map(u=>`<option ${u===(item.unidad||'')?' selected':''}>${u}</option>`).join('')}
+        <option ${!['KG','L','PZA','CAJA','BOLSA','g','ml','LT'].includes(item.unidad||'')?'selected':''} value="${item.unidad||''}">${item.unidad||'otro'}</option>
+      </select>
+      <button class="cell-save-btn" onclick="saveCellEdit(${idx},'${field}',this.closest('td'))">✓</button>
+      <button class="cell-cancel-btn" onclick="rerenderRow(${idx})">✕</button>
+    </div>`;
+  } else if (field === 'price') {
+    html = `<div class="cell-inline-edit">
+      <span style="font-size:11px;color:#888">$</span>
+      <input id="cei_${idx}_${field}" type="number" value="${(item.precio_unitario||item.precio_base||0).toFixed(2)}" step="0.01" style="width:90px"
+        onkeydown="if(event.key==='Enter'){event.preventDefault();saveCellEdit(${idx},'${field}',this.closest('td'));}
+                   if(event.key==='Escape')rerenderRow(${idx});">
+      <button class="cell-save-btn" onclick="saveCellEdit(${idx},'${field}',this.closest('td'))">✓</button>
+      <button class="cell-cancel-btn" onclick="rerenderRow(${idx})">✕</button>
+    </div>`;
+  }
+
+  tdEl.innerHTML = html;
+  setTimeout(() => { const inp = document.getElementById(`cei_${idx}_${field}`); if(inp){inp.focus();inp.select();} }, 30);
+}
+
+function saveCellEdit(idx, field, tdEl) {
+  const item = currentItems[idx]; if (!item) return;
+  if (field === 'desc') {
+    const v = (document.getElementById(`cei_${idx}_desc`)?.value||'').trim();
+    if (v) item.descripcion = v;
+  } else if (field === 'qty') {
+    const qty = parseFloat(document.getElementById(`cei_${idx}_qty`)?.value) || item.cantidad;
+    const unit = document.getElementById(`cei_${idx}_unit`)?.value || item.unidad;
+    item.cantidad = qty; item.unidad = unit;
+  } else if (field === 'price') {
+    const v = parseFloat(document.getElementById(`cei_${idx}_price`)?.value);
+    if (!isNaN(v) && v > 0) { item.precio_unitario = v; item.precio_base = v; }
+  }
+  rerenderRow(idx);
+}
+
+// ── Supplier chip edit button ──
+function openSupplierEdit() {
+  const sup = currentSupplier || '';
+  const info = getProveedorInfo(sup);
+  document.getElementById('supInvoiceName').textContent = sup;
+  document.getElementById('supInput').value = '';
+  supAllItems = [...SUPPLIERS_DB];
+  supRenderList(supAllItems);
+  // Pre-fill create form with known supplier info so user can update
+  document.getElementById('cfSupNombre').value = currentSupMatch?.name || sup;
+  document.getElementById('cfSupRFC').value = '';
+  document.getElementById('cfSupCredito').value = info?.creditDays || '';
+  document.getElementById('cfSupFormaPago').value = info?.formaPago || '';
+  const portal = document.getElementById('supPortal');
+  portal.style.display = 'block';
+  portal.style.top = '120px';
+  portal.style.left = '50%';
+  portal.style.transform = 'translateX(-50%)';
+  supCallback = (nbName) => {
+    const invoiceName = currentSupplier || nbName;
+    saveSupplierMapping(invoiceName, nbName);
+    currentSupMatch = { name: nbName, matchType: 'learned' };
+    renderSupplierChip();
+    showToast('🏪 Proveedor actualizado: ' + nbName);
+    supClose();
+  };
+  setTimeout(() => document.getElementById('supInput').focus(), 50);
+}
 
 function startPrefRename(idx, btnEl, bdName){
   const td = btnEl.closest('td');

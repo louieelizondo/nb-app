@@ -122,6 +122,8 @@ function doPost(e) {
       case 'update_order':     return jsonResp(updateOrder(body));
       case 'audit':            return jsonResp(writeAudit(body));
       case 'sync_batch':       return jsonResp(processSyncBatch(body));
+      case 'add_ingredient':   return jsonResp(addIngredient(body));
+      case 'add_proveedor':    return jsonResp(addProveedor(body));
       // Cortes & Ingresos
       case 'save_corte_individual':   return jsonResp(saveCorteIndividual(body));
       case 'delete_corte_individual': return jsonResp(deleteCorteIndividual(body));
@@ -925,6 +927,85 @@ function getOrCreateTab(name, headers) {
     });
   }
   return sheet;
+}
+
+// ══════════════════════════════════════════════
+// ADD INGREDIENT → MATERIA PRIMA
+// ══════════════════════════════════════════════
+
+/**
+ * Append a new row to MATERIA PRIMA.
+ * body: { ingredient: { Nombre, Unidad, CostoPaq, Categoria } }
+ * MATERIA PRIMA cols: A=Ingrediente, B=Categoría, C=CostoPaq, D=Fecha, E=UnidsCaja, F=VolUnid, G=Unidad
+ */
+function addIngredient(body) {
+  const ing = body.ingredient || body;
+  const nombre = (ing.Nombre || '').trim();
+  if (!nombre) throw new Error('Nombre requerido');
+
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const mp = ss.getSheetByName(MP_TAB);
+  if (!mp) throw new Error('Tab "' + MP_TAB + '" not found');
+
+  // Check for duplicate (case-insensitive)
+  const data = mp.getDataRange().getValues();
+  const exists = data.slice(1).some(r => String(r[0] || '').trim().toLowerCase() === nombre.toLowerCase());
+  if (exists) return { ok: false, message: 'Ingrediente ya existe: ' + nombre };
+
+  const row = [
+    nombre,
+    ing.Categoria || '',
+    parseFloat(ing.CostoPaq) || 0,
+    new Date(),
+    '',        // UnidsCaja — blank
+    '',        // VolUnid — blank
+    ing.Unidad || 'PZA'
+  ];
+  mp.appendRow(row);
+  log('ADD_INGREDIENT', nombre + ' | ' + (ing.Unidad || 'PZA') + ' | $' + (ing.CostoPaq || 0));
+  return { ok: true, message: 'Ingrediente agregado: ' + nombre };
+}
+
+// ══════════════════════════════════════════════
+// ADD PROVEEDOR → PROVEEDORES sheet
+// ══════════════════════════════════════════════
+
+/**
+ * Append a new row to the PROVEEDORES sheet.
+ * body: { proveedor: { Nombre, RFC, DiasCredito, FormaPago } }
+ * PROVEEDORES cols: 0=Proveedor, 1=ContactoVentas, 2=ContactoPagos, 3=TelCompras, 4=TelPagos,
+ *   5=Email, 6=FormaPago, 7=DíasCrédito, 8=Banco, 9=CLABE, 10=Cuenta,
+ *   11=RazónSocial(RFC), 12=VíaPedido, 13=LigaFacturación, 14=Facturas2026, 15=CatGasto, 16=Fuente
+ */
+function addProveedor(body) {
+  const prov = body.proveedor || body;
+  const nombre = (prov.Nombre || '').trim();
+  if (!nombre) throw new Error('Nombre requerido');
+
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet = ss.getSheetByName('PROVEEDORES');
+  if (!sheet) {
+    sheet = ss.insertSheet('PROVEEDORES');
+    sheet.appendRow(['Proveedor','ContactoVentas','ContactoPagos','TelCompras','TelPagos',
+      'Email','FormaPago','DíasCrédito','Banco','CLABE','Cuenta',
+      'RazónSocial','VíaPedido','LigaFacturación','Facturas2026','CatGasto','Fuente']);
+    sheet.getRange(1, 1, 1, 17).setFontWeight('bold');
+  }
+
+  // Check for duplicate
+  const data = sheet.getDataRange().getValues();
+  const exists = data.slice(1).some(r => String(r[0] || '').trim().toLowerCase() === nombre.toLowerCase());
+  if (exists) return { ok: false, message: 'Proveedor ya existe: ' + nombre };
+
+  const row = new Array(17).fill('');
+  row[0]  = nombre;
+  row[6]  = prov.FormaPago || '';
+  row[7]  = parseInt(prov.DiasCredito) || 0;
+  row[11] = prov.RFC || '';
+  row[16] = 'App';  // Fuente — marca que se creó desde la app
+  sheet.appendRow(row);
+  log('ADD_PROVEEDOR', nombre + ' | RFC:' + (prov.RFC || '—') + ' | ' + (prov.DiasCredito || 0) + 'd');
+  return { ok: true, message: 'Proveedor agregado: ' + nombre };
 }
 
 function log(action, detail) {

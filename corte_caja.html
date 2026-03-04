@@ -1799,15 +1799,20 @@
       if (!window._depositoPrintData) { showToast('Carga los datos primero', 'error'); return; }
       const { fecha, depositDenoms, depositTotal } = window._depositoPrintData;
       const fechaDeposito = document.getElementById('dep_fechaDeposito')?.value || '';
-      const subtitle = `<div style="text-align:center;font-size:12px;margin-bottom:2px;">Cta: 0118685134</div>
-        <div style="text-align:center;font-size:11px;color:#555;">${fecha}${fechaDeposito ? ' · dep: ' + fechaDeposito : ''}</div>`;
+      const subtitle = `
+        <div style="text-align:center;font-size:14px;font-weight:bold;margin-bottom:2px;">NATURAL BALANCE RANCH</div>
+        <div style="text-align:center;font-size:14px;font-weight:bold;margin-bottom:2px;">Cta: 0118685134</div>
+        <div style="text-align:center;font-size:14px;font-weight:bold;margin-bottom:4px;">Referencia: ${fecha}</div>
+        <div style="text-align:center;font-size:11px;color:#555;">${fechaDeposito ? 'Depósito: ' + fechaDeposito + ' · ' : ''}Tienda: SAN FELIPE</div>`;
       _openReceiptWindow('DEPOSITO BBVA', subtitle, depositDenoms, depositTotal);
     }
 
     function printSobre2Ticket() {
       if (!window._depositoPrintData) { showToast('Carga los datos primero', 'error'); return; }
       const { fecha, sobre2Denoms, sobre2Total } = window._depositoPrintData;
-      const subtitle = `<div style="text-align:center;font-size:11px;color:#555;">${fecha}</div>`;
+      const subtitle = `
+        <div style="text-align:center;font-size:11px;color:#555;margin-bottom:1px;">Tienda: SAN FELIPE</div>
+        <div style="text-align:center;font-size:11px;color:#555;">${fecha}</div>`;
       _openReceiptWindow('SOBRE 2', subtitle, sobre2Denoms, sobre2Total);
     }
 

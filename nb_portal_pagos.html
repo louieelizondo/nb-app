@@ -341,6 +341,7 @@ tbody tr.editing { background:#fffde7 !important; }
     </select>
     <select id="yearFilter" onchange="syncMonthFromYear(); applyFilters()"></select>
     <input type="text" id="searchInput" placeholder="Buscar proveedor o folio..." oninput="applyFilters()" style="min-width:200px;flex:1">
+    <button class="btn" style="background:#1565C0;color:white;white-space:nowrap;flex-shrink:0" onclick="openManualModal()">➕ Entrada Manual</button>
   </div>
 
   <div class="tbl-wrap">
@@ -416,6 +417,51 @@ tbody tr.editing { background:#fffde7 !important; }
     <img id="fotoImg" src="" alt="Factura">
     <div class="modal-actions" style="margin-top:16px">
       <button class="btn btn-undo" onclick="closeFotoModal()">Cerrar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MANUAL ENTRY MODAL -->
+<div class="modal-bg" id="manualModal">
+  <div class="modal">
+    <h3>➕ Entrada Manual</h3>
+    <label>Categoría *</label>
+    <select id="manualCategoria">
+      <option value="">— Seleccionar —</option>
+      <option value="Nómina">Nómina</option>
+      <option value="IMSS">IMSS</option>
+      <option value="Servicios">Servicios</option>
+      <option value="Renta">Renta</option>
+      <option value="Mantenimiento">Mantenimiento</option>
+      <option value="Otro">Otro</option>
+    </select>
+    <label>Descripción *</label>
+    <input type="text" id="manualDescripcion" placeholder="Ej: Nómina quincena 1 marzo, CFE marzo…">
+    <label>Monto *</label>
+    <input type="number" id="manualMonto" placeholder="0.00" step="0.01" min="0">
+    <div style="display:flex;gap:12px">
+      <div style="flex:1">
+        <label>Fecha</label>
+        <input type="date" id="manualFecha">
+      </div>
+      <div style="flex:1">
+        <label>Fecha de pago (si ya se pagó)</label>
+        <input type="date" id="manualFechaPago">
+      </div>
+    </div>
+    <label>Forma de pago</label>
+    <select id="manualFormaPago">
+      <option value="Transferencia">Transferencia</option>
+      <option value="Efectivo">Efectivo</option>
+      <option value="Tarjeta crédito">Tarjeta crédito</option>
+      <option value="Tarjeta débito">Tarjeta débito</option>
+      <option value="Cheque">Cheque</option>
+    </select>
+    <label>Notas (opcional)</label>
+    <input type="text" id="manualNotas" placeholder="Referencia, número de pago, etc.">
+    <div class="modal-actions">
+      <button class="btn btn-undo" onclick="closeManualModal()">Cancelar</button>
+      <button class="btn btn-pay" onclick="confirmManualEntry()">Guardar</button>
     </div>
   </div>
 </div>
@@ -1301,6 +1347,73 @@ async function pushDateToSheet(id, fechaPago, estado){
   enqueueSync({ action: 'update_date', id, fecha_pago: fechaPago, estado, version: getGastoVersion(id) });
 }
 
+// ── Manual Entry ──
+function openManualModal() {
+  const today = new Date().toISOString().slice(0,10);
+  document.getElementById('manualFecha').value = today;
+  document.getElementById('manualFechaPago').value = '';
+  document.getElementById('manualCategoria').value = '';
+  document.getElementById('manualDescripcion').value = '';
+  document.getElementById('manualMonto').value = '';
+  document.getElementById('manualNotas').value = '';
+  document.getElementById('manualFormaPago').value = 'Transferencia';
+  document.getElementById('manualModal').classList.add('open');
+}
+
+function closeManualModal() {
+  document.getElementById('manualModal').classList.remove('open');
+}
+
+function confirmManualEntry() {
+  const categoria = document.getElementById('manualCategoria').value;
+  const descripcion = document.getElementById('manualDescripcion').value.trim();
+  const monto = parseFloat(document.getElementById('manualMonto').value) || 0;
+  const fecha = document.getElementById('manualFecha').value;
+  const fechaPago = document.getElementById('manualFechaPago').value;
+  const formaPago = document.getElementById('manualFormaPago').value;
+  const notas = document.getElementById('manualNotas').value.trim();
+
+  if (!categoria) { showToast('Selecciona una categoría', 'error'); return; }
+  if (!descripcion) { showToast('La descripción es obligatoria', 'error'); return; }
+  if (!monto || monto <= 0) { showToast('El monto debe ser mayor a cero', 'error'); return; }
+  if (!fecha) { showToast('La fecha es obligatoria', 'error'); return; }
+
+  const id = 'MAN-' + Date.now();
+  const yaFuePagado = !!fechaPago;
+  const newEntry = {
+    id,
+    folio: id,
+    tipo_documento: 'Manual',
+    proveedor: descripcion,
+    proveedor_raw: descripcion,
+    categoria,
+    fecha_compra: fecha,
+    monto_factura: monto,
+    monto_pagar: monto,
+    forma_pago: formaPago,
+    estado: yaFuePagado ? 'Pagado' : 'Pendiente',
+    fecha_pago: fechaPago || fecha,
+    fecha_pago_real: yaFuePagado ? fechaPago : null,
+    credit_days: 0,
+    comprobante: notas,
+    created_at: new Date().toISOString(),
+    _manual: true
+  };
+
+  allGastos.push(newEntry);
+  saveGastos();
+  buildYearFilter();
+  applyFilters();
+  closeManualModal();
+  showToast('✅ Entrada registrada: ' + descripcion);
+
+  // Push to sheet if connected
+  const scriptUrl = getScriptUrl();
+  if (scriptUrl) {
+    enqueueSync({ action: 'create', gasto: newEntry });
+  }
+}
+
 // ── Init ──
 window.addEventListener('load', () => requireNbAuth(function appInit() {
   const now = new Date();
@@ -1330,6 +1443,7 @@ document.addEventListener('click', e => {
   if(e.target.id === 'payModal') closePayModal();
   if(e.target.id === 'dateModal') closeDateModal();
   if(e.target.id === 'fotoModal') closeFotoModal();
+  if(e.target.id === 'manualModal') closeManualModal();
 });
 </script>
 </body>
