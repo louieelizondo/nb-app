@@ -378,6 +378,7 @@ body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif
     <div id="summaryContent"></div>
     <button class="btn-completada" id="btnCompletada" onclick="completarCompra()">✅ Compra completada</button>
     <button class="copy-btn" onclick="copySummary()">📋 Copiar lista</button>
+    <button class="copy-btn" id="btnSubirLista" onclick="subirListaASheets()" style="background:var(--green,#4caf50);color:white">☁️ Subir a Sheets</button>
     <button class="close-btn" onclick="closeSummary()">Cerrar</button>
   </div>
 </div>
@@ -455,8 +456,9 @@ body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif
       </select>
     </div>
     <div id="productListContent"></div>
-    <div style="text-align:center;padding:12px">
+    <div style="text-align:center;padding:12px;display:flex;flex-wrap:wrap;gap:8px;justify-content:center">
       <button onclick="seedProductsToSheet()" id="seedBtn" style="background:var(--orange);color:white;border:none;padding:10px 20px;border-radius:8px;font-size:13px;cursor:pointer;display:none">⬆️ Subir productos al Sheet</button>
+      <button onclick="sincronizarDesdeMP()" id="syncMPBtn" style="background:#5c6bc0;color:white;border:none;padding:10px 20px;border-radius:8px;font-size:13px;cursor:pointer">🔄 Sync desde Materia Prima</button>
     </div>
   </div>
 </div>
@@ -492,7 +494,16 @@ body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif
     </select>
     <div style="display:flex;gap:8px">
       <div style="flex:1"><label>Tienda/Proveedor</label><input type="text" id="apTienda" placeholder="COSTCO" style="width:100%;padding:10px;border:1px solid var(--gray-border);border-radius:8px;font-size:14px;margin-bottom:8px"></div>
-      <div style="flex:1"><label>Unidad</label><input type="text" id="apUnidad" placeholder="Kg, Piezas, Caja" style="width:100%;padding:10px;border:1px solid var(--gray-border);border-radius:8px;font-size:14px;margin-bottom:8px"></div>
+    </div>
+    <div style="display:flex;gap:8px">
+      <div style="flex:1">
+        <label>Unidad conteo <span style="font-size:11px;color:var(--gray)">(cómo cuentas)</span></label>
+        <input type="text" id="apUnidad" placeholder="kg, lt, pz" style="width:100%;padding:10px;border:1px solid var(--gray-border);border-radius:8px;font-size:14px;margin-bottom:8px">
+      </div>
+      <div style="flex:1">
+        <label>Unidad compra <span style="font-size:11px;color:var(--gray)">(cómo ordenas)</span></label>
+        <input type="text" id="apUnidadCompra" placeholder="Caja 5kg, Bulto 10kg" style="width:100%;padding:10px;border:1px solid var(--gray-border);border-radius:8px;font-size:14px;margin-bottom:8px">
+      </div>
     </div>
     <div style="display:flex;gap:8px">
       <div style="flex:1"><label>Mínimo</label><input type="number" id="apMin" value="0" step="0.5" style="width:100%;padding:10px;border:1px solid var(--gray-border);border-radius:8px;font-size:14px;margin-bottom:8px"></div>
@@ -943,9 +954,10 @@ function updateSummaryStats() {
 }
 
 // ── Shopping list state ──
-let shoppingItems = []; // [{ idx, name, qty, unit, store }] — rebuilt each time modal opens
+let shoppingItems = []; // [{ idx, name, qty, qtyOverride, unit, orderUnit, store, cat }] — rebuilt each time modal opens
 let shoppingExclusions = {}; // { idx: true } — persisted: user decided not to buy this
 let shoppingNotFound = {};   // { idx: true } — session only: couldn't find it at the store
+let shoppingQtyOverrides = {}; // { idx: customQty } — user-edited quantities
 const SHOPPING_EXCL_KEY = 'nb_shopping_exclusions';
 try { shoppingExclusions = JSON.parse(localStorage.getItem(SHOPPING_EXCL_KEY) || '{}'); } catch(e) {}
 
@@ -956,9 +968,28 @@ function buildShoppingItems() {
     const current = counts[i] !== undefined ? counts[i] : p.inv;
     const need = p.max > 0 ? Math.max(0, p.max - current) : 0;
     if (need > 0) {
-      shoppingItems.push({ idx: i, name: p.n, qty: need, unit: p.u, store: p.s || 'Sin tienda' });
+      // f = Forma_Pedido — use as order unit display when different from count unit (u)
+      const orderUnit = p.f && p.f !== 'Ir a tienda' && p.f !== '' ? p.f : p.u;
+      shoppingItems.push({
+        idx: i, name: p.n, qty: need,
+        unit: p.u, orderUnit: orderUnit,
+        store: p.s || 'Sin tienda', cat: p.c || ''
+      });
     }
   });
+}
+
+function updateShoppingQty(idx, val) {
+  const n = parseFloat(val);
+  if (!isNaN(n) && n >= 0) {
+    shoppingQtyOverrides[idx] = n;
+  } else {
+    delete shoppingQtyOverrides[idx];
+  }
+}
+
+function getEffectiveQty(item) {
+  return shoppingQtyOverrides[item.idx] !== undefined ? shoppingQtyOverrides[item.idx] : item.qty;
 }
 
 function renderSummaryContent() {
@@ -989,10 +1020,20 @@ function renderSummaryContent() {
         const excl = !!shoppingExclusions[item.idx];
         const nf   = !!shoppingNotFound[item.idx];
         const nfBadge = nf ? `<span class="nf-badge">🔍 No encontré</span>` : '';
+        const effQty = getEffectiveQty(item);
+        const unitBadge = item.unit ? `<span style="font-size:10px;background:#e3f2fd;color:#1565c0;border-radius:4px;padding:1px 5px;font-weight:600">${item.unit}</span>` : '';
+        const orderBadge = item.orderUnit && item.orderUnit !== item.unit
+          ? `<span style="font-size:10px;background:#fff3e0;color:#e65100;border-radius:4px;padding:1px 5px;font-weight:600">📦 ${item.orderUnit}</span>` : '';
         html += `<div class="buy-item ${excl ? 'excluded' : ''} ${nf ? 'not-found' : ''}">
           <input type="checkbox" ${excl ? '' : 'checked'} onchange="toggleShoppingExclusion(${item.idx})">
           <span class="item-label">${item.name}${nfBadge}</span>
-          <span class="qty">${item.qty}${item.unit ? `<span style="font-size:10px;background:#e3f2fd;color:#1565c0;border-radius:4px;padding:1px 5px;margin-left:4px;font-weight:600">${item.unit}</span>` : ''}</span>
+          <span class="qty" style="display:flex;align-items:center;gap:4px">
+            <input type="number" value="${effQty}" min="0" step="0.5"
+              style="width:52px;border:1px solid #ddd;border-radius:6px;padding:2px 4px;font-size:14px;font-weight:700;text-align:center;background:${shoppingQtyOverrides[item.idx]!==undefined?'#fff8e1':'white'}"
+              oninput="updateShoppingQty(${item.idx},this.value)"
+              onchange="updateShoppingQty(${item.idx},this.value)">
+            ${unitBadge}${orderBadge}
+          </span>
           <button class="btn-nf ${nf ? 'active' : ''}" title="${nf ? 'Quitar' : 'No encontré este producto'}" onclick="toggleNotFound(${item.idx})">${nf ? '🔄' : '🔍'}</button>
         </div>`;
       });
@@ -1072,13 +1113,15 @@ function copySummary() {
     if (shoppingExclusions[item.idx]) return;
     if (!storeMap[item.store]) storeMap[item.store] = [];
     const nf = shoppingNotFound[item.idx] ? ' 🔍' : '';
-    storeMap[item.store].push({ name: item.name + nf, qty: item.qty, unit: item.unit });
+    storeMap[item.store].push({ name: item.name + nf, qty: getEffectiveQty(item), unit: item.unit, orderUnit: item.orderUnit });
   });
 
   Object.keys(storeMap).sort().forEach(store => {
     text += `\n🏪 ${store}\n`;
     storeMap[store].forEach(item => {
-      text += `  • ${item.name}: ${item.qty}${item.unit ? ' '+item.unit : ''}\n`;
+      const unitStr = item.unit ? ` ${item.unit}` : '';
+      const orderStr = item.orderUnit && item.orderUnit !== item.unit ? ` (${item.orderUnit})` : '';
+      text += `  • ${item.name}: ${item.qty}${unitStr}${orderStr}\n`;
     });
   });
 
@@ -1092,6 +1135,75 @@ function copySummary() {
     ta.remove();
     toast('📋 Lista copiada');
   });
+}
+
+// ============ UPLOAD SHOPPING LIST TO SHEETS ============
+async function subirListaASheets() {
+  const url = getScriptUrl();
+  if (!url) { toast('Configura el Script URL primero'); return; }
+
+  const activeItems = shoppingItems.filter(it => !shoppingExclusions[it.idx]);
+  if (!activeItems.length) { toast('No hay productos en la lista'); return; }
+
+  const btn = document.getElementById('btnSubirLista');
+  btn.textContent = '⏳ Subiendo...';
+  btn.disabled = true;
+
+  const payload = {
+    action: 'save_shopping_list',
+    quien: localStorage.getItem('nb_user') || 'App',
+    items: activeItems.map(it => ({
+      producto:    it.name,
+      categoria:   it.cat,
+      qty:         getEffectiveQty(it),
+      unidad:      it.unit || '',
+      forma_pedido: it.orderUnit || it.unit || '',
+      tienda:      it.store
+    }))
+  };
+
+  try {
+    const resp = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify(payload)
+    });
+    const data = await resp.json();
+    if (data.ok) {
+      btn.textContent = `✅ ${data.saved} subidos`;
+      toast(`☁️ ${data.saved} productos en LISTA_COMPRAS`);
+    } else {
+      btn.textContent = '❌ Error';
+      toast('Error al subir: ' + (data.error || ''));
+    }
+  } catch(e) {
+    btn.textContent = '❌ Error';
+    toast('Error de red al subir lista');
+  }
+  setTimeout(() => { btn.textContent = '☁️ Subir a Sheets'; btn.disabled = false; }, 3000);
+}
+
+// ============ SYNC FROM MATERIA PRIMA ============
+async function sincronizarDesdeMP() {
+  const url = getScriptUrl();
+  if (!url) { toast('Configura el Script URL primero'); return; }
+  if (!confirm('¿Importar todos los ingredientes de MATERIA PRIMA al inventario? Esto agrega los que faltan, no borra nada.')) return;
+
+  toast('⏳ Sincronizando...');
+  try {
+    const resp = await fetch(url + '?action=seed_from_mp');
+    const data = await resp.json();
+    if (data.ok) {
+      toast(`✅ ${data.seeded} importados, ${data.skipped} ya existían`);
+      // Refresh product list from sheet
+      await loadProductsFromSheet();
+      renderRoutes();
+    } else {
+      toast('Error: ' + (data.error || 'desconocido'));
+    }
+  } catch(e) {
+    toast('Error de red');
+  }
 }
 
 // ============ NAVIGATION ============
@@ -1948,6 +2060,7 @@ function openAddProductModal(prefill) {
   document.getElementById('apUbicacion').value = prefill ? prefill.l : 'Cocina';
   document.getElementById('apTienda').value = prefill ? (prefill.s||'') : '';
   document.getElementById('apUnidad').value = prefill ? (prefill.u||'') : '';
+  document.getElementById('apUnidadCompra').value = prefill ? (prefill.pu||'') : '';
   document.getElementById('apMin').value = prefill ? (prefill.inv||0) : 0;
   document.getElementById('apMax').value = prefill ? (prefill.max||0) : 0;
   document.getElementById('apForma').value = prefill ? (prefill.f||'Ir a tienda') : 'Ir a tienda';
@@ -1973,6 +2086,7 @@ function saveProduct() {
     l: document.getElementById('apUbicacion').value,
     s: document.getElementById('apTienda').value.trim(),
     u: document.getElementById('apUnidad').value.trim(),
+    pu: (document.getElementById('apUnidadCompra') ? document.getElementById('apUnidadCompra').value.trim() : ''),
     inv: parseFloat(document.getElementById('apMin').value) || 0,
     max: parseFloat(document.getElementById('apMax').value) || 0,
     f: document.getElementById('apForma').value,
@@ -2046,7 +2160,7 @@ async function pushProductToSheet(p, isUpdate) {
       const resp = await fetch(url, { method:'POST', headers:{'Content-Type':'text/plain'},
         body: JSON.stringify({ action:'update_product', id: p.id, fields: {
           Producto: p.n, Categoria: p.c, Ubicacion: p.l, Tienda: p.s, Unidad: p.u,
-          Forma_Pedido: p.f, Inventario_Min: p.inv, Inventario_Max: p.max,
+          Unidad_Compra: p.pu||'', Forma_Pedido: p.f, Inventario_Min: p.inv, Inventario_Max: p.max,
           Temporada: p.temporada||'Siempre', Tags: p.tags||'', Variantes: p.variantes||''
         }}) });
       const d = await resp.json(); if(d.ok) console.log('✏️ Product updated:', p.id);
@@ -2054,7 +2168,7 @@ async function pushProductToSheet(p, isUpdate) {
       const resp2 = await fetch(url, { method:'POST', headers:{'Content-Type':'text/plain'},
         body: JSON.stringify({ action:'add_product', product: {
           ID: p.id, Producto: p.n, Categoria: p.c, Ubicacion: p.l, Tienda: p.s, Unidad: p.u,
-          Forma_Pedido: p.f, Inventario_Min: p.inv, Inventario_Max: p.max, Activo: true,
+          Unidad_Compra: p.pu||'', Forma_Pedido: p.f, Inventario_Min: p.inv, Inventario_Max: p.max, Activo: true,
           Temporada: p.temporada||'Siempre', Tags: p.tags||'', Variantes: p.variantes||''
         }}) });
       const d2 = await resp2.json(); if(d2.ok) console.log('➕ Product added:', p.id);
@@ -2074,7 +2188,7 @@ async function seedProductsToSheet() {
       await fetch(url, { method:'POST', headers:{'Content-Type':'text/plain'},
         body: JSON.stringify({ action:'add_product', product: {
           ID: p.id, Producto: p.n, Categoria: p.c, Ubicacion: p.l, Tienda: p.s, Unidad: p.u,
-          Forma_Pedido: p.f, Inventario_Min: p.inv, Inventario_Max: p.max, Activo: p.active !== false,
+          Unidad_Compra: p.pu||'', Forma_Pedido: p.f, Inventario_Min: p.inv, Inventario_Max: p.max, Activo: p.active !== false,
           Temporada: p.temporada||'Siempre', Tags: p.tags||'', Variantes: p.variantes||''
         }}) });
       sent++;
@@ -2131,6 +2245,7 @@ async function loadProductsFromSheet() {
           l: p.Ubicacion,
           s: p.Tienda,
           u: p.Unidad,
+          pu: p.Unidad_Compra || '',   // purchase/order unit
           f: p.Forma_Pedido,
           inv: p.Inventario_Min,
           max: p.Inventario_Max,

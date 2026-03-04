@@ -37,6 +37,7 @@ const FACTURAS_HEADERS = [
 const INV_TAB = 'INVENTARIO_PRODUCTOS';
 const INV_HEADERS = [
   'ID', 'Producto', 'Categoria', 'Ubicacion', 'Tienda', 'Unidad',
+  'Unidad_Compra',                              // pu: what you ORDER in (Caja 5kg, Bulto 10kg)
   'Forma_Pedido', 'Inventario_Min', 'Inventario_Max', 'Activo',
   'Temporada', 'Tags', 'Variantes'
 ];
@@ -74,6 +75,7 @@ function doGet(e) {
       case 'get':           return jsonResp(getFactura(e.parameter.id));
       case 'list_products': return jsonResp(listProducts());
       case 'list_orders':   return jsonResp(listOrders());
+      case 'seed_from_mp':  return jsonResp(seedProductsFromMP());
       case 'health':        return jsonResp({ ok: true, ts: new Date().toISOString() });
       // Cortes & Ingresos
       case 'get_cortes_dia':       return jsonResp(getCortesDia(e.parameter));
@@ -122,8 +124,9 @@ function doPost(e) {
       case 'update_order':     return jsonResp(updateOrder(body));
       case 'audit':            return jsonResp(writeAudit(body));
       case 'sync_batch':       return jsonResp(processSyncBatch(body));
-      case 'add_ingredient':   return jsonResp(addIngredient(body));
-      case 'add_proveedor':    return jsonResp(addProveedor(body));
+      case 'add_ingredient':       return jsonResp(addIngredient(body));
+      case 'add_proveedor':        return jsonResp(addProveedor(body));
+      case 'save_shopping_list':   return jsonResp(saveShoppingList(body));
       // Cortes & Ingresos
       case 'save_corte_individual':   return jsonResp(saveCorteIndividual(body));
       case 'delete_corte_individual': return jsonResp(deleteCorteIndividual(body));
@@ -669,6 +672,7 @@ function addProduct(body) {
     p.Ubicacion || '',
     p.Tienda || '',
     p.Unidad || '',
+    p.Unidad_Compra || '',                // pu: purchase/order unit label
     p.Forma_Pedido || 'Ir a tienda',
     p.Inventario_Min || 0,
     p.Inventario_Max || 0,
@@ -679,6 +683,20 @@ function addProduct(body) {
   ];
   sheet.appendRow(row);
   log('ADD_PRODUCT', id + ' | ' + p.Producto);
+
+  // Cross-write to MATERIA PRIMA so recipes can reference it
+  // addIngredient checks for duplicates, safe to call every time
+  try {
+    addIngredient({
+      Nombre:    p.Producto   || '',
+      Categoria: p.Categoria  || '',
+      Unidad:    p.Unidad     || 'PZA',
+      CostoPaq:  0
+    });
+  } catch(e) {
+    log('ADD_PRODUCT_MP_WARN', 'Could not cross-write to MATERIA PRIMA: ' + e.message);
+  }
+
   return { ok: true, id, message: 'Producto agregado' };
 }
 
@@ -728,6 +746,108 @@ function seedProductsFromArray() {
   }
   // This will be called from the inventory app with the full product array
   return { ok: true, message: 'Ready for seeding. Send products via add_product.' };
+}
+
+// ══════════════════════════════════════════════
+// SEED INVENTARIO_PRODUCTOS FROM MATERIA PRIMA
+// ══════════════════════════════════════════════
+
+/**
+ * One-time (or safe-to-repeat) sync: read every row from MATERIA PRIMA
+ * and add any missing entries into INVENTARIO_PRODUCTOS.
+ * Matches by product name (case-insensitive). Will never create duplicates.
+ * Call via GET ?action=seed_from_mp
+ */
+function seedProductsFromMP() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const mp = ss.getSheetByName(MP_TAB);
+  if (!mp) throw new Error('Tab "' + MP_TAB + '" no encontrado');
+
+  const mpData = mp.getDataRange().getValues();
+  if (mpData.length < 2) return { ok: true, seeded: 0, skipped: 0, message: 'MATERIA PRIMA está vacío' };
+
+  // Build set of existing names in INVENTARIO_PRODUCTOS (col 1 = Producto)
+  const invSheet = getOrCreateTab(INV_TAB, INV_HEADERS);
+  const invData  = invSheet.getDataRange().getValues();
+  const existing = new Set();
+  for (let i = 1; i < invData.length; i++) {
+    const n = String(invData[i][1] || '').trim().toLowerCase();
+    if (n) existing.add(n);
+  }
+
+  // MP cols: A(0)=Ingrediente, B(1)=Categoría, G(6)=Unidad
+  let seeded = 0, skipped = 0;
+  for (let i = 1; i < mpData.length; i++) {
+    const ingrediente = String(mpData[i][0] || '').trim();
+    if (!ingrediente) continue;
+    if (existing.has(ingrediente.toLowerCase())) { skipped++; continue; }
+
+    const categoria = String(mpData[i][1] || '').trim();
+    const unidad    = String(mpData[i][6] || 'PZA').trim();
+    const safeId    = ingrediente.replace(/[^A-Za-z0-9]/g, '').substring(0, 12).toUpperCase();
+    const id        = 'MP_' + safeId + '_' + i;
+
+    invSheet.appendRow([
+      id, ingrediente, categoria,
+      '',            // Ubicacion
+      '',            // Tienda
+      unidad,        // Unidad (counting unit)
+      '',            // Unidad_Compra (purchase unit — fill in manually)
+      'Ir a tienda', // Forma_Pedido
+      0,             // Inventario_Min
+      0,             // Inventario_Max
+      true,          // Activo
+      'Siempre',     // Temporada
+      '',            // Tags
+      ''             // Variantes
+    ]);
+    existing.add(ingrediente.toLowerCase());
+    seeded++;
+  }
+
+  log('SEED_FROM_MP', seeded + ' importados, ' + skipped + ' ya existían');
+  return { ok: true, seeded, skipped, message: seeded + ' productos importados de MATERIA PRIMA, ' + skipped + ' ya existían' };
+}
+
+// ══════════════════════════════════════════════
+// SHOPPING LIST → GOOGLE SHEETS
+// ══════════════════════════════════════════════
+
+const LISTA_TAB     = 'LISTA_COMPRAS';
+const LISTA_HEADERS = ['Timestamp', 'Producto', 'Categoria', 'Qty_Pedido', 'Unidad', 'Forma_Pedido', 'Tienda', 'Guardado_Por'];
+
+/**
+ * Save the current shopping list to LISTA_COMPRAS tab (replaces previous list).
+ * body: { items: [{producto, categoria, qty, unidad, forma_pedido, tienda}], quien: string }
+ */
+function saveShoppingList(body) {
+  const items = body.items;
+  if (!items || !items.length) throw new Error('No items en la lista');
+
+  const sheet = getOrCreateTab(LISTA_TAB, LISTA_HEADERS);
+
+  // Clear previous list (keep header row)
+  if (sheet.getLastRow() > 1) {
+    sheet.deleteRows(2, sheet.getLastRow() - 1);
+  }
+
+  const ts    = new Date().toISOString();
+  const quien = body.quien || 'App';
+
+  const rows = items.map(it => [
+    ts,
+    it.producto    || it.n || '',
+    it.categoria   || it.c || '',
+    it.qty         || 0,
+    it.unidad      || it.u || '',
+    it.forma_pedido|| it.f || '',
+    it.tienda      || it.s || '',
+    quien
+  ]);
+
+  sheet.getRange(2, 1, rows.length, LISTA_HEADERS.length).setValues(rows);
+  log('SAVE_SHOPPING_LIST', rows.length + ' items por ' + quien);
+  return { ok: true, saved: rows.length, message: rows.length + ' productos guardados en LISTA_COMPRAS' };
 }
 
 // ══════════════════════════════════════════════
