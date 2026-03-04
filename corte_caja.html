@@ -476,8 +476,10 @@
             <label>Transferencias</label>
             <input type="number" id="ind_transferencias" step="0.01" />
           </div>
-        </div>
-        <div class="form-grid col3">
+          <div class="form-group">
+            <label>Cashback (ingresar positivo)</label>
+            <input type="number" id="ind_cashback" step="0.01" />
+          </div>
           <div class="form-group">
             <label>Retiros</label>
             <input type="number" id="ind_retiros" step="0.01" />
@@ -491,13 +493,6 @@
           <div style="font-size:14px; font-weight:700; padding:12px; background:#f9f6f2; border-radius:10px; display:flex; justify-content:space-between;">
             <span>Total Efectivo:</span>
             <span id="ind_totalEfectivo">$0.00</span>
-          </div>
-        </div>
-
-        <div class="form-grid col3" style="margin-top:12px;">
-          <div class="form-group">
-            <label>Cashback</label>
-            <input type="number" id="ind_cashback" step="0.01" />
           </div>
         </div>
 
@@ -985,7 +980,7 @@
       const cashback = parseFloat(document.getElementById('ind_cashback').value) || 0;
       const retiros = parseFloat(document.getElementById('ind_retiros').value) || 0;
 
-      const expectedCash = ventasCaja - tarjeta - transferencias + cashback - retiros;
+      const expectedCash = ventasCaja - tarjeta - transferencias - cashback - retiros;
       const faltanteSobrante = totalEfectivo - expectedCash;
 
       const badge = document.getElementById('ind_faltanteBadge');
