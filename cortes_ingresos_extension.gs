@@ -384,7 +384,7 @@ function saveCorteTienda(body) {
   const transferencias = parseFloat(c.Transferencias) || 0;
   const cashback = parseFloat(c.Cashback) || 0;
   const storeCredit = parseFloat(c.StoreCredit) || 0;
-  const expectedCash = pagosRecibidos - tarjeta - transferencias - storeCredit + cashback;
+  const expectedCash = pagosRecibidos - tarjeta - transferencias - storeCredit - cashback;
   const faltanteSobrante = Math.round((totalEfectivo - expectedCash) * 100) / 100;
 
   // Shopify values (auto-populated or 0)
@@ -397,7 +397,7 @@ function saveCorteTienda(body) {
 
   // Sobre2 & deposit
   const sobre2 = parseFloat(c.Sobre2) || 0;
-  const depositoAjustado = pagosRecibidos - sobre2;
+  const depositoAjustado = pagosRecibidos - tarjeta - transferencias - cashback - sobre2;
 
   const denoms = getDenomValues(c);
 
