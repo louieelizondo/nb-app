@@ -247,6 +247,14 @@ tbody tr.editing { background:#fffde7 !important; }
   .modal { width: 95%; padding: 24px 20px; }
 }
 
+/* Minimum tap target size + tap feedback */
+.chip { min-height: 40px; display: inline-flex; align-items: center; touch-action: manipulation; }
+.btn { touch-action: manipulation; }
+@media (max-width: 768px) {
+  tbody tr { transition: transform .1s, box-shadow .1s; }
+  tbody tr:active { transform: scale(.987); box-shadow: 0 1px 6px rgba(0,0,0,.08); }
+}
+
 /* Small phones */
 @media (max-width: 480px) {
   .summary-row { grid-template-columns: 1fr; gap: 8px; margin-bottom: 12px; }

@@ -412,6 +412,83 @@
       .card { padding: 12px; border-radius: 10px; }
       .tab-btn { padding: 8px 10px; font-size: 11px; }
     }
+
+    /* ═══════════════════════════════════════════════════════════════
+       TABLET NUMPAD
+    ═══════════════════════════════════════════════════════════════ */
+    #nb-numpad {
+      position: fixed;
+      bottom: 0; left: 0; right: 0;
+      background: #f0ebe4;
+      border-top: 2px solid #c4b8a8;
+      border-radius: 22px 22px 0 0;
+      box-shadow: 0 -8px 40px rgba(0,0,0,.22);
+      padding: 16px 20px env(safe-area-inset-bottom, 24px);
+      z-index: 99999;
+      transform: translateY(100%);
+      transition: transform .28s cubic-bezier(.34,1.3,.64,1);
+      user-select: none;
+      -webkit-user-select: none;
+      touch-action: none;
+    }
+    #nb-numpad.np-open { transform: translateY(0); }
+    .np-display {
+      background: white;
+      border-radius: 14px;
+      padding: 12px 18px;
+      margin-bottom: 14px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      box-shadow: 0 2px 8px rgba(0,0,0,.07);
+      gap: 12px;
+    }
+    .np-label {
+      font-size: 12px; font-weight: 700;
+      color: #7a6b5d; text-transform: uppercase;
+      letter-spacing: .6px; flex-shrink: 0;
+    }
+    .np-value {
+      font-size: 28px; font-weight: 900;
+      color: #2d2319; text-align: right;
+      min-width: 120px; letter-spacing: -.5px;
+    }
+    .np-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      max-width: 400px;
+      margin: 0 auto;
+    }
+    .np-btn {
+      background: white;
+      border: none;
+      border-radius: 14px;
+      font-size: 24px;
+      font-weight: 700;
+      color: #2d2319;
+      padding: 18px 8px;
+      cursor: pointer;
+      box-shadow: 0 3px 8px rgba(0,0,0,.09);
+      transition: transform .08s, background .08s;
+      -webkit-tap-highlight-color: transparent;
+      touch-action: manipulation;
+    }
+    .np-btn:active { transform: scale(.88); background: #e8f5e9; }
+    .np-btn.np-back { background: #fff0f0; color: #c62828; font-size: 20px; }
+    .np-btn.np-back:active { background: #ffcdd2; }
+    .np-btn.np-dot { color: #555; }
+    .np-btn.np-dot:disabled { opacity: .3; }
+    .np-btn.np-done {
+      grid-column: 1 / -1;
+      background: linear-gradient(135deg, #3a7c3a, #2e6b2e);
+      color: white;
+      font-size: 17px;
+      letter-spacing: .5px;
+      box-shadow: 0 5px 16px rgba(46,107,46,.35);
+      padding: 16px 8px;
+    }
+    .np-btn.np-done:active { transform: scale(.97); }
   </style>
 </head>
 <body>
@@ -1962,6 +2039,113 @@
     }
 
     // ═══════════════════════════════════════════════════════════════
+    // TABLET NUMPAD
+    // ═══════════════════════════════════════════════════════════════
+    (function() {
+      if (!('ontouchstart' in window)) return; // desktop: skip
+
+      let _npTarget = null;
+      let _npStr = '';
+
+      const numpad = document.getElementById('nb-numpad');
+      const npVal  = document.getElementById('np-value');
+      const npLbl  = document.getElementById('np-label');
+      const npDot  = document.getElementById('np-dot');
+
+      function getLabel(inp) {
+        const ancestor = inp.closest('.form-group, .denom-item');
+        if (!ancestor) return '';
+        return (ancestor.querySelector('label')?.textContent
+             || ancestor.querySelector('.denom-label')?.textContent
+             || '').trim();
+      }
+
+      function isIntField(inp) {
+        return inp.classList.contains('denom-input') || inp.step === '1';
+      }
+
+      function npShow(inp) {
+        _npTarget = inp;
+        _npStr = (inp.value && inp.value !== '0') ? inp.value : '';
+        const intOnly = isIntField(inp);
+        npDot.disabled = intOnly;
+        npLbl.textContent = getLabel(inp) || 'Cantidad';
+        npVal.textContent = _npStr || '0';
+        numpad.classList.add('np-open');
+      }
+
+      function npHide() {
+        numpad.classList.remove('np-open');
+        if (_npTarget) {
+          _npTarget.value = _npStr || '';
+          _npTarget.dispatchEvent(new Event('input', { bubbles: true }));
+          _npTarget = null;
+        }
+        _npStr = '';
+      }
+
+      function npKey(k) {
+        if (!_npTarget) return;
+        if (k === 'back') {
+          _npStr = _npStr.slice(0, -1);
+        } else if (k === '.') {
+          if (!isIntField(_npTarget) && !_npStr.includes('.')) _npStr += '.';
+        } else {
+          if (_npStr === '' && k === '0') { _npStr = '0'; }
+          else if (_npStr === '0') { _npStr = k; }
+          else { _npStr += k; }
+        }
+        npVal.textContent = _npStr || '0';
+        _npTarget.value = _npStr || '';
+        _npTarget.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+
+      // Attach to a single input
+      function attachOne(inp) {
+        if (inp.dataset.npAttached) return;
+        inp.dataset.npAttached = 'true';
+        // Suppress native keyboard
+        inp.setAttribute('inputmode', 'none');
+        inp.style.caretColor = 'transparent';
+        inp.addEventListener('touchstart', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          npShow(inp);
+        }, { passive: false });
+        inp.addEventListener('focus', () => {
+          if (_npTarget !== inp) npShow(inp);
+        });
+      }
+
+      // Attach to all number inputs currently in DOM
+      window.npAttachAll = function() {
+        document.querySelectorAll('input[type="number"]').forEach(attachOne);
+      };
+
+      // Numpad button taps
+      document.addEventListener('DOMContentLoaded', () => {
+        numpad.querySelectorAll('.np-btn').forEach(btn => {
+          btn.addEventListener('click', (e) => {
+            e.preventDefault();
+            const k = btn.dataset.key;
+            if (k === 'done') npHide();
+            else npKey(k);
+          });
+          btn.addEventListener('touchstart', (e) => {
+            e.stopPropagation();
+          }, { passive: true });
+        });
+        // Tap outside numpad closes it
+        document.addEventListener('touchstart', (e) => {
+          if (numpad.classList.contains('np-open') && !numpad.contains(e.target)
+              && e.target !== _npTarget) {
+            npHide();
+          }
+        }, { passive: true });
+      });
+    })();
+
+    // ═══════════════════════════════════════════════════════════════
     // INIT
     // ═══════════════════════════════════════════════════════════════
 
@@ -1971,8 +2155,34 @@
         await initTab1();
         await initTab2();
         await initTab5();
+        // Attach numpad to all number inputs (including denom grids just created)
+        window.npAttachAll?.();
       });
     });
   </script>
+
+  <!-- TABLET NUMPAD OVERLAY -->
+  <div id="nb-numpad">
+    <div class="np-display">
+      <span class="np-label" id="np-label">Cantidad</span>
+      <span class="np-value" id="np-value">0</span>
+    </div>
+    <div class="np-grid">
+      <button class="np-btn" data-key="7">7</button>
+      <button class="np-btn" data-key="8">8</button>
+      <button class="np-btn" data-key="9">9</button>
+      <button class="np-btn" data-key="4">4</button>
+      <button class="np-btn" data-key="5">5</button>
+      <button class="np-btn" data-key="6">6</button>
+      <button class="np-btn" data-key="1">1</button>
+      <button class="np-btn" data-key="2">2</button>
+      <button class="np-btn" data-key="3">3</button>
+      <button class="np-btn np-dot" data-key="." id="np-dot">.</button>
+      <button class="np-btn" data-key="0">0</button>
+      <button class="np-btn np-back" data-key="back">⌫</button>
+      <button class="np-btn np-done" data-key="done">✓ Listo</button>
+    </div>
+  </div>
+
 </body>
 </html>
