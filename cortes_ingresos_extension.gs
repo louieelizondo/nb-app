@@ -385,7 +385,7 @@ function saveCorteTienda(body) {
   const cashback = parseFloat(c.Cashback) || 0;
   const storeCredit = parseFloat(c.StoreCredit) || 0;
   const expectedCash = pagosRecibidos - tarjeta - transferencias - storeCredit - cashback;
-  const faltanteSobrante = Math.round((expectedCash - totalEfectivo) * 100) / 100;
+  const faltanteSobrante = Math.round((totalEfectivo - expectedCash) * 100) / 100;
 
   // Shopify values (auto-populated or 0)
   const shopVentas = parseFloat(c.Shopify_VentasTotales) || 0;
