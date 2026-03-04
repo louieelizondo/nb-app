@@ -1244,7 +1244,8 @@
             <div id="cambio_panel" style="background:#e3f2fd;padding:16px;border-radius:12px;margin-bottom:12px;">
               <div style="font-weight:700;color:#1565c0;font-size:15px;margin-bottom:4px;">🔄 Paso 2 — Cambio de Billetes</div>
               <div style="font-size:12px;color:#444;margin-bottom:14px;">
-                Ajusta el conteo con los billetes que tienes en mano tras el cambio.<br>
+                El líder debe intercambiar los billetes chicos y monedas por billetes grandes con el cajero o caja chica, para dejar cambio en tienda y facilitar el conteo del depósito.<br><br>
+                Después del intercambio, registra aquí el conteo final de billetes en mano.<br>
                 El total debe cuadrar exacto con: <strong>${formatCurrency(totalEfectivo)}</strong>
               </div>
               <div class="denom-grid" id="cb2_container"></div>
@@ -1613,8 +1614,8 @@
               </table>
             </div>
           </div>
-          <div style="padding:12px;border-radius:8px;text-align:center;font-weight:700;font-size:14px;${Math.abs(depositTotal + sobre2Total - depositoAjustado - sobre2) < 0.5 ? 'background:#e8f5e9;color:#2e7d32;' : 'background:#fff3e0;color:#e65100;'}">
-            ${Math.abs(depositTotal + sobre2Total - depositoAjustado - sobre2) < 0.5 ? '✅ Los totales cuadran' : '⚠️ Verifica los conteos — los totales no coinciden'}
+          <div style="padding:12px;border-radius:8px;text-align:center;font-weight:700;font-size:14px;${Math.abs((depositTotal - sobre2Total) - depositoAjustado) < 0.5 && Math.abs(sobre2Total - sobre2) < 0.5 ? 'background:#e8f5e9;color:#2e7d32;' : 'background:#fff3e0;color:#e65100;'}">
+            ${Math.abs((depositTotal - sobre2Total) - depositoAjustado) < 0.5 && Math.abs(sobre2Total - sobre2) < 0.5 ? '✅ Los totales cuadran' : '⚠️ Verifica los conteos — los totales no coinciden'}
           </div>`;
 
         // Store for print
