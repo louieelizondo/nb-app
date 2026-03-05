@@ -213,6 +213,12 @@ body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif
 .btn-ir:active { opacity:.9; }
 .btn-pedido { background:#0077b6; color:var(--white); }
 .btn-pedido:active { opacity:.9; }
+.btn-comprado { background:#e65100; color:var(--white); }
+.btn-comprado:active { opacity:.9; }
+.btn-facturado { background:#1565c0; color:var(--white); }
+.btn-facturado:active { opacity:.9; }
+.btn-archivado { background:var(--green); color:var(--white); }
+.btn-archivado:active { opacity:.9; }
 
 /* Status badges */
 .status-badge { display:inline-block; padding:2px 8px; border-radius:10px; font-size:11px; font-weight:600; }
@@ -407,15 +413,14 @@ body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif
 <div class="view" id="viewSections">
   <div class="progress-text" id="progressText"></div>
   <div class="progress-bar-wrap"><div class="progress-bar-fill" id="progressFill"></div></div>
-  <div class="section-list" id="sectionList"></div>
-</div>
-
-<!-- Summary Bar -->
-<div class="summary-bar" id="summaryBar">
-  <div class="inner">
-    <div class="stats" id="summaryStats"></div>
-    <button class="btn-summary" onclick="showSummary()">📋 Lista de Compras</button>
+  <div style="text-align:center;padding:8px 12px 0">
+    <button id="btnResetAll" onclick="resetAllSections()"
+      style="background:#fff3e0;color:#e65100;border:1.5px solid #ffcc80;border-radius:24px;
+             padding:8px 20px;font-size:13px;font-weight:600;cursor:pointer;touch-action:manipulation">
+      🔄 Reiniciar todo el conteo
+    </button>
   </div>
+  <div class="section-list" id="sectionList"></div>
 </div>
 
 <!-- Summary Modal -->
@@ -790,7 +795,6 @@ function selectCategory(cat) {
   showView('viewSections');
   document.getElementById('backBtn').style.display = 'block';
   document.getElementById('headerSub').textContent = cat;
-  document.getElementById('summaryBar').style.display = 'block';
   renderSections();
 }
 
@@ -979,6 +983,22 @@ function resetSection(encodedKey) {
   saveState();
   renderSections();
   toast('↺ Sección reiniciada');
+}
+
+function resetAllSections() {
+  if (!confirm('¿Reiniciar el conteo completo de esta categoría?')) return;
+  PRODUCTS.forEach((p, i) => {
+    if (p.c !== currentCategory) return;
+    delete counts[i];
+    delete variantNotes[i];
+  });
+  // Clear all done sections for current category
+  Object.keys(doneSections).forEach(k => {
+    if (k.startsWith(currentCategory + '|')) delete doneSections[k];
+  });
+  saveState();
+  renderSections();
+  toast('🔄 Conteo reiniciado');
 }
 
 // ============ SUMMARY ============
@@ -1583,6 +1603,8 @@ const SUPPLIER_URLS = {
 let pedirFilter = 'all'; // all, urgent, category name
 let pedirExcluded = {}; // { productIdx: true } — in-memory, resets each time
 let pedirModeOverrides = {}; // { supplier: 'Ir a tienda' | 'Pedido domicilio' }
+let pedirQtyOverrides = {}; // { productIdx: customQty } — user-edited order qty
+let pedirManualItems = {}; // { supplier: [{name, qty, unit}] } — manually added products
 
 // Load mode overrides from localStorage
 try { pedirModeOverrides = JSON.parse(localStorage.getItem('nb_pedir_modes') || '{}'); } catch(e) {}
@@ -1701,16 +1723,44 @@ function renderPedir() {
         <button onclick="toggleAllSupplier('${supplierEsc}', ${allSelected ? 'false' : 'true'})">${allSelected ? 'Quitar todos' : 'Seleccionar todos'}</button>
       </div>`;
 
-    // Item list with checkboxes
+    // Item list with checkboxes + editable qty
+    const manuals = pedirManualItems[supplier] || [];
     const itemList = items.map(p => {
       const excluded = pedirExcluded[p.idx];
+      const qty = pedirQtyOverrides[p.idx] !== undefined ? pedirQtyOverrides[p.idx] : p.needed;
       return `
         <div class="pedir-item ${excluded ? 'excluded' : ''}">
           <input type="checkbox" ${excluded ? '' : 'checked'} onchange="togglePedirItem(${p.idx})">
           <span class="item-text">${p.n}${p.isUrgent ? ' <span style="color:var(--red);font-size:10px">● agotado</span>' : ''}${p.outOfSeason ? ' <span style="color:#ff9800;font-size:10px;background:#fff3e0;padding:1px 5px;border-radius:8px">⏳ fuera de temp.</span>' : ''}</span>
-          <span class="item-qty">${p.needed} ${p.u||''}</span>
+          <input type="number" class="pedir-qty-input" value="${qty}" min="0" step="0.5" inputmode="decimal"
+            onchange="setPedirQty(${p.idx}, this.value)" onclick="this.select()"
+            style="width:52px;text-align:center;font-size:14px;font-weight:700;color:var(--orange,#e65100);
+                   border:1.5px solid #ffcc80;border-radius:8px;padding:4px 2px;background:#fff8f0">
+          <span style="font-size:12px;color:var(--gray)">${p.u||''}</span>
         </div>`;
     }).join('');
+
+    // Manual items added by user
+    const manualList = manuals.map((m, mi) => `
+      <div class="pedir-item" style="background:#f0f8ff;border-left:3px solid #2196f3">
+        <input type="checkbox" checked onchange="removeManualPedirItem('${supplierEsc}',${mi})">
+        <span class="item-text" style="font-style:italic">${m.name}</span>
+        <input type="number" class="pedir-qty-input" value="${m.qty}" min="0" step="0.5" inputmode="decimal"
+          onchange="setManualPedirQty('${supplierEsc}',${mi},this.value)" onclick="this.select()"
+          style="width:52px;text-align:center;font-size:14px;font-weight:700;color:#1565c0;
+                 border:1.5px solid #90caf9;border-radius:8px;padding:4px 2px;background:#e3f2fd">
+        <span style="font-size:12px;color:var(--gray)">${m.unit||''}</span>
+      </div>`).join('');
+
+    // Add manual product row
+    const addManualRow = `
+      <div style="padding:6px 4px">
+        <button onclick="addManualPedirItem('${supplierEsc}')"
+          style="width:100%;background:transparent;border:1.5px dashed #90caf9;border-radius:8px;
+                 color:#1565c0;font-size:13px;padding:7px;cursor:pointer;touch-action:manipulation">
+          + Agregar producto a este pedido
+        </button>
+      </div>`;
 
     // Action buttons
     let actions = '';
@@ -1721,15 +1771,23 @@ function renderPedir() {
     } else if (isDelivery) {
       actions += `<button class="btn-pedido" onclick="placeOrder('${supplierEsc}')">📦 Ordenado</button>`;
     } else {
-      actions += `<button class="btn-ir" onclick="copySupplierList('${supplierEsc}')">📋 Copiar</button>`;
+      // Recoger flow: step buttons
+      actions += `<button class="btn-comprado" onclick="markRecogerStatus('${supplierEsc}','comprado')">🛒 Comprado</button>`;
+      actions += ` <button class="btn-facturado" onclick="markRecogerStatus('${supplierEsc}','facturado')">🧾 Facturado</button>`;
+      actions += ` <button class="btn-archivado" onclick="markRecogerStatus('${supplierEsc}','archivado')">✅ Archivado</button>`;
     }
 
     if (siteUrl) {
       actions += ` <button class="btn-site" onclick="window.open('${siteUrl}','_blank')">🌐 Sitio</button>`;
     }
 
-    // WhatsApp — only for selected items
-    const waItems = selectedItems.map(p => `• ${p.n}: ${p.needed} ${p.u||'unid'}`).join('\n');
+    // WhatsApp — only for selected items + manual items
+    const waRegular = selectedItems.map(p => {
+      const qty = pedirQtyOverrides[p.idx] !== undefined ? pedirQtyOverrides[p.idx] : p.needed;
+      return `• ${p.n}: ${qty} ${p.u||'unid'}`;
+    });
+    const waManual = manuals.map(m => `• ${m.name}: ${m.qty} ${m.unit||'unid'}`);
+    const waItems = [...waRegular, ...waManual].join('\n');
     const waMsg = encodeURIComponent(`Hola, pedido de Natural Balance:\n\n${waItems}\n\nGracias!`);
     actions += ` <button class="btn-whatsapp" onclick="window.open('https://wa.me/?text=${waMsg}','_blank')">💬 WA</button>`;
 
@@ -1743,6 +1801,8 @@ function renderPedir() {
         <div class="order-items" style="margin:8px 0">
           ${selectAllRow}
           ${itemList}
+          ${manualList}
+          ${addManualRow}
         </div>
         <div class="order-actions">${actions}</div>
       </div>`;
@@ -1778,23 +1838,95 @@ function setPedirMode(supplier, mode) {
   renderPedir();
 }
 
+// ── Pedir qty overrides ──
+function setPedirQty(idx, val) {
+  const num = parseFloat(val);
+  if (!isNaN(num) && num >= 0) pedirQtyOverrides[idx] = num;
+  else delete pedirQtyOverrides[idx];
+  // no full re-render — input already has new value
+}
+
+// ── Manual item additions ──
+function addManualPedirItem(supplier) {
+  const name = prompt('Nombre del producto:');
+  if (!name || !name.trim()) return;
+  const qtyStr = prompt('Cantidad:', '1');
+  const qty = parseFloat(qtyStr) || 1;
+  const unit = prompt('Unidad (opcional, ej: pza, kg, caja):', '') || '';
+  if (!pedirManualItems[supplier]) pedirManualItems[supplier] = [];
+  pedirManualItems[supplier].push({ name: name.trim(), qty, unit });
+  renderPedir();
+}
+
+function setManualPedirQty(supplier, idx, val) {
+  if (!pedirManualItems[supplier]) return;
+  const num = parseFloat(val);
+  if (!isNaN(num) && num >= 0) pedirManualItems[supplier][idx].qty = num;
+}
+
+function removeManualPedirItem(supplier, idx) {
+  if (!pedirManualItems[supplier]) return;
+  pedirManualItems[supplier].splice(idx, 1);
+  renderPedir();
+}
+
+// ── Recoger purchase flow (store pickup) ──
+const recogerStatus = {}; // { supplier: 'comprado'|'facturado'|'archivado' }
+
+function markRecogerStatus(supplier, status) {
+  recogerStatus[supplier] = status;
+  const labels = { comprado: '🛒 Comprado', facturado: '🧾 Facturado', archivado: '✅ Archivado' };
+  toast(`${labels[status]} — ${supplier}`);
+  if (status === 'archivado') {
+    // Archive: save as a completed order so it moves out of pedir
+    const selected = getNeedsOrder().filter(p => (p.s || 'Sin tienda') === supplier && !pedirExcluded[p.idx]);
+    const manuals = pedirManualItems[supplier] || [];
+    const allItems = [
+      ...selected.map(p => ({ name: p.n, qty: pedirQtyOverrides[p.idx] !== undefined ? pedirQtyOverrides[p.idx] : p.needed, unit: p.u || '' })),
+      ...manuals
+    ];
+    if (allItems.length === 0) { renderPedir(); return; }
+    const newOrder = {
+      id: 'ORD' + Date.now(),
+      supplier,
+      items: allItems,
+      mode: 'Ir a tienda',
+      status: 'ordered',
+      ordered_at: new Date().toISOString()
+    };
+    orders.push(newOrder);
+    saveOrders();
+    delete recogerStatus[supplier];
+    delete pedirManualItems[supplier];
+    renderPedir();
+    pushOrderToSheet(newOrder);
+  } else {
+    renderPedir();
+  }
+}
+
 function placeOrder(supplier) {
   const selected = getNeedsOrder().filter(p => (p.s || 'Sin tienda') === supplier && !pedirExcluded[p.idx]);
-  if (selected.length === 0) { toast('Selecciona al menos un producto'); return; }
+  const manuals = pedirManualItems[supplier] || [];
+  const allItems = [
+    ...selected.map(p => ({ name: p.n, qty: pedirQtyOverrides[p.idx] !== undefined ? pedirQtyOverrides[p.idx] : p.needed, unit: p.u || '' })),
+    ...manuals
+  ];
+  if (allItems.length === 0) { toast('Selecciona al menos un producto'); return; }
 
   const newOrder = {
     id: 'ORD' + Date.now(),
     supplier,
-    items: selected.map(p => ({ name: p.n, qty: p.needed, unit: p.u || '' })),
+    items: allItems,
     mode: pedirModeOverrides[supplier] || 'Pedido domicilio',
     status: 'ordered',
     ordered_at: new Date().toISOString()
   };
   orders.push(newOrder);
   saveOrders();
+  delete pedirManualItems[supplier];
   renderPedir();
   toast(`📦 Pedido a ${supplier} registrado`);
-  // Sync order to Sheet
   pushOrderToSheet(newOrder);
 }
 
@@ -2532,7 +2664,6 @@ function getActiveProducts() {
 function showView(viewId) {
   document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
   document.getElementById(viewId).classList.add('active');
-  document.getElementById('summaryBar').style.display = (viewId === 'viewSections') ? 'block' : 'none';
 }
 
 // ── localStorage Size Management ──
