@@ -2166,10 +2166,17 @@
       let _npTarget = null;
       let _npStr = '';
 
-      const numpad = document.getElementById('nb-numpad');
-      const npVal  = document.getElementById('np-value');
-      const npLbl  = document.getElementById('np-label');
-      const npDot  = document.getElementById('np-dot');
+      // Elements don't exist yet when script runs (div is after script tag)
+      // — resolve lazily on first use
+      let numpad, npVal, npLbl, npDot;
+      function npEls() {
+        if (!numpad) {
+          numpad = document.getElementById('nb-numpad');
+          npVal  = document.getElementById('np-value');
+          npLbl  = document.getElementById('np-label');
+          npDot  = document.getElementById('np-dot');
+        }
+      }
 
       function getLabel(inp) {
         const ancestor = inp.closest('.form-group, .denom-item');
@@ -2184,6 +2191,7 @@
       }
 
       function npShow(inp) {
+        npEls();
         _npTarget = inp;
         _npStr = (inp.value && inp.value !== '0') ? inp.value : '';
         const intOnly = isIntField(inp);
@@ -2194,6 +2202,7 @@
       }
 
       function npHide() {
+        npEls();
         numpad.classList.remove('np-open');
         if (_npTarget) {
           _npTarget.value = _npStr || '';
@@ -2204,6 +2213,7 @@
       }
 
       function npKey(k) {
+        npEls();
         if (!_npTarget) return;
         if (k === 'back') {
           _npStr = _npStr.slice(0, -1);
@@ -2223,8 +2233,9 @@
       function attachOne(inp) {
         if (inp.dataset.npAttached) return;
         inp.dataset.npAttached = 'true';
-        // Suppress native keyboard
+        // Suppress native keyboard completely — readonly blocks it on all browsers
         inp.setAttribute('inputmode', 'none');
+        inp.setAttribute('readonly', '');
         inp.style.caretColor = 'transparent';
         inp.addEventListener('touchstart', (e) => {
           e.preventDefault();
@@ -2246,6 +2257,7 @@
 
       // Numpad button taps
       document.addEventListener('DOMContentLoaded', () => {
+        npEls(); // resolve elements now that DOM is fully parsed
         numpad.querySelectorAll('.np-btn').forEach(btn => {
           btn.addEventListener('click', (e) => {
             e.preventDefault();
