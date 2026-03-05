@@ -147,29 +147,69 @@
     }
     .denom-item {
       background: #f9f6f2;
-      border-radius: 10px;
-      padding: 12px;
+      border-radius: 12px;
+      padding: 14px 10px 10px;
       border: 1px solid #e0d8cf;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
     }
     .denom-label {
-      font-size: 11px;
-      font-weight: 700;
-      color: #7a6b5d;
-      margin-bottom: 4px;
-      text-transform: uppercase;
+      font-size: 14px;
+      font-weight: 800;
+      color: #2d2319;
+      margin-bottom: 10px;
+      text-align: center;
     }
-    .denom-input {
+    .denom-counter {
+      display: flex;
+      align-items: center;
+      gap: 6px;
       width: 100%;
-      padding: 8px;
-      border: 1px solid #d0c7bd;
-      border-radius: 6px;
-      font-size: 13px;
-      margin-bottom: 4px;
     }
+    .denom-btn {
+      width: 48px;
+      height: 48px;
+      border: none;
+      border-radius: 10px;
+      font-size: 24px;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      user-select: none;
+      -webkit-user-select: none;
+      touch-action: manipulation;
+      transition: background 0.1s;
+    }
+    .denom-btn-minus { background: #ffebee; color: #c62828; }
+    .denom-btn-minus:active { background: #ef9a9a; }
+    .denom-btn-plus  { background: #e8f5e9; color: #2e7d32; }
+    .denom-btn-plus:active  { background: #a5d6a7; }
+    .denom-input {
+      flex: 1;
+      text-align: center;
+      font-size: 26px;
+      font-weight: 900;
+      color: #2d2319;
+      border: 2px solid #e0d8cf;
+      border-radius: 8px;
+      padding: 6px 4px;
+      background: white;
+      min-width: 0;
+      -moz-appearance: textfield;
+    }
+    .denom-input::-webkit-outer-spin-button,
+    .denom-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+    .denom-input:focus { border-color: #4caf50; outline: none; }
     .denom-calc {
       font-size: 12px;
-      color: #999;
+      color: #7a6b5d;
       font-weight: 600;
+      margin-top: 8px;
+      text-align: center;
     }
 
     /* BADGES */
@@ -967,14 +1007,32 @@
         item.className = 'denom-item';
         item.innerHTML = `
           <div class="denom-label">${d.label}</div>
-          <input type="number" class="denom-input" data-key="${d.key}" value="0" min="0" step="1" />
+          <div class="denom-counter">
+            <button type="button" class="denom-btn denom-btn-minus">−</button>
+            <input type="number" class="denom-input" data-key="${d.key}" value="0" min="0" inputmode="numeric" pattern="[0-9]*" />
+            <button type="button" class="denom-btn denom-btn-plus">+</button>
+          </div>
           <div class="denom-calc">× ${d.label} = <span>$0.00</span></div>
         `;
         const input = item.querySelector('input');
-        input.addEventListener('input', () => {
+        const minus = item.querySelector('.denom-btn-minus');
+        const plus  = item.querySelector('.denom-btn-plus');
+        minus.addEventListener('click', () => {
+          input.value = Math.max(0, (parseInt(input.value) || 0) - 1);
           updateDenomCalc(item, d.value);
           onChange();
         });
+        plus.addEventListener('click', () => {
+          input.value = (parseInt(input.value) || 0) + 1;
+          updateDenomCalc(item, d.value);
+          onChange();
+        });
+        input.addEventListener('input', () => {
+          if (parseInt(input.value) < 0 || input.value === '') input.value = 0;
+          updateDenomCalc(item, d.value);
+          onChange();
+        });
+        input.addEventListener('focus', () => { input.select(); });
         container.appendChild(item);
       });
     }
@@ -1612,14 +1670,23 @@
             <div style="font-size:11px;color:${hl?'#2e7d32':'#999'};font-weight:700;text-transform:uppercase;letter-spacing:.4px">${label}</div>
             <div style="font-size:${hl?'20':'17'}px;font-weight:800;color:${hl?'#2e7d32':'inherit'}">${formatCurrency(val)}</div>
           </div>`;
+        // Sobre2 and depósito are editable — leader can fix when bills don't land exactly right
+        const editableCell = (label, val, id, hl=false) => `
+          <div style="background:${hl?'#e8f5e9':'#fff8e1'};padding:10px 12px;border-radius:10px;border:2px dashed ${hl?'#66bb6a':'#ffb300'};">
+            <div style="font-size:11px;color:${hl?'#2e7d32':'#f57c00'};font-weight:700;text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px;">${label} ✏️</div>
+            <input type="number" id="${id}" value="${val}" step="1" inputmode="numeric"
+              style="width:100%;border:none;background:transparent;font-size:${hl?'20':'17'}px;font-weight:800;color:${hl?'#2e7d32':'#2d2319'};outline:none;padding:0;"
+              onchange="updateDepositoTargets()" oninput="updateDepositoTargets()" />
+            <div style="font-size:10px;color:#999;margin-top:2px;">Editable — ajusta si es necesario</div>
+          </div>`;
         const summaryHtml = `
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px;">
             ${cell('Pagos Recibidos', pagosRecibidos)}
             ${cell('Tarjeta', tarjeta)}
             ${cell('Transferencias', transferencias)}
             ${cell('Cashback', cashback)}
-            ${cell('Sobre 2', sobre2)}
-            <div style="grid-column:1/-1">${cell('Depósito BBVA', depositoAjustado, true)}</div>
+            ${editableCell('Sobre 2', sobre2, 'dep_target_sobre2')}
+            <div style="grid-column:1/-1">${editableCell('Depósito BBVA', depositoAjustado, 'dep_target_deposito', true)}</div>
           </div>`;
         if (!inlineContainer) document.getElementById('dep_summary').innerHTML = summaryHtml;
 
@@ -1693,11 +1760,11 @@
               </table>
             </div>
           </div>
-          <div style="padding:12px;border-radius:8px;text-align:center;font-weight:700;font-size:14px;${Math.abs((depositTotal - sobre2Total) - depositoAjustado) < 0.5 && Math.abs(sobre2Total - sobre2) < 0.5 ? 'background:#e8f5e9;color:#2e7d32;' : 'background:#fff3e0;color:#e65100;'}">
-            ${Math.abs((depositTotal - sobre2Total) - depositoAjustado) < 0.5 && Math.abs(sobre2Total - sobre2) < 0.5 ? '✅ Los totales cuadran' : '⚠️ Verifica los conteos — los totales no coinciden'}
+          <div id="dep_verify_badge" style="padding:12px;border-radius:8px;text-align:center;font-weight:700;font-size:14px;background:#fff9c4;color:#f57f17;">
+            ↑ Edita los targets si es necesario, luego verifica
           </div>`;
 
-        // Store for print
+        // Store for print — targets are mutable via updateDepositoTargets()
         window._depositoPrintData = { fecha, depositDenoms, sobre2Denoms, depositTotal, sobre2Total, sobre2, s2Data, depositoAjustado };
 
         if (inlineContainer) {
@@ -1713,12 +1780,51 @@
             </div>`;
         } else {
           document.getElementById('dep_allocation').innerHTML = allocationHtml;
+          document.getElementById('dep_summary').innerHTML = summaryHtml;
         }
+        // Trigger initial verification with computed targets
+        setTimeout(updateDepositoTargets, 50);
 
         return; // early exit
       } catch (e) {
         console.error('Error:', e);
         showToast('Error cargando datos: ' + e.message, 'error');
+      }
+    }
+
+    // ── EDITABLE DEPOSIT TARGETS ────────────────────────────────────
+    function updateDepositoTargets() {
+      if (!window._depositoPrintData) return;
+      const s2Input  = document.getElementById('dep_target_sobre2');
+      const depInput = document.getElementById('dep_target_deposito');
+      if (!s2Input || !depInput) return;
+
+      const targetSobre2   = parseFloat(s2Input.value)  || 0;
+      const targetDeposito = parseFloat(depInput.value) || 0;
+
+      // Update print data so receipts use the edited targets
+      window._depositoPrintData.sobre2           = targetSobre2;
+      window._depositoPrintData.depositoAjustado = targetDeposito;
+
+      const { depositTotal, sobre2Total } = window._depositoPrintData;
+      const badge = document.getElementById('dep_verify_badge');
+      if (!badge) return;
+
+      const depOk = Math.abs(depositTotal - targetDeposito) < 1;
+      const s2Ok  = Math.abs(sobre2Total  - targetSobre2)  < 1;
+      const sumOk = Math.abs((depositTotal + sobre2Total) - (targetDeposito + targetSobre2)) < 1;
+
+      if (depOk && s2Ok) {
+        badge.style.background = '#e8f5e9'; badge.style.color = '#2e7d32';
+        badge.textContent = '✅ Los totales cuadran exacto';
+      } else if (sumOk) {
+        badge.style.background = '#e3f2fd'; badge.style.color = '#1565c0';
+        badge.textContent = `✅ Suma total cuadra — Depósito ${formatCurrency(depositTotal)} / Sobre 2 ${formatCurrency(sobre2Total)} (targets ajustados)`;
+      } else {
+        const diffDep = depositTotal - targetDeposito;
+        const diffS2  = sobre2Total  - targetSobre2;
+        badge.style.background = '#fff3e0'; badge.style.color = '#e65100';
+        badge.textContent = `⚠️ Depósito: ${diffDep >= 0 ? '+' : ''}${formatCurrency(diffDep)} · Sobre 2: ${diffS2 >= 0 ? '+' : ''}${formatCurrency(diffS2)}`;
       }
     }
 
