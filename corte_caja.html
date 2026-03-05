@@ -188,22 +188,29 @@
     .denom-btn-minus:active { background: #ef9a9a; }
     .denom-btn-plus  { background: #e8f5e9; color: #2e7d32; }
     .denom-btn-plus:active  { background: #a5d6a7; }
-    .denom-input {
+    /* Hidden value store — never shown to user */
+    .denom-input { display: none; }
+
+    /* Big tappable number button — single tap always registers */
+    .denom-qty-btn {
       flex: 1;
       text-align: center;
-      font-size: 26px;
+      font-size: 28px;
       font-weight: 900;
       color: #2d2319;
       border: 2px solid #e0d8cf;
       border-radius: 8px;
-      padding: 6px 4px;
+      padding: 8px 4px;
       background: white;
       min-width: 0;
-      -moz-appearance: textfield;
+      cursor: pointer;
+      touch-action: manipulation;
+      user-select: none;
+      -webkit-user-select: none;
+      -webkit-tap-highlight-color: transparent;
+      transition: background 0.08s, border-color 0.08s;
     }
-    .denom-input::-webkit-outer-spin-button,
-    .denom-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
-    .denom-input:focus { border-color: #4caf50; outline: none; }
+    .denom-qty-btn:active { background: #e8f5e9; border-color: #4caf50; }
     .denom-calc {
       font-size: 12px;
       color: #7a6b5d;
@@ -1020,49 +1027,64 @@
           <div class="denom-label">${d.label}</div>
           <div class="denom-counter">
             <button type="button" class="denom-btn denom-btn-minus">−</button>
-            <input type="number" class="denom-input" data-key="${d.key}" value="0" min="0" inputmode="numeric" pattern="[0-9]*" />
+            <button type="button" class="denom-qty-btn">0</button>
+            <input type="hidden" class="denom-input" data-key="${d.key}" value="0" />
             <button type="button" class="denom-btn denom-btn-plus">+</button>
           </div>
           <div class="denom-calc">× ${d.label} = <span>$0.00</span></div>
         `;
-        const input = item.querySelector('input');
-        const minus = item.querySelector('.denom-btn-minus');
-        const plus  = item.querySelector('.denom-btn-plus');
-        minus.addEventListener('click', () => {
-          input.value = Math.max(0, (parseInt(input.value) || 0) - 1);
+        const hiddenInput = item.querySelector('.denom-input');
+        const qtyBtn      = item.querySelector('.denom-qty-btn');
+        const minus       = item.querySelector('.denom-btn-minus');
+        const plus        = item.querySelector('.denom-btn-plus');
+
+        function refresh() {
+          qtyBtn.textContent = hiddenInput.value || '0';
           updateDenomCalc(item, d.value);
           onChange();
+        }
+
+        minus.addEventListener('click', () => {
+          hiddenInput.value = Math.max(0, (parseInt(hiddenInput.value) || 0) - 1);
+          refresh();
         });
         plus.addEventListener('click', () => {
-          input.value = (parseInt(input.value) || 0) + 1;
-          updateDenomCalc(item, d.value);
-          onChange();
+          hiddenInput.value = (parseInt(hiddenInput.value) || 0) + 1;
+          refresh();
         });
-        input.addEventListener('input', () => {
-          updateDenomCalc(item, d.value);
-          onChange();
+        // Single tap on the number → open numpad
+        qtyBtn.addEventListener('click', () => {
+          openDenomNumpad(hiddenInput, qtyBtn, d.label, refresh);
         });
-        // Attach numpad immediately — works even for dynamically created grids
-        window.npAttachOne?.(input);
         container.appendChild(item);
       });
     }
 
     function updateDenomCalc(item, value) {
-      const input = item.querySelector('input');
-      const calc = item.querySelector('.denom-calc span');
+      const input = item.querySelector('.denom-input');
+      const calc  = item.querySelector('.denom-calc span');
       const total = (parseFloat(input.value) || 0) * value;
       calc.innerText = formatCurrency(total);
     }
 
     function getDenomValues(containerId) {
       const result = {};
-      const container = document.getElementById(containerId);
-      container.querySelectorAll('input').forEach(inp => {
-        const key = inp.getAttribute('data-key');
-        result[key] = parseFloat(inp.value) || 0;
+      document.getElementById(containerId).querySelectorAll('.denom-input').forEach(inp => {
+        result[inp.getAttribute('data-key')] = parseFloat(inp.value) || 0;
       });
       return result;
+    }
+
+    // Set a denom value programmatically (pre-fill) and update display
+    function setDenomValue(containerId, key, val) {
+      const container = document.getElementById(containerId);
+      const inp = container.querySelector(`.denom-input[data-key="${key}"]`);
+      if (!inp) return;
+      inp.value = val || 0;
+      const btn = inp.closest('.denom-item')?.querySelector('.denom-qty-btn');
+      if (btn) btn.textContent = val || 0;
+      const denom = DENOMINATIONS.find(d => d.key === key);
+      if (denom) updateDenomCalc(inp.closest('.denom-item'), denom.value);
     }
 
     function getTotalEfectivo(denomValues) {
@@ -1259,7 +1281,7 @@
       document.getElementById('ind_transferencias').value = '';
       document.getElementById('ind_cashback').value = '';
       document.getElementById('ind_retiros').value = '';
-      document.querySelectorAll('#ind_denomGrid input').forEach(i => i.value = '0');
+      DENOMINATIONS.forEach(d => setDenomValue('ind_denomGrid', d.key, 0));
       updateIndividualCalcs();
     }
 
@@ -1417,11 +1439,7 @@
           // Populate Counter 2 with existing createDenomGrid, then pre-fill corte values
           createDenomGrid('cb2_container', updateCambioCounter);
           DENOMINATIONS.forEach(d => {
-            const inp = document.querySelector('#cb2_container input[data-key="' + d.key + '"]');
-            if (inp) {
-              inp.value = corte[d.key] || 0;
-              updateDenomCalc(inp.closest('.denom-item'), d.value);
-            }
+            setDenomValue('cb2_container', d.key, corte[d.key] || 0);
           });
           updateCambioCounter();
           startPolling(corte.Fecha);
@@ -1576,7 +1594,7 @@
       document.getElementById('tienda_transferencias').value = '';
       document.getElementById('tienda_cashback').value = '';
       // tienda_storeCredit removed
-      document.querySelectorAll('#tienda_denomGrid input').forEach(i => i.value = '0');
+      DENOMINATIONS.forEach(d => setDenomValue('tienda_denomGrid', d.key, 0));
       updateTiendaCalcs();
     }
 
@@ -2153,7 +2171,7 @@
        'arqueo_bolsita','arqueo_gastos']
         .forEach(id => document.getElementById(id).value = '');
       document.getElementById('arqueo_colaborador').value = '';
-      document.querySelectorAll('#arqueo_denomGrid input').forEach(i => i.value = '0');
+      DENOMINATIONS.forEach(d => setDenomValue('arqueo_denomGrid', d.key, 0));
       updateArqueoCalcs();
     }
 
@@ -2163,7 +2181,9 @@
     (function() {
       if (!('ontouchstart' in window)) return; // desktop: skip
 
-      let _npTarget = null;
+      let _npTarget = null;     // payment inputs (regular <input>)
+      let _npDisplayEl = null;  // denom qty button (visual display)
+      let _npDenomCb = null;    // refresh callback for denom grids
       let _npStr = '';
 
       // Elements don't exist yet when script runs (div is after script tag)
@@ -2190,24 +2210,41 @@
         return inp.classList.contains('denom-input') || inp.step === '1';
       }
 
+      // Open numpad for a regular payment input
       function npShow(inp) {
         npEls();
-        _npTarget = inp;
+        _npTarget    = inp;
+        _npDisplayEl = null;
+        _npDenomCb   = null;
         _npStr = (inp.value && inp.value !== '0') ? inp.value : '';
-        const intOnly = isIntField(inp);
-        npDot.disabled = intOnly;
+        npDot.disabled = isIntField(inp);
         npLbl.textContent = getLabel(inp) || 'Cantidad';
         npVal.textContent = _npStr || '0';
         numpad.classList.add('np-open');
       }
 
+      // Open numpad for a denom counter button (called from createDenomGrid)
+      window.openDenomNumpad = function(hiddenInput, displayBtn, label, refreshCb) {
+        npEls();
+        _npTarget    = hiddenInput;
+        _npDisplayEl = displayBtn;
+        _npDenomCb   = refreshCb;
+        _npStr = (hiddenInput.value && hiddenInput.value !== '0') ? hiddenInput.value.toString() : '';
+        npDot.disabled = true; // denominations are always integers
+        npLbl.textContent = label;
+        npVal.textContent = _npStr || '0';
+        numpad.classList.add('np-open');
+      };
+
       function npHide() {
         npEls();
         numpad.classList.remove('np-open');
         if (_npTarget) {
-          _npTarget.value = _npStr || '';
-          _npTarget.dispatchEvent(new Event('input', { bubbles: true }));
-          _npTarget = null;
+          _npTarget.value = _npStr || (_npDisplayEl ? '0' : '');
+          if (_npDisplayEl) { _npDisplayEl.textContent = _npStr || '0'; }
+          if (_npDenomCb)   { _npDenomCb(); }
+          else { _npTarget.dispatchEvent(new Event('input', { bubbles: true })); }
+          _npTarget = null; _npDisplayEl = null; _npDenomCb = null;
         }
         _npStr = '';
       }
@@ -2218,15 +2255,17 @@
         if (k === 'back') {
           _npStr = _npStr.slice(0, -1);
         } else if (k === '.') {
-          if (!isIntField(_npTarget) && !_npStr.includes('.')) _npStr += '.';
+          if (!npDot.disabled && !_npStr.includes('.')) _npStr += '.';
         } else {
           if (_npStr === '' && k === '0') { _npStr = '0'; }
           else if (_npStr === '0') { _npStr = k; }
           else { _npStr += k; }
         }
         npVal.textContent = _npStr || '0';
-        _npTarget.value = _npStr || '';
-        _npTarget.dispatchEvent(new Event('input', { bubbles: true }));
+        _npTarget.value = _npStr || (_npDisplayEl ? '0' : '');
+        if (_npDisplayEl) { _npDisplayEl.textContent = _npStr || '0'; }
+        if (_npDenomCb)   { _npDenomCb(); }
+        else { _npTarget.dispatchEvent(new Event('input', { bubbles: true })); }
       }
 
       // Attach to a single input
