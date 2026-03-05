@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Transferencias · NB</title>
+<script src="nb_auth.js"></script>
+<style>
+  :root {
+    --purple: #6a1b9a; --purple-bg: #f3e5f5; --purple-light: #9c27b0;
+    --green: #2e7d32; --green-bg: #e8f5e9; --green-light: #4caf50;
+    --gray: #757575; --gray-bg: #f5f5f5; --gray-border: #e0e0e0;
+    --dark: #2d2319; --white: #fff;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+         background: #f0ede8; min-height: 100vh; color: var(--dark); }
+
+  .header { background: var(--purple); color: var(--white); padding: 14px 16px;
+            display: flex; align-items: center; gap: 10px; position: sticky; top: 0; z-index: 50; }
+  .header h1 { font-size: 17px; font-weight: 700; flex: 1; }
+  .header .sub { font-size: 12px; opacity: .8; }
+  .header a { color: var(--white); text-decoration: none; font-size: 22px; line-height: 1; }
+
+  .container { max-width: 560px; margin: 0 auto; padding: 16px; padding-bottom: 100px; }
+
+  .card { background: var(--white); border-radius: 12px; padding: 16px;
+          margin-bottom: 14px; box-shadow: 0 1px 4px rgba(0,0,0,.08); }
+  .card-title { font-size: 13px; font-weight: 700; color: var(--gray);
+                text-transform: uppercase; letter-spacing: .5px; margin-bottom: 12px; }
+
+  .field-row { display: flex; gap: 10px; margin-bottom: 10px; }
+  .field { flex: 1; }
+  .field label { display: block; font-size: 12px; color: var(--gray); margin-bottom: 4px; }
+  .field input, .field select, .field textarea {
+    width: 100%; padding: 11px 12px; border: 1.5px solid var(--gray-border);
+    border-radius: 8px; font-size: 15px; background: var(--white); color: var(--dark);
+    -webkit-appearance: none; font-family: inherit;
+  }
+  .field input[type="number"] { text-align: right; font-weight: 700; font-size: 18px; }
+  .field input:focus, .field select:focus, .field textarea:focus {
+    outline: none; border-color: var(--purple-light); }
+
+  /* Monto highlight */
+  #trMonto { color: var(--purple); font-size: 22px; }
+
+  /* Filter chips */
+  .chips { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+  .chip { padding: 6px 14px; border-radius: 20px; border: 1.5px solid var(--gray-border);
+          font-size: 13px; font-weight: 600; background: var(--white); cursor: pointer;
+          touch-action: manipulation; }
+  .chip.active { background: var(--purple); color: var(--white); border-color: var(--purple); }
+
+  /* Transfer list */
+  .tr-item { padding: 10px 0; border-bottom: 1px solid var(--gray-border); }
+  .tr-item:last-child { border-bottom: none; }
+  .tr-row1 { display: flex; justify-content: space-between; align-items: center; }
+  .tr-concepto { font-size: 14px; font-weight: 600; flex: 1; }
+  .tr-monto { font-size: 16px; font-weight: 800; color: var(--purple); }
+  .tr-row2 { font-size: 12px; color: var(--gray); margin-top: 2px; }
+  .tr-cuentas { font-size: 12px; color: var(--gray); margin-top: 1px; }
+
+  .empty-state { text-align: center; padding: 30px 20px; color: var(--gray); font-size: 13px; }
+
+  .action-bar { position: fixed; bottom: 0; left: 0; right: 0;
+                background: var(--white); padding: 12px 16px;
+                box-shadow: 0 -2px 10px rgba(0,0,0,.1); z-index: 50; }
+  .action-bar .inner { max-width: 560px; margin: 0 auto; }
+  .btn-save { width: 100%; padding: 15px; background: var(--purple); color: var(--white);
+              border: none; border-radius: 10px; font-size: 16px; font-weight: 700;
+              cursor: pointer; touch-action: manipulation; }
+  .btn-save:disabled { background: var(--gray); }
+  .btn-save:active { opacity: .9; }
+
+  .toast { position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%);
+           background: #333; color: #fff; padding: 10px 18px; border-radius: 20px;
+           font-size: 14px; z-index: 300; opacity: 0; pointer-events: none;
+           transition: opacity .3s; white-space: nowrap; }
+  .toast.show { opacity: 1; }
+
+  /* Month picker */
+  .month-nav { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+  .month-nav button { background: none; border: 1.5px solid var(--gray-border);
+                      border-radius: 8px; padding: 6px 12px; font-size: 14px;
+                      cursor: pointer; touch-action: manipulation; }
+  .month-nav span { flex: 1; text-align: center; font-weight: 700; font-size: 15px; }
+
+  .tr-summary { background: var(--purple-bg); border-radius: 8px; padding: 10px 14px;
+                display: flex; justify-content: space-between; margin-bottom: 12px; }
+  .tr-summary .lbl { font-size: 12px; color: var(--gray); }
+  .tr-summary .val { font-size: 16px; font-weight: 800; color: var(--purple); }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <a href="index.html">←</a>
+  <div>
+    <h1>Transferencias</h1>
+    <div class="sub" id="headerSub">NB Finance</div>
+  </div>
+</div>
+
+<div id="authGate" style="display:none;padding:40px 20px;text-align:center">
+  <div style="font-size:48px;margin-bottom:16px">🔒</div>
+  <p style="color:var(--gray);margin-bottom:20px">Inicia sesión para continuar</p>
+  <div id="googleSignIn"></div>
+</div>
+
+<div id="appContent" style="display:none">
+  <div class="container">
+
+    <!-- New transfer form -->
+    <div class="card">
+      <div class="card-title">➕ Nueva Transferencia</div>
+
+      <div class="field-row">
+        <div class="field">
+          <label>Fecha</label>
+          <input type="date" id="trFecha">
+        </div>
+        <div class="field">
+          <label>Colaborador</label>
+          <input type="text" id="trColaborador" placeholder="Nombre">
+        </div>
+      </div>
+
+      <div class="field-row solo" style="margin-bottom:10px">
+        <div class="field">
+          <label>Monto ($MXN)</label>
+          <input type="number" id="trMonto" placeholder="0.00" min="0" step="0.01" inputmode="decimal">
+        </div>
+      </div>
+
+      <div class="field-row solo" style="margin-bottom:10px">
+        <div class="field">
+          <label>Concepto</label>
+          <input type="text" id="trConcepto" placeholder="Ej: Depósito BBVA, Traspaso a nómina...">
+        </div>
+      </div>
+
+      <div class="field-row">
+        <div class="field">
+          <label>De cuenta</label>
+          <select id="trDeCuenta">
+            <option value="">Seleccionar...</option>
+            <option>BBVA Negocios</option>
+            <option>BBVA Personal</option>
+            <option>Efectivo Caja</option>
+            <option>Sobre 2</option>
+            <option>Fondo Repartidor</option>
+            <option>Otro</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>A cuenta</label>
+          <select id="trACuenta">
+            <option value="">Seleccionar...</option>
+            <option>BBVA Negocios</option>
+            <option>BBVA Personal</option>
+            <option>Nómina</option>
+            <option>Proveedor</option>
+            <option>Sobre 2</option>
+            <option>Fondo Repartidor</option>
+            <option>Otro</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="field-row solo" style="margin-bottom:0">
+        <div class="field">
+          <label>Referencia (opcional)</label>
+          <input type="text" id="trReferencia" placeholder="Número de operación, folio...">
+        </div>
+      </div>
+    </div>
+
+    <!-- History -->
+    <div class="card">
+      <div class="card-title">📋 Historial</div>
+
+      <div class="month-nav">
+        <button onclick="shiftMonth(-1)">◀</button>
+        <span id="monthLabel"></span>
+        <button onclick="shiftMonth(1)">▶</button>
+      </div>
+
+      <div class="tr-summary" id="trSummary" style="display:none">
+        <div><div class="lbl">Transferencias</div><div class="val" id="trCount">0</div></div>
+        <div><div class="lbl">Total</div><div class="val" id="trTotal">$0.00</div></div>
+      </div>
+
+      <div id="trList">
+        <div class="empty-state">Cargando...</div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- Action bar -->
+<div class="action-bar" id="actionBar" style="display:none">
+  <div class="inner">
+    <button class="btn-save" id="btnGuardar" onclick="guardarTransferencia()">
+      🏦 Registrar Transferencia
+    </button>
+  </div>
+</div>
+
+<div class="toast" id="toastEl"></div>
+
+<script>
+const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxQ7BzFITQnxyndvo2q7Xa1-Sc-yX5S8JGRc1mIbd4ye0rSpN2I2qx1zAjzRqbPXNeL/exec';
+
+let viewYear, viewMonth; // 0-based month
+
+function fmt(n) {
+  return '$' + (parseFloat(n) || 0).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+const MONTHS_ES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio',
+                   'Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+
+// ── Auth ──
+window.nbAuthCallback = function(user) {
+  document.getElementById('authGate').style.display = 'none';
+  document.getElementById('appContent').style.display = 'block';
+  document.getElementById('actionBar').style.display = 'block';
+  document.getElementById('headerSub').textContent = user.name || user.email;
+  init();
+};
+
+function init() {
+  const today = new Date();
+  document.getElementById('trFecha').value = today.toISOString().split('T')[0];
+  viewYear  = today.getFullYear();
+  viewMonth = today.getMonth();
+  updateMonthLabel();
+  loadHistory();
+}
+
+function shiftMonth(dir) {
+  viewMonth += dir;
+  if (viewMonth > 11) { viewMonth = 0; viewYear++; }
+  if (viewMonth < 0)  { viewMonth = 11; viewYear--; }
+  updateMonthLabel();
+  loadHistory();
+}
+
+function updateMonthLabel() {
+  document.getElementById('monthLabel').textContent = MONTHS_ES[viewMonth] + ' ' + viewYear;
+}
+
+// ── Save ──
+async function guardarTransferencia() {
+  const fecha  = document.getElementById('trFecha').value;
+  const colab  = document.getElementById('trColaborador').value.trim();
+  const monto  = parseFloat(document.getElementById('trMonto').value);
+  const conc   = document.getElementById('trConcepto').value.trim();
+  const deCta  = document.getElementById('trDeCuenta').value;
+  const aCta   = document.getElementById('trACuenta').value;
+  const ref    = document.getElementById('trReferencia').value.trim();
+
+  if (!fecha) { toast('Falta la fecha'); return; }
+  if (!monto || monto <= 0) { toast('Falta el monto'); return; }
+  if (!conc) { toast('Falta el concepto'); return; }
+
+  const btn = document.getElementById('btnGuardar');
+  btn.disabled = true;
+  btn.textContent = 'Guardando...';
+
+  try {
+    const r = await fetch(SCRIPT_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({
+        action: 'save_transferencia',
+        transferencia: { Fecha: fecha, Colaborador: colab, Monto: monto,
+          Concepto: conc, De_Cuenta: deCta, A_Cuenta: aCta, Referencia: ref }
+      })
+    });
+    const data = await r.json();
+    if (data.ok) {
+      toast('✅ Transferencia registrada');
+      resetForm();
+      loadHistory();
+    } else {
+      throw new Error(data.error || 'Error');
+    }
+  } catch(e) {
+    toast('Error: ' + e.message, true);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '🏦 Registrar Transferencia';
+  }
+}
+
+function resetForm() {
+  document.getElementById('trMonto').value = '';
+  document.getElementById('trConcepto').value = '';
+  document.getElementById('trDeCuenta').value = '';
+  document.getElementById('trACuenta').value = '';
+  document.getElementById('trReferencia').value = '';
+}
+
+// ── History ──
+async function loadHistory() {
+  const monthStr = viewYear + '-' + String(viewMonth + 1).padStart(2, '0');
+  try {
+    const r = await fetch(SCRIPT_URL + '?action=get_transferencias&month=' + monthStr + '&_t=' + Date.now());
+    const data = await r.json();
+    renderHistory(data.transferencias || []);
+  } catch(e) {
+    document.getElementById('trList').innerHTML =
+      '<div class="empty-state">No se pudo cargar el historial</div>';
+  }
+}
+
+function renderHistory(list) {
+  const el = document.getElementById('trList');
+  if (!list.length) {
+    document.getElementById('trSummary').style.display = 'none';
+    el.innerHTML = '<div class="empty-state">Sin transferencias este mes</div>';
+    return;
+  }
+
+  const total = list.reduce((s, t) => s + (parseFloat(t.Monto) || 0), 0);
+  document.getElementById('trCount').textContent = list.length;
+  document.getElementById('trTotal').textContent = fmt(total);
+  document.getElementById('trSummary').style.display = 'flex';
+
+  const sorted = [...list].sort((a, b) => b.Fecha > a.Fecha ? 1 : -1);
+  el.innerHTML = sorted.map(t => `
+    <div class="tr-item">
+      <div class="tr-row1">
+        <span class="tr-concepto">${t.Concepto || '—'}</span>
+        <span class="tr-monto">${fmt(t.Monto)}</span>
+      </div>
+      <div class="tr-row2">${t.Fecha}${t.Colaborador ? ' · ' + t.Colaborador : ''}</div>
+      ${(t.De_Cuenta || t.A_Cuenta) ?
+        `<div class="tr-cuentas">${t.De_Cuenta || '?'} → ${t.A_Cuenta || '?'}${t.Referencia ? ' · Ref: ' + t.Referencia : ''}</div>` : ''}
+    </div>`).join('');
+}
+
+// ── Toast ──
+function toast(msg, isErr) {
+  const el = document.getElementById('toastEl');
+  el.textContent = msg;
+  el.style.background = isErr ? '#c62828' : '#333';
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 3000);
+}
+
+// ── Auth init ──
+document.addEventListener('DOMContentLoaded', () => {
+  if (typeof initNBAuth === 'function') {
+    initNBAuth({ authGateId: 'authGate', signInDivId: 'googleSignIn', onAuth: window.nbAuthCallback });
+  } else {
+    document.getElementById('authGate').style.display = 'none';
+    document.getElementById('appContent').style.display = 'block';
+    document.getElementById('actionBar').style.display = 'block';
+    init();
+  }
+});
+</script>
+</body>
+</html>

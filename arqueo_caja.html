@@ -1,0 +1,558 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Arqueo de Caja Chica · NB</title>
+<script src="nb_auth.js"></script>
+<style>
+  :root {
+    --green: #2e7d32; --green-bg: #e8f5e9; --green-light: #4caf50;
+    --orange: #e65100; --orange-bg: #fff3e0;
+    --red: #c62828; --red-bg: #fce4ec;
+    --blue: #1565c0; --blue-bg: #e3f2fd;
+    --gray: #757575; --gray-bg: #f5f5f5; --gray-border: #e0e0e0;
+    --dark: #2d2319; --white: #fff;
+    --card-bg: #fafaf8;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+         background: #f0ede8; min-height: 100vh; color: var(--dark); }
+
+  /* ── Header ── */
+  .header { background: var(--green); color: var(--white); padding: 14px 16px;
+            display: flex; align-items: center; gap: 10px; position: sticky; top: 0; z-index: 50; }
+  .header h1 { font-size: 17px; font-weight: 700; flex: 1; }
+  .header .sub { font-size: 12px; opacity: .8; }
+  .header a { color: var(--white); text-decoration: none; font-size: 22px; line-height: 1; }
+
+  /* ── Layout ── */
+  .container { max-width: 560px; margin: 0 auto; padding: 16px; padding-bottom: 100px; }
+
+  /* ── Cards ── */
+  .card { background: var(--white); border-radius: 12px; padding: 16px;
+          margin-bottom: 14px; box-shadow: 0 1px 4px rgba(0,0,0,.08); }
+  .card-title { font-size: 13px; font-weight: 700; color: var(--gray);
+                text-transform: uppercase; letter-spacing: .5px; margin-bottom: 12px; }
+
+  /* ── Form fields ── */
+  .field-row { display: flex; gap: 10px; margin-bottom: 10px; }
+  .field-row.solo { display: block; }
+  .field { flex: 1; }
+  .field label { display: block; font-size: 12px; color: var(--gray); margin-bottom: 4px; }
+  .field input[type="text"], .field input[type="date"], .field input[type="number"] {
+    width: 100%; padding: 11px 12px; border: 1.5px solid var(--gray-border);
+    border-radius: 8px; font-size: 16px; background: var(--white); color: var(--dark);
+    -webkit-appearance: none;
+  }
+  .field input[type="number"] { text-align: right; font-weight: 700; }
+  .field input:focus { outline: none; border-color: var(--green-light); }
+
+  /* ── Denomination grid ── */
+  .denom-grid { display: flex; flex-direction: column; gap: 8px; }
+  .denom-item { display: flex; align-items: center; gap: 10px; }
+  .denom-label { width: 64px; font-size: 13px; font-weight: 600; color: var(--dark); }
+  .denom-counter { display: flex; align-items: center; gap: 6px; flex: 1; }
+  .denom-btn { width: 40px; height: 40px; border-radius: 50%; border: 1.5px solid var(--gray-border);
+               background: var(--gray-bg); font-size: 20px; line-height: 1; cursor: pointer;
+               touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+  .denom-btn:active { background: var(--gray-border); }
+  .denom-qty-btn { flex: 1; text-align: center; font-size: 24px; font-weight: 900; color: var(--dark);
+                   border: 2px solid var(--gray-border); border-radius: 8px; padding: 6px 4px;
+                   background: var(--white); cursor: pointer; touch-action: manipulation;
+                   -webkit-tap-highlight-color: transparent; transition: background .08s; }
+  .denom-qty-btn:active { background: var(--green-bg); border-color: var(--green-light); }
+  .denom-input { display: none; }
+  .denom-calc { width: 80px; text-align: right; font-size: 13px; color: var(--gray); }
+
+  /* ── Totals ── */
+  .totals-row { display: flex; justify-content: space-between; align-items: center;
+                padding: 8px 0; border-top: 1px solid var(--gray-border); }
+  .totals-row:first-child { border-top: none; }
+  .totals-row .label { font-size: 13px; color: var(--gray); }
+  .totals-row .val { font-size: 15px; font-weight: 700; color: var(--dark); }
+  .totals-row.grand .label { font-size: 15px; font-weight: 700; color: var(--dark); }
+  .totals-row.grand .val { font-size: 18px; color: var(--green); }
+
+  /* ── Status badge ── */
+  .status-badge { display: block; text-align: center; padding: 12px 16px;
+                  border-radius: 10px; font-size: 15px; font-weight: 700; margin: 12px 0; }
+  .badge-ok { background: var(--green-bg); color: var(--green); }
+  .badge-warn { background: var(--orange-bg); color: var(--orange); }
+  .badge-bad { background: var(--red-bg); color: var(--red); }
+  .badge-neutral { background: var(--gray-bg); color: var(--gray); }
+
+  /* ── Action bar ── */
+  .action-bar { position: fixed; bottom: 0; left: 0; right: 0;
+                background: var(--white); padding: 12px 16px;
+                box-shadow: 0 -2px 10px rgba(0,0,0,.1); z-index: 50; }
+  .action-bar .inner { max-width: 560px; margin: 0 auto; }
+  .btn-save { width: 100%; padding: 15px; background: var(--green); color: var(--white);
+              border: none; border-radius: 10px; font-size: 16px; font-weight: 700;
+              cursor: pointer; touch-action: manipulation; }
+  .btn-save:disabled { background: var(--gray); }
+  .btn-save:active { background: var(--green); opacity: .9; }
+
+  /* ── History ── */
+  .hist-item { padding: 10px 0; border-bottom: 1px solid var(--gray-border); display: flex;
+               justify-content: space-between; align-items: center; }
+  .hist-item:last-child { border-bottom: none; }
+  .hist-meta { font-size: 12px; color: var(--gray); }
+  .hist-falta { font-size: 14px; font-weight: 700; }
+  .hist-ok { color: var(--green); }
+  .hist-bad { color: var(--red); }
+
+  /* ── Numpad ── */
+  #nb-numpad { position:fixed; bottom:0; left:0; right:0; background:var(--white);
+               box-shadow:0 -4px 20px rgba(0,0,0,.2); border-radius:16px 16px 0 0;
+               padding:12px 12px 24px; z-index:200; transform:translateY(110%);
+               transition:transform .22s cubic-bezier(.4,0,.2,1); max-width:420px;
+               margin:0 auto; }
+  #nb-numpad.np-open { transform:translateY(0); }
+  .np-header { display:flex; justify-content:space-between; align-items:center;
+               margin-bottom:8px; padding:0 4px; }
+  .np-lbl { font-size:14px; font-weight:700; color:var(--dark); }
+  .np-val { font-size:28px; font-weight:900; color:var(--green); min-width:80px;
+            text-align:right; }
+  .np-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; }
+  .np-btn { padding:14px; border:1.5px solid var(--gray-border); border-radius:10px;
+            font-size:20px; font-weight:700; background:var(--gray-bg); cursor:pointer;
+            touch-action:manipulation; -webkit-tap-highlight-color:transparent; }
+  .np-btn:active { background:var(--gray-border); }
+  .np-btn.np-ok { background:var(--green); color:var(--white); border-color:var(--green); }
+  .np-btn.np-ok:active { opacity:.9; }
+  .np-btn.np-back { font-size:16px; }
+
+  /* ── Toast ── */
+  .toast { position:fixed; bottom:80px; left:50%; transform:translateX(-50%);
+           background:#333; color:#fff; padding:10px 18px; border-radius:20px;
+           font-size:14px; z-index:300; opacity:0; pointer-events:none;
+           transition:opacity .3s; white-space:nowrap; }
+  .toast.show { opacity:1; }
+
+  @media(min-width:600px) {
+    .denom-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <a href="index.html">←</a>
+  <div>
+    <h1>Arqueo de Caja Chica</h1>
+    <div class="sub" id="headerSub">NB Finance</div>
+  </div>
+</div>
+
+<div id="authGate" style="display:none;padding:40px 20px;text-align:center">
+  <div style="font-size:48px;margin-bottom:16px">🔒</div>
+  <p style="color:var(--gray);margin-bottom:20px">Inicia sesión para continuar</p>
+  <div id="googleSignIn"></div>
+</div>
+
+<div id="appContent" style="display:none">
+  <div class="container">
+
+    <!-- Date + Colaborador -->
+    <div class="card">
+      <div class="card-title">📋 Datos del Arqueo</div>
+      <div class="field-row">
+        <div class="field">
+          <label>Fecha</label>
+          <input type="date" id="aqFecha">
+        </div>
+        <div class="field">
+          <label>Colaborador</label>
+          <input type="text" id="aqColaborador" placeholder="Nombre">
+        </div>
+      </div>
+    </div>
+
+    <!-- Fondos -->
+    <div class="card">
+      <div class="card-title">💼 Fondos de Caja</div>
+      <div class="field-row">
+        <div class="field"><label>Fondo 1</label><input type="number" id="aqFondo1" value="0" min="0" inputmode="decimal" step="0.01" onchange="recalc()"></div>
+        <div class="field"><label>Fondo 2</label><input type="number" id="aqFondo2" value="0" min="0" inputmode="decimal" step="0.01" onchange="recalc()"></div>
+      </div>
+      <div class="field-row">
+        <div class="field"><label>Fondo 3</label><input type="number" id="aqFondo3" value="0" min="0" inputmode="decimal" step="0.01" onchange="recalc()"></div>
+        <div class="field"><label>Fondo 4</label><input type="number" id="aqFondo4" value="0" min="0" inputmode="decimal" step="0.01" onchange="recalc()"></div>
+      </div>
+      <div class="field-row">
+        <div class="field"><label>Fondo Repartidor 1</label><input type="number" id="aqFondoRep1" value="0" min="0" inputmode="decimal" step="0.01" onchange="recalc()"></div>
+        <div class="field"><label>Fondo Repartidor 2</label><input type="number" id="aqFondoRep2" value="0" min="0" inputmode="decimal" step="0.01" onchange="recalc()"></div>
+      </div>
+      <div class="field-row">
+        <div class="field"><label>Bolsita de Cambio</label><input type="number" id="aqBolsita" value="0" min="0" inputmode="decimal" step="0.01" onchange="recalc()"></div>
+        <div class="field"><label>Gastos a Reponer</label><input type="number" id="aqGastos" value="0" min="0" inputmode="decimal" step="0.01" onchange="recalc()"></div>
+      </div>
+      <div class="totals-row" style="margin-top:8px">
+        <span class="label">Total fondos</span>
+        <span class="val" id="totalFondosEl">$0.00</span>
+      </div>
+    </div>
+
+    <!-- Denomination count -->
+    <div class="card">
+      <div class="card-title">💵 Conteo de Efectivo</div>
+      <div class="denom-grid" id="aqDenomGrid"></div>
+      <div class="totals-row" style="margin-top:12px">
+        <span class="label">Total efectivo contado</span>
+        <span class="val" id="totalEfectivoEl">$0.00</span>
+      </div>
+    </div>
+
+    <!-- Summary -->
+    <div class="card" id="summaryCard">
+      <div class="card-title">📊 Resumen</div>
+      <div class="totals-row">
+        <span class="label">Total fondos</span>
+        <span class="val" id="sumFondos">$0.00</span>
+      </div>
+      <div class="totals-row">
+        <span class="label">Total efectivo</span>
+        <span class="val" id="sumEfectivo">$0.00</span>
+      </div>
+      <div class="totals-row grand">
+        <span class="label">Total general</span>
+        <span class="val" id="sumTotal">$0.00</span>
+      </div>
+      <div class="totals-row">
+        <span class="label">Fondo esperado</span>
+        <span class="val" style="color:var(--gray)" id="sumEsperado">$12,000.00</span>
+      </div>
+      <div id="statusBadge" class="status-badge badge-neutral">Llena el conteo para ver el resultado</div>
+    </div>
+
+    <!-- History -->
+    <div class="card">
+      <div class="card-title">🕓 Últimos Arqueos</div>
+      <div id="historyList">
+        <div style="text-align:center;padding:20px;color:var(--gray);font-size:13px">Cargando...</div>
+      </div>
+    </div>
+
+  </div><!-- /container -->
+</div><!-- /appContent -->
+
+<!-- Action bar -->
+<div class="action-bar" id="actionBar" style="display:none">
+  <div class="inner">
+    <button class="btn-save" id="btnGuardar" onclick="guardarArqueo()">💾 Guardar Arqueo</button>
+  </div>
+</div>
+
+<!-- Numpad -->
+<div id="nb-numpad">
+  <div class="np-header">
+    <span class="np-lbl" id="np-label">Cantidad</span>
+    <span class="np-val" id="np-value">0</span>
+  </div>
+  <div class="np-grid">
+    <button class="np-btn" onclick="npKey('7')">7</button>
+    <button class="np-btn" onclick="npKey('8')">8</button>
+    <button class="np-btn" onclick="npKey('9')">9</button>
+    <button class="np-btn" onclick="npKey('4')">4</button>
+    <button class="np-btn" onclick="npKey('5')">5</button>
+    <button class="np-btn" onclick="npKey('6')">6</button>
+    <button class="np-btn" onclick="npKey('1')">1</button>
+    <button class="np-btn" onclick="npKey('2')">2</button>
+    <button class="np-btn" onclick="npKey('3')">3</button>
+    <button class="np-btn np-back" onclick="npKey('back')">⌫</button>
+    <button class="np-btn" onclick="npKey('0')">0</button>
+    <button class="np-btn np-ok" onclick="npHide()">✓</button>
+  </div>
+</div>
+
+<div class="toast" id="toastEl"></div>
+
+<script>
+// ── Config ──
+const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxQ7BzFITQnxyndvo2q7Xa1-Sc-yX5S8JGRc1mIbd4ye0rSpN2I2qx1zAjzRqbPXNeL/exec';
+const FONDO_ESPERADO = 12000;
+
+const DENOMINATIONS = [
+  { key: 'D_1000', label: '$1,000', value: 1000 },
+  { key: 'D_500',  label: '$500',   value: 500  },
+  { key: 'D_200',  label: '$200',   value: 200  },
+  { key: 'D_100',  label: '$100',   value: 100  },
+  { key: 'D_50',   label: '$50',    value: 50   },
+  { key: 'D_20',   label: '$20',    value: 20   },
+  { key: 'D_10',   label: '$10',    value: 10   },
+  { key: 'D_5',    label: '$5',     value: 5    },
+  { key: 'D_2',    label: '$2',     value: 2    },
+  { key: 'D_1',    label: '$1',     value: 1    },
+  { key: 'D_050',  label: '$0.50',  value: 0.50 },
+];
+
+function fmt(n) {
+  return '$' + (parseFloat(n) || 0).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+// ── Auth ──
+window.nbAuthCallback = function(user) {
+  document.getElementById('authGate').style.display = 'none';
+  document.getElementById('appContent').style.display = 'block';
+  document.getElementById('actionBar').style.display = 'block';
+  document.getElementById('headerSub').textContent = user.name || user.email;
+  init();
+};
+
+// ── Init ──
+function init() {
+  const today = new Date().toISOString().split('T')[0];
+  document.getElementById('aqFecha').value = today;
+  buildDenomGrid();
+  loadHistory();
+}
+
+// ── Denom grid ──
+function buildDenomGrid() {
+  const container = document.getElementById('aqDenomGrid');
+  container.innerHTML = '';
+  DENOMINATIONS.forEach(d => {
+    const item = document.createElement('div');
+    item.className = 'denom-item';
+    item.innerHTML = `
+      <span class="denom-label">${d.label}</span>
+      <div class="denom-counter">
+        <button type="button" class="denom-btn" onclick="adjDenom('${d.key}',-1)">−</button>
+        <button type="button" class="denom-qty-btn" id="qbtn-${d.key}" onclick="openDenomNP('${d.key}','${d.label}')">0</button>
+        <input type="hidden" class="denom-input" id="dinp-${d.key}" data-key="${d.key}" value="0">
+        <button type="button" class="denom-btn" onclick="adjDenom('${d.key}',1)">+</button>
+      </div>
+      <span class="denom-calc" id="dcalc-${d.key}">$0.00</span>
+    `;
+    container.appendChild(item);
+  });
+}
+
+function adjDenom(key, delta) {
+  const inp = document.getElementById('dinp-' + key);
+  const val = Math.max(0, (parseInt(inp.value) || 0) + delta);
+  setDenomVal(key, val);
+}
+
+function setDenomVal(key, val) {
+  val = Math.max(0, parseInt(val) || 0);
+  document.getElementById('dinp-' + key).value = val;
+  document.getElementById('qbtn-' + key).textContent = val;
+  const d = DENOMINATIONS.find(x => x.key === key);
+  if (d) document.getElementById('dcalc-' + key).textContent = fmt(val * d.value);
+  recalc();
+}
+
+function getDenomValues() {
+  const res = {};
+  DENOMINATIONS.forEach(d => {
+    res[d.key] = parseInt(document.getElementById('dinp-' + d.key).value) || 0;
+  });
+  return res;
+}
+
+function getTotalEfectivo() {
+  return DENOMINATIONS.reduce((sum, d) => {
+    return sum + (parseInt(document.getElementById('dinp-' + d.key).value) || 0) * d.value;
+  }, 0);
+}
+
+// ── Recalc summary ──
+function recalc() {
+  const fondos = ['aqFondo1','aqFondo2','aqFondo3','aqFondo4','aqFondoRep1','aqFondoRep2','aqBolsita','aqGastos'];
+  const totalFondos = fondos.reduce((s, id) => s + (parseFloat(document.getElementById(id).value) || 0), 0);
+  const totalEf = getTotalEfectivo();
+  const totalGen = totalFondos + totalEf;
+  const diff = Math.round((totalGen - FONDO_ESPERADO) * 100) / 100;
+
+  document.getElementById('totalFondosEl').textContent  = fmt(totalFondos);
+  document.getElementById('totalEfectivoEl').textContent = fmt(totalEf);
+  document.getElementById('sumFondos').textContent   = fmt(totalFondos);
+  document.getElementById('sumEfectivo').textContent = fmt(totalEf);
+  document.getElementById('sumTotal').textContent    = fmt(totalGen);
+
+  const badge = document.getElementById('statusBadge');
+  if (totalGen === 0) {
+    badge.className = 'status-badge badge-neutral';
+    badge.textContent = 'Llena el conteo para ver el resultado';
+  } else if (Math.abs(diff) < 0.01) {
+    badge.className = 'status-badge badge-ok';
+    badge.textContent = '✅ Cuadra exacto — ' + fmt(totalGen);
+  } else if (diff > 0) {
+    badge.className = 'status-badge badge-warn';
+    badge.textContent = '⚠️ Sobran ' + fmt(diff) + ' — Total: ' + fmt(totalGen);
+  } else {
+    badge.className = 'status-badge badge-bad';
+    badge.textContent = '❌ Faltan ' + fmt(Math.abs(diff)) + ' — Total: ' + fmt(totalGen);
+  }
+}
+
+// ── Save ──
+async function guardarArqueo() {
+  const fecha = document.getElementById('aqFecha').value;
+  const colab = document.getElementById('aqColaborador').value.trim();
+  if (!fecha) { toast('Falta la fecha'); return; }
+  if (!colab) { toast('Falta el colaborador'); return; }
+
+  const btn = document.getElementById('btnGuardar');
+  btn.disabled = true;
+  btn.textContent = 'Guardando...';
+
+  const denoms = getDenomValues();
+  const payload = {
+    action: 'save_arqueo',
+    arqueo: {
+      Fecha: fecha, Colaborador: colab,
+      Fondo1: parseFloat(document.getElementById('aqFondo1').value) || 0,
+      Fondo2: parseFloat(document.getElementById('aqFondo2').value) || 0,
+      Fondo3: parseFloat(document.getElementById('aqFondo3').value) || 0,
+      Fondo4: parseFloat(document.getElementById('aqFondo4').value) || 0,
+      FondoRepartidor1: parseFloat(document.getElementById('aqFondoRep1').value) || 0,
+      FondoRepartidor2: parseFloat(document.getElementById('aqFondoRep2').value) || 0,
+      BolsitaCambio: parseFloat(document.getElementById('aqBolsita').value) || 0,
+      GastosReponer: parseFloat(document.getElementById('aqGastos').value) || 0,
+      ...denoms,
+      Device: navigator.userAgent.includes('Mobile') ? 'mobile' : 'desktop'
+    }
+  };
+
+  try {
+    const r = await fetch(SCRIPT_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify(payload)
+    });
+    const data = await r.json();
+    if (data.ok) {
+      toast('✅ Arqueo guardado · F/S: ' + fmt(data.faltanteSobrante));
+      resetForm();
+      loadHistory();
+    } else {
+      throw new Error(data.error || 'Error desconocido');
+    }
+  } catch(e) {
+    toast('Error: ' + e.message, true);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '💾 Guardar Arqueo';
+  }
+}
+
+function resetForm() {
+  document.getElementById('aqColaborador').value = '';
+  ['aqFondo1','aqFondo2','aqFondo3','aqFondo4','aqFondoRep1','aqFondoRep2','aqBolsita','aqGastos']
+    .forEach(id => document.getElementById(id).value = 0);
+  DENOMINATIONS.forEach(d => setDenomVal(d.key, 0));
+  recalc();
+}
+
+// ── History ──
+async function loadHistory() {
+  try {
+    const r = await fetch(SCRIPT_URL + '?action=get_arqueos&_t=' + Date.now());
+    const data = await r.json();
+    renderHistory(data.arqueos || []);
+  } catch(e) {
+    document.getElementById('historyList').innerHTML =
+      '<div style="text-align:center;padding:12px;color:var(--gray);font-size:13px">No se pudo cargar el historial</div>';
+  }
+}
+
+function renderHistory(arqueos) {
+  const list = document.getElementById('historyList');
+  if (!arqueos.length) {
+    list.innerHTML = '<div style="text-align:center;padding:20px;color:var(--gray);font-size:13px">Sin arqueos registrados</div>';
+    return;
+  }
+  const recent = arqueos.slice(-10).reverse();
+  list.innerHTML = recent.map(a => {
+    const fs = parseFloat(a.FaltanteSobrante) || 0;
+    const cls = Math.abs(fs) < 0.01 ? 'hist-ok' : 'hist-bad';
+    const sign = fs >= 0 ? '+' : '';
+    return `<div class="hist-item">
+      <div>
+        <div style="font-size:14px;font-weight:600">${a.Fecha} · ${a.Colaborador}</div>
+        <div class="hist-meta">Total: ${fmt(a.TotalGeneral)} · Efectivo: ${fmt(a.TotalEfectivo)}</div>
+      </div>
+      <div class="hist-falta ${cls}">${sign}${fmt(fs)}</div>
+    </div>`;
+  }).join('');
+}
+
+// ── Numpad (IIFE) ──
+(function() {
+  let _npTarget = null, _npDisplayEl = null, _npDenomCb = null, _npStr = '';
+  let numpad, npVal, npLbl;
+  function npEls() {
+    if (!numpad) {
+      numpad = document.getElementById('nb-numpad');
+      npVal  = document.getElementById('np-value');
+      npLbl  = document.getElementById('np-label');
+    }
+  }
+  window.openDenomNP = function(key, label) {
+    npEls();
+    const inp = document.getElementById('dinp-' + key);
+    const btn = document.getElementById('qbtn-' + key);
+    _npTarget    = inp;
+    _npDisplayEl = btn;
+    _npDenomCb   = () => setDenomVal(key, inp.value);
+    _npStr = (inp.value && inp.value !== '0') ? inp.value : '';
+    npLbl.textContent = label;
+    npVal.textContent = _npStr || '0';
+    numpad.classList.add('np-open');
+  };
+  window.npHide = function() {
+    npEls();
+    numpad.classList.remove('np-open');
+    if (_npTarget) {
+      _npTarget.value = _npStr || '0';
+      if (_npDisplayEl) _npDisplayEl.textContent = _npStr || '0';
+      if (_npDenomCb)   _npDenomCb();
+      _npTarget = null; _npDisplayEl = null; _npDenomCb = null;
+    }
+    _npStr = '';
+  };
+  window.npKey = function(k) {
+    npEls();
+    if (!_npTarget) return;
+    if (k === 'back') { _npStr = _npStr.slice(0, -1); }
+    else if (_npStr === '' && k === '0') { _npStr = '0'; }
+    else if (_npStr === '0') { _npStr = k; }
+    else { _npStr += k; }
+    npVal.textContent = _npStr || '0';
+    if (_npDisplayEl) _npDisplayEl.textContent = _npStr || '0';
+    if (_npTarget) _npTarget.value = _npStr || '0';
+    if (_npDenomCb) _npDenomCb();
+  };
+})();
+
+// ── Toast ──
+function toast(msg, isError) {
+  const el = document.getElementById('toastEl');
+  el.textContent = msg;
+  el.style.background = isError ? '#c62828' : '#333';
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 3000);
+}
+
+// ── Auth init ──
+document.addEventListener('DOMContentLoaded', () => {
+  if (typeof initNBAuth === 'function') {
+    initNBAuth({
+      authGateId: 'authGate',
+      signInDivId: 'googleSignIn',
+      onAuth: window.nbAuthCallback
+    });
+  } else {
+    // Dev fallback
+    document.getElementById('authGate').style.display = 'none';
+    document.getElementById('appContent').style.display = 'block';
+    document.getElementById('actionBar').style.display = 'block';
+    init();
+  }
+});
+</script>
+</body>
+</html>
