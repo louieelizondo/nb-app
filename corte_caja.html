@@ -212,6 +212,17 @@
       text-align: center;
     }
 
+    /* Bigger, more tappable payment method inputs */
+    .form-group input[type="number"] {
+      font-size: 22px;
+      font-weight: 800;
+      padding: 14px 16px;
+      text-align: right;
+      color: #2e6b2e;
+      min-height: 56px;
+    }
+    .form-group input[type="number"]::placeholder { color: #ccc; font-weight: 400; font-size: 16px; }
+
     /* BADGES */
     .badge {
       display: inline-flex;
@@ -1028,11 +1039,11 @@
           onChange();
         });
         input.addEventListener('input', () => {
-          if (parseInt(input.value) < 0 || input.value === '') input.value = 0;
           updateDenomCalc(item, d.value);
           onChange();
         });
-        input.addEventListener('focus', () => { input.select(); });
+        // Attach numpad immediately — works even for dynamically created grids
+        window.npAttachOne?.(input);
         container.appendChild(item);
       });
     }
@@ -2224,6 +2235,9 @@
           if (_npTarget !== inp) npShow(inp);
         });
       }
+
+      // Expose so createDenomGrid can attach immediately for dynamic grids
+      window.npAttachOne = attachOne;
 
       // Attach to all number inputs currently in DOM
       window.npAttachAll = function() {
