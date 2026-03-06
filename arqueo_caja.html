@@ -51,20 +51,15 @@
   /* ── Denomination grid ── */
   .denom-grid { display: flex; flex-direction: column; gap: 8px; }
   .denom-item { display: flex; align-items: center; gap: 10px; }
-  .denom-label { width: 64px; font-size: 13px; font-weight: 600; color: var(--dark); }
-  .denom-counter { display: flex; align-items: center; gap: 6px; flex: 1; }
-  .denom-btn { width: 36px; height: 36px; border-radius: 50%; border: 1.5px solid var(--gray-border);
-               background: var(--gray-bg); font-size: 18px; line-height: 1; cursor: pointer;
-               touch-action: manipulation; flex-shrink: 0; }
-  .denom-btn:active { background: var(--gray-border); }
-  .denom-counter input[type="number"] {
-    flex: 1; text-align: center; font-size: 20px; font-weight: 800;
-    border: 1.5px solid var(--gray-border); border-radius: 8px; padding: 6px 4px;
+  .denom-label { width: 64px; font-size: 13px; font-weight: 600; color: var(--dark); flex-shrink: 0; }
+  .denom-item input[type="number"] {
+    flex: 1; text-align: center; font-size: 18px; font-weight: 700;
+    border: 1.5px solid var(--gray-border); border-radius: 8px; padding: 8px 6px;
     background: var(--white); color: var(--dark); -webkit-appearance: none;
     font-family: inherit; min-width: 0;
   }
-  .denom-counter input[type="number"]:focus { outline: none; border-color: var(--green-light); }
-  .denom-calc { width: 80px; text-align: right; font-size: 13px; color: var(--gray); }
+  .denom-item input[type="number"]:focus { outline: none; border-color: var(--green-light); }
+  .denom-calc { width: 80px; text-align: right; font-size: 13px; color: var(--gray); flex-shrink: 0; }
 
   /* ── Totals ── */
   .totals-row { display: flex; justify-content: space-between; align-items: center;
@@ -112,7 +107,6 @@
 
   @media(min-width:600px) {
     .denom-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
-    .denom-counter input[type="number"] { font-size: 22px; }
   }
 </style>
 </head>
@@ -276,18 +270,10 @@ function buildDenomGrid() {
     item.className = 'denom-item';
     item.innerHTML = `
       <span class="denom-label">${d.label}</span>
-      <div class="denom-counter">
-        <button type="button" class="denom-btn">−</button>
-        <input type="number" id="dinp-${d.key}" data-key="${d.key}" value="0" min="0" step="1" inputmode="numeric">
-        <button type="button" class="denom-btn">+</button>
-      </div>
+      <input type="number" id="dinp-${d.key}" data-key="${d.key}" value="0" min="0" step="1" inputmode="numeric">
       <span class="denom-calc" id="dcalc-${d.key}">$0.00</span>
     `;
-    const inp  = item.querySelector('input');
-    const btns = item.querySelectorAll('.denom-btn');
-    btns[0].addEventListener('click', () => { inp.value = Math.max(0, (parseInt(inp.value) || 0) - 1); setDenomVal(d.key, inp.value); });
-    btns[1].addEventListener('click', () => { inp.value = (parseInt(inp.value) || 0) + 1;              setDenomVal(d.key, inp.value); });
-    inp.addEventListener('input', () => setDenomVal(d.key, inp.value));
+    item.querySelector('input').addEventListener('input', e => setDenomVal(d.key, e.target.value));
     container.appendChild(item);
   });
 }

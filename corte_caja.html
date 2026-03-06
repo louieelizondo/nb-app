@@ -191,15 +191,16 @@
     /* Hidden value store — never shown to user */
     .denom-input { display: none; }
 
-    /* Simple (desktop) denom grid — standard number inputs */
+    /* Simple (desktop) denom grid — plain number inputs, no +/- buttons */
+    .denom-grid-simple .denom-item { align-items: center; }
     .denom-grid-simple .denom-input {
       display: block !important; flex: 1; min-width: 0;
-      text-align: center; font-size: 20px; font-weight: 800; color: #2d2319;
-      border: 1.5px solid #e0d8cf; border-radius: 8px; padding: 6px 4px;
+      text-align: center; font-size: 18px; font-weight: 700; color: #2d2319;
+      border: 1.5px solid #e0d8cf; border-radius: 8px; padding: 8px 6px;
       background: #fff; -webkit-appearance: none; font-family: inherit;
     }
     .denom-grid-simple .denom-input:focus { outline: none; border-color: #4caf50; }
-    .denom-grid-simple .denom-qty-btn { display: none; }
+    .denom-grid-simple .denom-calc { font-size: 12px; margin-top: 0; text-align: right; min-width: 100px; }
 
     /* Big tappable number button — single tap always registers */
     .denom-qty-btn {
@@ -1070,7 +1071,7 @@
       });
     }
 
-    // Desktop-friendly version: uses visible <input type="number"> instead of tap-button + numpad
+    // Desktop-friendly version: plain number inputs, no +/- buttons
     function createDenomGridSimple(containerId, onChange) {
       const container = document.getElementById(containerId);
       container.innerHTML = '';
@@ -1080,24 +1081,15 @@
         item.className = 'denom-item';
         item.innerHTML = `
           <div class="denom-label">${d.label}</div>
-          <div class="denom-counter">
-            <button type="button" class="denom-btn denom-btn-minus">−</button>
-            <input type="number" class="denom-input" data-key="${d.key}" value="0" min="0" step="1" inputmode="numeric" />
-            <button type="button" class="denom-btn denom-btn-plus">+</button>
-          </div>
+          <input type="number" class="denom-input" data-key="${d.key}" value="0" min="0" step="1" inputmode="numeric" />
           <div class="denom-calc">× ${d.label} = <span>$0.00</span></div>
         `;
-        const inp   = item.querySelector('.denom-input');
-        const minus = item.querySelector('.denom-btn-minus');
-        const plus  = item.querySelector('.denom-btn-plus');
-        function refresh() {
+        const inp = item.querySelector('.denom-input');
+        inp.addEventListener('input', () => {
           if ((parseInt(inp.value) || 0) < 0) inp.value = 0;
           updateDenomCalc(item, d.value);
           onChange();
-        }
-        inp.addEventListener('input', refresh);
-        minus.addEventListener('click', () => { inp.value = Math.max(0, (parseInt(inp.value) || 0) - 1); refresh(); });
-        plus.addEventListener('click',  () => { inp.value = (parseInt(inp.value) || 0) + 1; refresh(); });
+        });
         container.appendChild(item);
       });
     }
