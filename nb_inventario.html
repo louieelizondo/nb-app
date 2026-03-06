@@ -2261,7 +2261,7 @@ function renderProductList() {
   if (productSeasonFilter) list = list.filter(p => (p.temporada || 'Siempre') === productSeasonFilter);
   if (supplierFilter) list = list.filter(p => p.s === supplierFilter);
   if (formaFilter) list = list.filter(p => (p.f || 'Ir a tienda') === formaFilter);
-  if (search) list = list.filter(p => p.n.toLowerCase().includes(search) || (p.s||'').toLowerCase().includes(search) || (p.tags||'').toLowerCase().includes(search));
+  if (search) list = list.filter(p => (p.n||'').toLowerCase().includes(search) || (p.s||'').toLowerCase().includes(search) || (p.tags||'').toLowerCase().includes(search));
 
   // Group by category
   const grouped = {};
@@ -2278,8 +2278,8 @@ function renderProductList() {
 
   Object.keys(grouped).sort().forEach(cat => {
     const isOpen = !collapsedProdCats.has(cat);
-    const catId = 'prodcat-' + cat.replace(/[^a-zA-Z0-9]/g,'_');
-    const catEsc = cat.replace(/'/g,"\\'");
+    const catId = 'prodcat-' + (cat||'').replace(/[^a-zA-Z0-9]/g,'_');
+    const catEsc = (cat||'').replace(/'/g,"\\'");
     html += `<div class="prod-cat-card${isOpen?' open':''}" id="${catId}">
       <div class="prod-cat-header" onclick="toggleProdCat('${catEsc}')">
         <span class="cat-chevron">▾</span>
@@ -2292,7 +2292,7 @@ function renderProductList() {
       </div>
       <div class="prod-cat-body">`;
 
-    grouped[cat].sort((a, b) => a.n.localeCompare(b.n, 'es')).forEach(p => {
+    grouped[cat].sort((a, b) => (a.n||'').localeCompare(b.n||'', 'es')).forEach(p => {
       const isActive = p.active !== false;
       const isEditing = expandedProdIdx === p.idx;
 
