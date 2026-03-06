@@ -90,6 +90,12 @@ body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif
 .prod-cat-card.open .cat-chevron { transform:rotate(180deg); }
 .prod-cat-header .cat-name { font-size:13px; font-weight:700; color:var(--green); flex:1; }
 .prod-cat-header .cat-count { font-size:11px; color:var(--gray); background:var(--gray-bg); padding:2px 8px; border-radius:10px; }
+.prod-cat-header .bulk-btns { display:flex; gap:4px; flex-shrink:0; }
+.bulk-act-btn { font-size:11px; padding:3px 7px; border-radius:6px; border:none; cursor:pointer; font-weight:600; white-space:nowrap; }
+.bulk-act-btn.activate { background:#d8f3dc; color:#2d6a4f; }
+.bulk-act-btn.activate:active { background:#b7e4c7; }
+.bulk-act-btn.deactivate { background:#f0f0f0; color:#555; }
+.bulk-act-btn.deactivate:active { background:#e0e0e0; }
 .prod-cat-body { display:none; }
 .prod-cat-card.open .prod-cat-body { display:block; }
 
@@ -1885,7 +1891,9 @@ function adjustPedirQty(idx, delta) {
   const current = pedirQtyOverrides[idx] !== undefined
     ? pedirQtyOverrides[idx]
     : (getNeedsOrder().find(p => p.idx === idx)?.needed || 0);
-  const newVal = Math.max(0, Math.round((parseFloat(current) + delta) * 10) / 10);
+  // Snap to nearest 0.5 first, then apply delta — normalizes messy decimals on first tap
+  const snapped = Math.round(parseFloat(current) * 2) / 2;
+  const newVal = Math.max(0, snapped + delta);
   pedirQtyOverrides[idx] = newVal;
   renderPedir();
 }
@@ -1893,7 +1901,9 @@ function adjustPedirQty(idx, delta) {
 function adjustManualPedirQty(supplier, idx, delta) {
   if (!pedirManualItems[supplier] || !pedirManualItems[supplier][idx]) return;
   const current = pedirManualItems[supplier][idx].qty || 0;
-  const newVal = Math.max(0, Math.round((parseFloat(current) + delta) * 10) / 10);
+  // Snap to nearest 0.5 first, then apply delta
+  const snapped = Math.round(parseFloat(current) * 2) / 2;
+  const newVal = Math.max(0, snapped + delta);
   pedirManualItems[supplier][idx].qty = newVal;
   renderPedir();
 }
@@ -2269,15 +2279,20 @@ function renderProductList() {
   Object.keys(grouped).sort().forEach(cat => {
     const isOpen = !collapsedProdCats.has(cat);
     const catId = 'prodcat-' + cat.replace(/[^a-zA-Z0-9]/g,'_');
+    const catEsc = cat.replace(/'/g,"\\'");
     html += `<div class="prod-cat-card${isOpen?' open':''}" id="${catId}">
-      <div class="prod-cat-header" onclick="toggleProdCat('${cat.replace(/'/g,"\\'")}')">
+      <div class="prod-cat-header" onclick="toggleProdCat('${catEsc}')">
         <span class="cat-chevron">▾</span>
         <span class="cat-name">${cat}</span>
         <span class="cat-count">${grouped[cat].length}</span>
+        <div class="bulk-btns">
+          <button class="bulk-act-btn activate" onclick="event.stopPropagation();bulkToggleCat('${catEsc}',true)" title="Activar todos en esta categoría">✅ Todos</button>
+          <button class="bulk-act-btn deactivate" onclick="event.stopPropagation();bulkToggleCat('${catEsc}',false)" title="Desactivar todos en esta categoría">⬜ Todos</button>
+        </div>
       </div>
       <div class="prod-cat-body">`;
 
-    grouped[cat].forEach(p => {
+    grouped[cat].sort((a, b) => a.n.localeCompare(b.n, 'es')).forEach(p => {
       const isActive = p.active !== false;
       const isEditing = expandedProdIdx === p.idx;
 
@@ -2483,6 +2498,24 @@ function toggleProductActive(idx) {
       .catch(e => console.log('Toggle push error:', e));
   }
   toast(PRODUCTS[idx].active !== false ? '✅ Activado' : '⬜ Desactivado');
+}
+
+function bulkToggleCat(cat, activeVal) {
+  const url = getScriptUrl();
+  let count = 0;
+  PRODUCTS.forEach(p => {
+    if (p.c !== cat) return;
+    p.active = activeVal;
+    count++;
+    if (url && p.id) {
+      fetch(url, { method:'POST', headers:{'Content-Type':'text/plain'},
+        body: JSON.stringify({ action:'toggle_product', id: p.id, active: activeVal })
+      }).catch(e => console.log('Bulk toggle error:', e));
+    }
+  });
+  saveProductsToCache();
+  renderProductList();
+  toast(activeVal ? `✅ ${count} productos activados` : `⬜ ${count} productos desactivados`);
 }
 
 function openAddProductModal(prefill) {
