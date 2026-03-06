@@ -53,16 +53,17 @@
   .denom-item { display: flex; align-items: center; gap: 10px; }
   .denom-label { width: 64px; font-size: 13px; font-weight: 600; color: var(--dark); }
   .denom-counter { display: flex; align-items: center; gap: 6px; flex: 1; }
-  .denom-btn { width: 40px; height: 40px; border-radius: 50%; border: 1.5px solid var(--gray-border);
-               background: var(--gray-bg); font-size: 20px; line-height: 1; cursor: pointer;
-               touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+  .denom-btn { width: 36px; height: 36px; border-radius: 50%; border: 1.5px solid var(--gray-border);
+               background: var(--gray-bg); font-size: 18px; line-height: 1; cursor: pointer;
+               touch-action: manipulation; flex-shrink: 0; }
   .denom-btn:active { background: var(--gray-border); }
-  .denom-qty-btn { flex: 1; text-align: center; font-size: 24px; font-weight: 900; color: var(--dark);
-                   border: 2px solid var(--gray-border); border-radius: 8px; padding: 6px 4px;
-                   background: var(--white); cursor: pointer; touch-action: manipulation;
-                   -webkit-tap-highlight-color: transparent; transition: background .08s; }
-  .denom-qty-btn:active { background: var(--green-bg); border-color: var(--green-light); }
-  .denom-input { display: none; }
+  .denom-counter input[type="number"] {
+    flex: 1; text-align: center; font-size: 20px; font-weight: 800;
+    border: 1.5px solid var(--gray-border); border-radius: 8px; padding: 6px 4px;
+    background: var(--white); color: var(--dark); -webkit-appearance: none;
+    font-family: inherit; min-width: 0;
+  }
+  .denom-counter input[type="number"]:focus { outline: none; border-color: var(--green-light); }
   .denom-calc { width: 80px; text-align: right; font-size: 13px; color: var(--gray); }
 
   /* ── Totals ── */
@@ -102,27 +103,6 @@
   .hist-ok { color: var(--green); }
   .hist-bad { color: var(--red); }
 
-  /* ── Numpad ── */
-  #nb-numpad { position:fixed; bottom:0; left:0; right:0; background:var(--white);
-               box-shadow:0 -4px 20px rgba(0,0,0,.2); border-radius:16px 16px 0 0;
-               padding:12px 12px 24px; z-index:200; transform:translateY(110%);
-               transition:transform .22s cubic-bezier(.4,0,.2,1); max-width:420px;
-               margin:0 auto; }
-  #nb-numpad.np-open { transform:translateY(0); }
-  .np-header { display:flex; justify-content:space-between; align-items:center;
-               margin-bottom:8px; padding:0 4px; }
-  .np-lbl { font-size:14px; font-weight:700; color:var(--dark); }
-  .np-val { font-size:28px; font-weight:900; color:var(--green); min-width:80px;
-            text-align:right; }
-  .np-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; }
-  .np-btn { padding:14px; border:1.5px solid var(--gray-border); border-radius:10px;
-            font-size:20px; font-weight:700; background:var(--gray-bg); cursor:pointer;
-            touch-action:manipulation; -webkit-tap-highlight-color:transparent; }
-  .np-btn:active { background:var(--gray-border); }
-  .np-btn.np-ok { background:var(--green); color:var(--white); border-color:var(--green); }
-  .np-btn.np-ok:active { opacity:.9; }
-  .np-btn.np-back { font-size:16px; }
-
   /* ── Toast ── */
   .toast { position:fixed; bottom:80px; left:50%; transform:translateX(-50%);
            background:#333; color:#fff; padding:10px 18px; border-radius:20px;
@@ -132,6 +112,7 @@
 
   @media(min-width:600px) {
     .denom-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+    .denom-counter input[type="number"] { font-size: 22px; }
   }
 </style>
 </head>
@@ -244,28 +225,6 @@
   </div>
 </div>
 
-<!-- Numpad -->
-<div id="nb-numpad">
-  <div class="np-header">
-    <span class="np-lbl" id="np-label">Cantidad</span>
-    <span class="np-val" id="np-value">0</span>
-  </div>
-  <div class="np-grid">
-    <button class="np-btn" onclick="npKey('7')">7</button>
-    <button class="np-btn" onclick="npKey('8')">8</button>
-    <button class="np-btn" onclick="npKey('9')">9</button>
-    <button class="np-btn" onclick="npKey('4')">4</button>
-    <button class="np-btn" onclick="npKey('5')">5</button>
-    <button class="np-btn" onclick="npKey('6')">6</button>
-    <button class="np-btn" onclick="npKey('1')">1</button>
-    <button class="np-btn" onclick="npKey('2')">2</button>
-    <button class="np-btn" onclick="npKey('3')">3</button>
-    <button class="np-btn np-back" onclick="npKey('back')">⌫</button>
-    <button class="np-btn" onclick="npKey('0')">0</button>
-    <button class="np-btn np-ok" onclick="npHide()">✓</button>
-  </div>
-</div>
-
 <div class="toast" id="toastEl"></div>
 
 <script>
@@ -318,27 +277,25 @@ function buildDenomGrid() {
     item.innerHTML = `
       <span class="denom-label">${d.label}</span>
       <div class="denom-counter">
-        <button type="button" class="denom-btn" onclick="adjDenom('${d.key}',-1)">−</button>
-        <button type="button" class="denom-qty-btn" id="qbtn-${d.key}" onclick="openDenomNP('${d.key}','${d.label}')">0</button>
-        <input type="hidden" class="denom-input" id="dinp-${d.key}" data-key="${d.key}" value="0">
-        <button type="button" class="denom-btn" onclick="adjDenom('${d.key}',1)">+</button>
+        <button type="button" class="denom-btn">−</button>
+        <input type="number" id="dinp-${d.key}" data-key="${d.key}" value="0" min="0" step="1" inputmode="numeric">
+        <button type="button" class="denom-btn">+</button>
       </div>
       <span class="denom-calc" id="dcalc-${d.key}">$0.00</span>
     `;
+    const inp  = item.querySelector('input');
+    const btns = item.querySelectorAll('.denom-btn');
+    btns[0].addEventListener('click', () => { inp.value = Math.max(0, (parseInt(inp.value) || 0) - 1); setDenomVal(d.key, inp.value); });
+    btns[1].addEventListener('click', () => { inp.value = (parseInt(inp.value) || 0) + 1;              setDenomVal(d.key, inp.value); });
+    inp.addEventListener('input', () => setDenomVal(d.key, inp.value));
     container.appendChild(item);
   });
 }
 
-function adjDenom(key, delta) {
-  const inp = document.getElementById('dinp-' + key);
-  const val = Math.max(0, (parseInt(inp.value) || 0) + delta);
-  setDenomVal(key, val);
-}
-
 function setDenomVal(key, val) {
   val = Math.max(0, parseInt(val) || 0);
-  document.getElementById('dinp-' + key).value = val;
-  document.getElementById('qbtn-' + key).textContent = val;
+  const inp = document.getElementById('dinp-' + key);
+  if (inp) inp.value = val;
   const d = DENOMINATIONS.find(x => x.key === key);
   if (d) document.getElementById('dcalc-' + key).textContent = fmt(val * d.value);
   recalc();
@@ -479,54 +436,6 @@ function renderHistory(arqueos) {
     </div>`;
   }).join('');
 }
-
-// ── Numpad (IIFE) ──
-(function() {
-  let _npTarget = null, _npDisplayEl = null, _npDenomCb = null, _npStr = '';
-  let numpad, npVal, npLbl;
-  function npEls() {
-    if (!numpad) {
-      numpad = document.getElementById('nb-numpad');
-      npVal  = document.getElementById('np-value');
-      npLbl  = document.getElementById('np-label');
-    }
-  }
-  window.openDenomNP = function(key, label) {
-    npEls();
-    const inp = document.getElementById('dinp-' + key);
-    const btn = document.getElementById('qbtn-' + key);
-    _npTarget    = inp;
-    _npDisplayEl = btn;
-    _npDenomCb   = () => setDenomVal(key, inp.value);
-    _npStr = (inp.value && inp.value !== '0') ? inp.value : '';
-    npLbl.textContent = label;
-    npVal.textContent = _npStr || '0';
-    numpad.classList.add('np-open');
-  };
-  window.npHide = function() {
-    npEls();
-    numpad.classList.remove('np-open');
-    if (_npTarget) {
-      _npTarget.value = _npStr || '0';
-      if (_npDisplayEl) _npDisplayEl.textContent = _npStr || '0';
-      if (_npDenomCb)   _npDenomCb();
-      _npTarget = null; _npDisplayEl = null; _npDenomCb = null;
-    }
-    _npStr = '';
-  };
-  window.npKey = function(k) {
-    npEls();
-    if (!_npTarget) return;
-    if (k === 'back') { _npStr = _npStr.slice(0, -1); }
-    else if (_npStr === '' && k === '0') { _npStr = '0'; }
-    else if (_npStr === '0') { _npStr = k; }
-    else { _npStr += k; }
-    npVal.textContent = _npStr || '0';
-    if (_npDisplayEl) _npDisplayEl.textContent = _npStr || '0';
-    if (_npTarget) _npTarget.value = _npStr || '0';
-    if (_npDenomCb) _npDenomCb();
-  };
-})();
 
 // ── Toast ──
 function toast(msg, isError) {
