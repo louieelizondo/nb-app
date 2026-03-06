@@ -1733,23 +1733,14 @@
             <div style="font-size:11px;color:${hl?'#2e7d32':'#999'};font-weight:700;text-transform:uppercase;letter-spacing:.4px">${label}</div>
             <div style="font-size:${hl?'20':'17'}px;font-weight:800;color:${hl?'#2e7d32':'inherit'}">${formatCurrency(val)}</div>
           </div>`;
-        // Sobre2 and depósito are editable — leader can fix when bills don't land exactly right
-        const editableCell = (label, val, id, hl=false) => `
-          <div style="background:${hl?'#e8f5e9':'#fff8e1'};padding:10px 12px;border-radius:10px;border:2px dashed ${hl?'#66bb6a':'#ffb300'};">
-            <div style="font-size:11px;color:${hl?'#2e7d32':'#f57c00'};font-weight:700;text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px;">${label} ✏️</div>
-            <input type="number" id="${id}" value="${val}" step="1" inputmode="numeric"
-              style="width:100%;border:none;background:transparent;font-size:${hl?'20':'17'}px;font-weight:800;color:${hl?'#2e7d32':'#2d2319'};outline:none;padding:0;"
-              onchange="updateDepositoTargets()" oninput="updateDepositoTargets()" />
-            <div style="font-size:10px;color:#999;margin-top:2px;">Editable — ajusta si es necesario</div>
-          </div>`;
         const summaryHtml = `
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px;">
             ${cell('Pagos Recibidos', pagosRecibidos)}
             ${cell('Tarjeta', tarjeta)}
             ${cell('Transferencias', transferencias)}
             ${cell('Cashback', cashback)}
-            ${editableCell('Sobre 2', sobre2, 'dep_target_sobre2')}
-            <div style="grid-column:1/-1">${editableCell('Depósito BBVA', depositoAjustado, 'dep_target_deposito', true)}</div>
+            ${cell('Sobre 2', sobre2)}
+            <div style="grid-column:1/-1">${cell('Depósito BBVA', depositoAjustado, true)}</div>
           </div>`;
         if (!inlineContainer) document.getElementById('dep_summary').innerHTML = summaryHtml;
 
@@ -1762,21 +1753,26 @@
         const depositTotal  = cambio?.total ?? depositoAjustado;
         const sobre2Total   = s2Data?.total ?? sobre2;
 
-        const renderDenomTable = (denoms) => {
+        // Renders editable qty inputs — tableId is 'dep' or 's2'
+        const renderDenomTable = (denoms, tableId) => {
           let rows = '';
           DENOMINATIONS.forEach(d => {
             const qty = (denoms && denoms[d.key]) || 0;
             const tot = qty * d.value;
             rows += `<tr>
-              <td style="text-align:center;font-weight:700;background:#c8e6c9;padding:6px;">${qty}</td>
-              <td style="padding:6px;">${d.label}</td>
-              <td style="text-align:right;font-weight:700;background:#ffcdd2;padding:6px;">${formatCurrency(tot)}</td>
+              <td style="text-align:center;padding:4px 3px;">
+                <input type="number" class="dep-denom-qty"
+                  data-table="${tableId}" data-key="${d.key}" data-val="${d.value}"
+                  value="${qty}" min="0" step="1" inputmode="numeric"
+                  style="width:58px;text-align:center;font-weight:700;border:1.5px solid #ccc;border-radius:6px;padding:5px 2px;font-size:14px;background:#fff;"
+                  oninput="recalcDepTable('${tableId}')">
+              </td>
+              <td style="padding:6px;font-size:13px;">${d.label}</td>
+              <td id="dep-row-${tableId}-${d.key}" style="text-align:right;font-weight:700;padding:6px;font-size:13px;">${formatCurrency(tot)}</td>
             </tr>`;
           });
           return rows;
         };
-
-        const noDataWarning = (label) => `<tr><td colspan="3" style="padding:10px;text-align:center;color:#e65100;font-size:12px;">⚠️ ${label} — Ve a Corte de Tienda.</td></tr>`;
 
         const allocationHtml = `
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;">
@@ -1787,16 +1783,16 @@
                     <th colspan="3" style="padding:10px;text-align:center;font-size:15px;font-weight:900;">DEPOSITO</th>
                   </tr>
                   <tr style="background:#e0e0e0;">
-                    <th style="padding:6px;text-align:center;">Cantidad</th>
-                    <th style="padding:6px;">Tipo de Moneda</th>
-                    <th style="padding:6px;text-align:right;">Totales</th>
+                    <th style="padding:6px;text-align:center;font-size:12px;">Cantidad</th>
+                    <th style="padding:6px;font-size:12px;">Denominación</th>
+                    <th style="padding:6px;text-align:right;font-size:12px;">Total</th>
                   </tr>
                 </thead>
-                <tbody>${cambio ? renderDenomTable(depositDenoms) : noDataWarning('Cambio no guardado')}</tbody>
+                <tbody>${renderDenomTable(depositDenoms, 'dep')}</tbody>
                 <tfoot>
                   <tr style="background:#e8f5e9;font-weight:900;">
                     <td colspan="2" style="padding:10px;text-align:right;font-size:14px;">TOTAL</td>
-                    <td style="padding:10px;text-align:right;color:#1b5e20;font-size:17px;">${formatCurrency(depositTotal)}</td>
+                    <td id="dep-table-total-dep" style="padding:10px;text-align:right;color:#1b5e20;font-size:17px;">${formatCurrency(depositTotal)}</td>
                   </tr>
                 </tfoot>
               </table>
@@ -1805,30 +1801,30 @@
               <table style="width:100%;border-collapse:collapse;border:1px solid #ccc;">
                 <thead>
                   <tr style="background:#1b5e20;color:white;">
-                    <th colspan="3" style="padding:10px;text-align:center;font-size:15px;font-weight:900;">Sobre 2</th>
+                    <th colspan="3" style="padding:10px;text-align:center;font-size:15px;font-weight:900;">SOBRE 2</th>
                   </tr>
                   <tr style="background:#e0e0e0;">
-                    <th style="padding:6px;text-align:center;">Cantidad</th>
-                    <th style="padding:6px;">Tipo de Moneda</th>
-                    <th style="padding:6px;text-align:right;">Totales</th>
+                    <th style="padding:6px;text-align:center;font-size:12px;">Cantidad</th>
+                    <th style="padding:6px;font-size:12px;">Denominación</th>
+                    <th style="padding:6px;text-align:right;font-size:12px;">Total</th>
                   </tr>
                 </thead>
-                <tbody>${s2Data ? renderDenomTable(sobre2Denoms) : noDataWarning('Sobre 2 no guardado')}</tbody>
+                <tbody>${renderDenomTable(sobre2Denoms, 's2')}</tbody>
                 <tfoot>
                   <tr style="background:#e8f5e9;font-weight:900;">
                     <td colspan="2" style="padding:10px;text-align:right;font-size:14px;">TOTAL</td>
-                    <td style="padding:10px;text-align:right;color:#1b5e20;font-size:17px;">${formatCurrency(sobre2Total)}</td>
+                    <td id="dep-table-total-s2" style="padding:10px;text-align:right;color:#1b5e20;font-size:17px;">${formatCurrency(sobre2Total)}</td>
                   </tr>
                 </tfoot>
               </table>
             </div>
           </div>
           <div id="dep_verify_badge" style="padding:12px;border-radius:8px;text-align:center;font-weight:700;font-size:14px;background:#fff9c4;color:#f57f17;">
-            ↑ Edita los targets si es necesario, luego verifica
+            Llena las cantidades y verifica que cuadren ↑
           </div>`;
 
-        // Store for print — targets are mutable via updateDepositoTargets()
-        window._depositoPrintData = { fecha, depositDenoms, sobre2Denoms, depositTotal, sobre2Total, sobre2, s2Data, depositoAjustado };
+        // Store fixed targets for verification — totals are read live from DOM at print time
+        window._depositoPrintData = { fecha, depositoAjustado, sobre2 };
 
         if (inlineContainer) {
           inlineContainer.innerHTML = `
@@ -1845,8 +1841,8 @@
           document.getElementById('dep_allocation').innerHTML = allocationHtml;
           document.getElementById('dep_summary').innerHTML = summaryHtml;
         }
-        // Trigger initial verification with computed targets
-        setTimeout(updateDepositoTargets, 50);
+        // Trigger initial verification
+        setTimeout(verifyDepositoTotals, 50);
 
         return; // early exit
       } catch (e) {
@@ -1855,40 +1851,66 @@
       }
     }
 
-    // ── EDITABLE DEPOSIT TARGETS ────────────────────────────────────
-    function updateDepositoTargets() {
+    // ── EDITABLE DENOMINATION TABLES ────────────────────────────────
+    function recalcDepTable(tableId) {
+      let total = 0;
+      document.querySelectorAll(`.dep-denom-qty[data-table="${tableId}"]`).forEach(inp => {
+        const qty = Math.max(0, parseInt(inp.value) || 0);
+        inp.value = qty;
+        const rowTot = qty * parseFloat(inp.dataset.val);
+        total += rowTot;
+        const rowEl = document.getElementById(`dep-row-${tableId}-${inp.dataset.key}`);
+        if (rowEl) rowEl.textContent = formatCurrency(rowTot);
+      });
+      const totEl = document.getElementById(`dep-table-total-${tableId}`);
+      if (totEl) totEl.textContent = formatCurrency(total);
+      verifyDepositoTotals();
+    }
+
+    function verifyDepositoTotals() {
       if (!window._depositoPrintData) return;
-      const s2Input  = document.getElementById('dep_target_sobre2');
-      const depInput = document.getElementById('dep_target_deposito');
-      if (!s2Input || !depInput) return;
+      const { depositoAjustado, sobre2 } = window._depositoPrintData;
 
-      const targetSobre2   = parseFloat(s2Input.value)  || 0;
-      const targetDeposito = parseFloat(depInput.value) || 0;
+      const calcTotal = (tableId) => {
+        let t = 0;
+        document.querySelectorAll(`.dep-denom-qty[data-table="${tableId}"]`).forEach(inp => {
+          t += Math.max(0, parseInt(inp.value) || 0) * parseFloat(inp.dataset.val);
+        });
+        return t;
+      };
 
-      // Update print data so receipts use the edited targets
-      window._depositoPrintData.sobre2           = targetSobre2;
-      window._depositoPrintData.depositoAjustado = targetDeposito;
+      const depTotal = calcTotal('dep');
+      const s2Total  = calcTotal('s2');
 
-      const { depositTotal, sobre2Total } = window._depositoPrintData;
       const badge = document.getElementById('dep_verify_badge');
       if (!badge) return;
 
-      const depOk = Math.abs(depositTotal - targetDeposito) < 1;
-      const s2Ok  = Math.abs(sobre2Total  - targetSobre2)  < 1;
-      const sumOk = Math.abs((depositTotal + sobre2Total) - (targetDeposito + targetSobre2)) < 1;
+      const depOk = Math.abs(depTotal - depositoAjustado) < 1;
+      const s2Ok  = Math.abs(s2Total  - sobre2)           < 1;
 
       if (depOk && s2Ok) {
         badge.style.background = '#e8f5e9'; badge.style.color = '#2e7d32';
         badge.textContent = '✅ Los totales cuadran exacto';
-      } else if (sumOk) {
-        badge.style.background = '#e3f2fd'; badge.style.color = '#1565c0';
-        badge.textContent = `✅ Suma total cuadra — Depósito ${formatCurrency(depositTotal)} / Sobre 2 ${formatCurrency(sobre2Total)} (targets ajustados)`;
       } else {
-        const diffDep = depositTotal - targetDeposito;
-        const diffS2  = sobre2Total  - targetSobre2;
+        const fmt2 = (d) => (d >= 0 ? '+' : '') + formatCurrency(Math.abs(d));
+        const parts = [];
+        if (!depOk) parts.push(`Depósito: ${fmt2(depTotal - depositoAjustado)}`);
+        if (!s2Ok)  parts.push(`Sobre 2: ${fmt2(s2Total - sobre2)}`);
         badge.style.background = '#fff3e0'; badge.style.color = '#e65100';
-        badge.textContent = `⚠️ Depósito: ${diffDep >= 0 ? '+' : ''}${formatCurrency(diffDep)} · Sobre 2: ${diffS2 >= 0 ? '+' : ''}${formatCurrency(diffS2)}`;
+        badge.textContent = '⚠️ ' + parts.join(' · ');
       }
+    }
+
+    // Read live quantities from denomination table inputs
+    function getDenomTableData(tableId) {
+      const denoms = {};
+      let total = 0;
+      document.querySelectorAll(`.dep-denom-qty[data-table="${tableId}"]`).forEach(inp => {
+        const qty = parseInt(inp.value) || 0;
+        denoms[inp.dataset.key] = qty;
+        total += qty * parseFloat(inp.dataset.val);
+      });
+      return { denoms, total };
     }
 
     function updateCambioTotal() {
@@ -2045,23 +2067,25 @@
 
     function printDepositTicket() {
       if (!window._depositoPrintData) { showToast('Carga los datos primero', 'error'); return; }
-      const { fecha, depositDenoms, depositTotal } = window._depositoPrintData;
+      const { fecha } = window._depositoPrintData;
+      const { denoms, total } = getDenomTableData('dep');
       const fechaDeposito = document.getElementById('dep_fechaDeposito')?.value || '';
       const subtitle = `
         <div style="text-align:center;font-size:14px;font-weight:bold;margin-bottom:2px;">NATURAL BALANCE RANCH</div>
         <div style="text-align:center;font-size:14px;font-weight:bold;margin-bottom:2px;">Cta: 0118685134</div>
         <div style="text-align:center;font-size:14px;font-weight:bold;margin-bottom:4px;">Referencia: ${fecha}</div>
         <div style="text-align:center;font-size:11px;color:#555;">${fechaDeposito ? 'Depósito: ' + fechaDeposito + ' · ' : ''}Tienda: SAN FELIPE</div>`;
-      _openReceiptWindow('DEPOSITO BBVA', subtitle, depositDenoms, depositTotal);
+      _openReceiptWindow('DEPOSITO BBVA', subtitle, denoms, total);
     }
 
     function printSobre2Ticket() {
       if (!window._depositoPrintData) { showToast('Carga los datos primero', 'error'); return; }
-      const { fecha, sobre2Denoms, sobre2Total } = window._depositoPrintData;
+      const { fecha } = window._depositoPrintData;
+      const { denoms, total } = getDenomTableData('s2');
       const subtitle = `
         <div style="text-align:center;font-size:11px;color:#555;margin-bottom:1px;">Tienda: SAN FELIPE</div>
         <div style="text-align:center;font-size:11px;color:#555;">${fecha}</div>`;
-      _openReceiptWindow('SOBRE 2', subtitle, sobre2Denoms, sobre2Total);
+      _openReceiptWindow('SOBRE 2', subtitle, denoms, total);
     }
 
     // ═══════════════════════════════════════════════════════════════
