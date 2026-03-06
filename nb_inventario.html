@@ -250,6 +250,20 @@ body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif
 .pedir-item .item-text { flex:1; font-size:13px; }
 .pedir-item .item-qty { font-weight:600; color:var(--orange); font-size:13px; white-space:nowrap; }
 
+/* Pedir V2: Qty stepper (replaces plain input) */
+.pedir-qty-stepper { display:flex; align-items:center; flex-shrink:0; }
+.pedir-qty-stepper button { width:32px; height:36px; border:none; border-radius:0; cursor:pointer; font-size:18px; font-weight:700; display:flex; align-items:center; justify-content:center; touch-action:manipulation; flex-shrink:0; }
+.pedir-qty-stepper button:first-child { border-radius:8px 0 0 8px; background:#ffe0b2; color:#e65100; }
+.pedir-qty-stepper button:first-child:active { background:#ffcc80; }
+.pedir-qty-stepper button:last-child { border-radius:0 8px 8px 0; background:#ffe0b2; color:#e65100; }
+.pedir-qty-stepper button:last-child:active { background:#ffcc80; }
+.pedir-qty-stepper input { width:44px; height:36px; border:1.5px solid #ffcc80; border-left:none; border-right:none; text-align:center; font-size:14px; font-weight:700; color:var(--orange,#e65100); background:#fff8f0; -moz-appearance:textfield; }
+.pedir-qty-stepper input::-webkit-outer-spin-button,
+.pedir-qty-stepper input::-webkit-inner-spin-button { -webkit-appearance:none; }
+/* Manual items stepper (blue) */
+.pedir-qty-stepper.manual button:first-child, .pedir-qty-stepper.manual button:last-child { background:#bbdefb; color:#1565c0; }
+.pedir-qty-stepper.manual input { border-color:#90caf9; color:#1565c0; background:#e3f2fd; }
+
 /* Pedir V2: Select all toggle */
 .select-all-row { display:flex; justify-content:space-between; align-items:center; padding:4px 0; margin-bottom:4px; border-bottom:1px dashed var(--gray-border); }
 .select-all-row span { font-size:12px; color:var(--gray); }
@@ -1725,17 +1739,20 @@ function renderPedir() {
 
     // Item list with checkboxes + editable qty
     const manuals = pedirManualItems[supplier] || [];
-    const itemList = items.map(p => {
+    const itemsSorted = [...items].sort((a, b) => a.n.localeCompare(b.n, 'es'));
+    const itemList = itemsSorted.map(p => {
       const excluded = pedirExcluded[p.idx];
       const qty = pedirQtyOverrides[p.idx] !== undefined ? pedirQtyOverrides[p.idx] : p.needed;
       return `
         <div class="pedir-item ${excluded ? 'excluded' : ''}">
           <input type="checkbox" ${excluded ? '' : 'checked'} onchange="togglePedirItem(${p.idx})">
           <span class="item-text">${p.n}${p.isUrgent ? ' <span style="color:var(--red);font-size:10px">● agotado</span>' : ''}${p.outOfSeason ? ' <span style="color:#ff9800;font-size:10px;background:#fff3e0;padding:1px 5px;border-radius:8px">⏳ fuera de temp.</span>' : ''}</span>
-          <input type="number" class="pedir-qty-input" value="${qty}" min="0" step="0.5" inputmode="decimal"
-            onchange="setPedirQty(${p.idx}, this.value)" onclick="this.select()"
-            style="width:52px;text-align:center;font-size:14px;font-weight:700;color:var(--orange,#e65100);
-                   border:1.5px solid #ffcc80;border-radius:8px;padding:4px 2px;background:#fff8f0">
+          <div class="pedir-qty-stepper">
+            <button onclick="adjustPedirQty(${p.idx},-0.5)">−</button>
+            <input type="number" class="pedir-qty-input" value="${qty}" min="0" step="0.5" inputmode="decimal"
+              onchange="setPedirQty(${p.idx}, this.value)" onclick="this.select()">
+            <button onclick="adjustPedirQty(${p.idx},0.5)">+</button>
+          </div>
           <span style="font-size:12px;color:var(--gray)">${p.u||''}</span>
         </div>`;
     }).join('');
@@ -1745,10 +1762,12 @@ function renderPedir() {
       <div class="pedir-item" style="background:#f0f8ff;border-left:3px solid #2196f3">
         <input type="checkbox" checked onchange="removeManualPedirItem('${supplierEsc}',${mi})">
         <span class="item-text" style="font-style:italic">${m.name}</span>
-        <input type="number" class="pedir-qty-input" value="${m.qty}" min="0" step="0.5" inputmode="decimal"
-          onchange="setManualPedirQty('${supplierEsc}',${mi},this.value)" onclick="this.select()"
-          style="width:52px;text-align:center;font-size:14px;font-weight:700;color:#1565c0;
-                 border:1.5px solid #90caf9;border-radius:8px;padding:4px 2px;background:#e3f2fd">
+        <div class="pedir-qty-stepper manual">
+          <button onclick="adjustManualPedirQty('${supplierEsc}',${mi},-0.5)">−</button>
+          <input type="number" class="pedir-qty-input" value="${m.qty}" min="0" step="0.5" inputmode="decimal"
+            onchange="setManualPedirQty('${supplierEsc}',${mi},this.value)" onclick="this.select()">
+          <button onclick="adjustManualPedirQty('${supplierEsc}',${mi},0.5)">+</button>
+        </div>
         <span style="font-size:12px;color:var(--gray)">${m.unit||''}</span>
       </div>`).join('');
 
@@ -1844,6 +1863,23 @@ function setPedirQty(idx, val) {
   if (!isNaN(num) && num >= 0) pedirQtyOverrides[idx] = num;
   else delete pedirQtyOverrides[idx];
   // no full re-render — input already has new value
+}
+
+function adjustPedirQty(idx, delta) {
+  const current = pedirQtyOverrides[idx] !== undefined
+    ? pedirQtyOverrides[idx]
+    : (getNeedsOrder().find(p => p.idx === idx)?.needed || 0);
+  const newVal = Math.max(0, Math.round((parseFloat(current) + delta) * 10) / 10);
+  pedirQtyOverrides[idx] = newVal;
+  renderPedir();
+}
+
+function adjustManualPedirQty(supplier, idx, delta) {
+  if (!pedirManualItems[supplier] || !pedirManualItems[supplier][idx]) return;
+  const current = pedirManualItems[supplier][idx].qty || 0;
+  const newVal = Math.max(0, Math.round((parseFloat(current) + delta) * 10) / 10);
+  pedirManualItems[supplier][idx].qty = newVal;
+  renderPedir();
 }
 
 // ── Manual item additions ──
