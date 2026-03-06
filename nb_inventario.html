@@ -273,6 +273,10 @@ body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif
 .btn-site { background:var(--gray-bg); color:var(--dark); border:1px solid var(--gray-border) !important; }
 .btn-site:active { background:var(--gray-border); }
 
+/* Deshacer (undo) button */
+.btn-deshacer { background:#f0f0f0; color:#555; border:1px solid #ccc !important; flex:0 0 auto !important; min-width:0; }
+.btn-deshacer:active { background:#e0e0e0; }
+
 /* ═══════════════════════════════════════
    RESPONSIVE — Tablet (768px+)
    ═══════════════════════════════════════ */
@@ -368,6 +372,8 @@ body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif
   .stepper button { width:32px; height:32px; }
   .stepper input { width:42px; height:32px; font-size:14px; }
   .section-footer button { padding:8px; font-size:12px; }
+  .pedir-qty-stepper button { width:38px; height:44px; font-size:20px; }
+  .pedir-qty-stepper input { width:56px; height:44px; font-size:17px; }
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -1787,13 +1793,21 @@ function renderPedir() {
 
     if (existingOrder) {
       actions += `<button class="btn-receive" onclick="markOrderReceiving('${supplierEsc}')">📦 Recibir</button>`;
+      actions += `<button class="btn-deshacer" onclick="undoOrder('${supplierEsc}')">↩ Deshacer</button>`;
     } else if (isDelivery) {
       actions += `<button class="btn-pedido" onclick="placeOrder('${supplierEsc}')">📦 Ordenado</button>`;
     } else {
-      // Recoger flow: step buttons
-      actions += `<button class="btn-comprado" onclick="markRecogerStatus('${supplierEsc}','comprado')">🛒 Comprado</button>`;
-      actions += ` <button class="btn-facturado" onclick="markRecogerStatus('${supplierEsc}','facturado')">🧾 Facturado</button>`;
-      actions += ` <button class="btn-archivado" onclick="markRecogerStatus('${supplierEsc}','archivado')">✅ Archivado</button>`;
+      // Recoger flow: sequential — show only the next step
+      const rs = recogerStatus[supplier];
+      if (!rs) {
+        actions += `<button class="btn-comprado" onclick="markRecogerStatus('${supplierEsc}','comprado')">🛒 Comprado</button>`;
+      } else if (rs === 'comprado') {
+        actions += `<button class="btn-facturado" onclick="markRecogerStatus('${supplierEsc}','facturado')">🧾 Facturado</button>`;
+        actions += `<button class="btn-deshacer" onclick="undoRecogerStatus('${supplierEsc}')">↩ Deshacer</button>`;
+      } else if (rs === 'facturado') {
+        actions += `<button class="btn-archivado" onclick="markRecogerStatus('${supplierEsc}','archivado')">✅ Archivado</button>`;
+        actions += `<button class="btn-deshacer" onclick="undoRecogerStatus('${supplierEsc}')">↩ Deshacer</button>`;
+      }
     }
 
     if (siteUrl) {
@@ -1939,6 +1953,23 @@ function markRecogerStatus(supplier, status) {
   } else {
     renderPedir();
   }
+}
+
+function undoRecogerStatus(supplier) {
+  const prev = { comprado: null, facturado: 'comprado' };
+  const current = recogerStatus[supplier];
+  if (prev[current] === null) delete recogerStatus[supplier];
+  else if (prev[current]) recogerStatus[supplier] = prev[current];
+  renderPedir();
+}
+
+function undoOrder(supplier) {
+  const idx = orders.findIndex(o => o.supplier === supplier && o.status === 'ordered');
+  if (idx === -1) return;
+  orders.splice(idx, 1);
+  saveOrders();
+  renderPedir();
+  toast(`↩ Pedido de ${supplier} cancelado`);
 }
 
 function placeOrder(supplier) {
