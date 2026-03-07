@@ -853,6 +853,17 @@ function renderSections() {
 
   let html = '';
 
+  if (totalSections === 0) {
+    html = `<div style="text-align:center;padding:48px 24px;color:var(--gray)">
+      <div style="font-size:48px;margin-bottom:12px">📭</div>
+      <h3 style="font-size:16px;font-weight:600;color:var(--dark);margin-bottom:8px">Sin productos activos</h3>
+      <p style="font-size:13px;line-height:1.5">Todos los productos de <strong>${currentCategory}</strong> están desactivados.<br>
+      Ve a <strong>⚙️ Productos</strong> y usa <strong>✅ Todos</strong> para reactivarlos.</p>
+    </div>`;
+    document.getElementById('sectionList').innerHTML = html;
+    return;
+  }
+
   if (doneCount === totalSections && totalSections > 0) {
     html += `<div class="all-done">
       <div class="big-check">✅</div>
@@ -2287,7 +2298,7 @@ function renderProductList() {
         <span class="cat-count">${grouped[cat].length}</span>
         <div class="bulk-btns">
           <button class="bulk-act-btn activate" onclick="event.stopPropagation();bulkToggleCat('${catEsc}',true)" title="Activar todos en esta categoría">✅ Todos</button>
-          <button class="bulk-act-btn deactivate" onclick="event.stopPropagation();bulkToggleCat('${catEsc}',false)" title="Desactivar todos en esta categoría">⬜ Todos</button>
+          <button class="bulk-act-btn deactivate" onclick="event.stopPropagation();if(confirm('¿Desactivar todos los productos de \'${catEsc}\'? No aparecerán en conteo ni en pedir.'))bulkToggleCat('${catEsc}',false)" title="Desactivar todos en esta categoría">⬜ Todos</button>
         </div>
       </div>
       <div class="prod-cat-body">`;
@@ -2715,7 +2726,7 @@ async function loadProductsFromSheet() {
           f: p.Forma_Pedido,
           inv: p.Inventario_Min,
           max: p.Inventario_Max,
-          active: p.Activo,
+          active: p.Activo === false ? false : true,
           temporada: p.Temporada || 'Siempre',
           tags: p.Tags || '',
           variantes: p.Variantes || ''
