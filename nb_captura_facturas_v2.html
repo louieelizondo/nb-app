@@ -458,7 +458,13 @@ tr:last-child td { border-bottom: none; }
         <button class="btn btn-green" id="processBtn" onclick="processInvoice()">🔍 Analizar con Claude</button>
         <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
           <button class="btn btn-outline btn-small" onclick="openCamera()">📷 Retomar</button>
+          <button class="btn btn-outline btn-small" id="addPage2Btn" style="border-color:#1565c0;color:#1565c0" onclick="addPage2()">📄➕ Página 2</button>
           <button class="btn btn-outline btn-small" onclick="resetAll()">✕ Cancelar</button>
+        </div>
+        <div id="page2Thumb" style="display:none;margin-top:10px;padding:8px;background:#e3f2fd;border-radius:8px;font-size:13px;color:#1565c0;display:none;align-items:center;gap:8px">
+          <img id="page2ThumbImg" src="" style="height:48px;border-radius:4px;border:1px solid #90caf9">
+          <span>✅ Página 2 lista</span>
+          <button onclick="removePage2()" style="margin-left:auto;background:none;border:none;color:#c62828;cursor:pointer;font-size:16px" title="Quitar página 2">✕</button>
         </div>
       </div>
     </div>
@@ -469,7 +475,6 @@ tr:last-child td { border-bottom: none; }
     <div class="card">
       <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
         <div class="card-title" style="margin-bottom:0">📋 Resultados <span class="count-badge" id="resultsCount">0</span></div>
-        <button class="btn btn-outline btn-small" id="addPage2Btn" style="display:none;border-color:#1565c0;color:#1565c0" onclick="addPage2()">📄➕ Agregar Página 2</button>
       </div>
       <div class="stats-row" id="statsRow"></div>
 
@@ -1502,7 +1507,8 @@ function resetAll(){
   document.getElementById('adjustSection').style.display='none';
   document.getElementById('fileInput').value='';
   document.getElementById('gastosPanel').style.display='none';
-  const p2btn = document.getElementById('addPage2Btn'); if(p2btn) p2btn.style.display='none';
+  const p2thumb = document.getElementById('page2Thumb'); if(p2thumb) p2thumb.style.display='none';
+  const procBtn = document.getElementById('processBtn'); if(procBtn) procBtn.innerHTML='🔍 Analizar con Claude';
   _page2Mode = false; _page2Base64 = null;
   currentBase64=null; currentItems=[]; currentAdjustments=[]; adjNextId=0; currentInvoiceTotal=0; lastParsed=null;
   ssClose(); supClose();
@@ -1518,22 +1524,38 @@ function addPage2() {
   _page2Mode = true;
   _page2Base64 = null;
   showToast('📄 Captura la página 2 de la factura', 3000);
-  // Re-open camera / file selector — photo goes to _page2Base64 via processFilePage2
   openCamera();
 }
 
-// Called when page 2 photo is ready — stores it and re-analyzes both pages together
+// Called when page 2 photo is ready — stores it but does NOT auto-analyze
 function processFilePage2(file){
   const r = new FileReader();
   r.onload = e => {
-    _page2Base64 = e.target.result.split(',')[1];
+    const dataUrl = e.target.result;
+    _page2Base64 = dataUrl.split(',')[1];
     _page2Mode = false;
-    // Show small thumbnail indicator
-    showToast('📄 Página 2 capturada — re-analizando ambas páginas…', 3000);
-    // Re-analyze with both images
-    processInvoice();
+    // Show thumbnail in preview section
+    const thumb = document.getElementById('page2Thumb');
+    const thumbImg = document.getElementById('page2ThumbImg');
+    if(thumb && thumbImg){
+      thumbImg.src = dataUrl;
+      thumb.style.display = 'flex';
+    }
+    // Update analyze button text
+    const btn = document.getElementById('processBtn');
+    if(btn) btn.innerHTML = '🔍 Analizar 2 Páginas';
+    showToast('✅ Página 2 lista — presiona Analizar cuando quieras', 3000);
   };
   r.readAsDataURL(file);
+}
+
+function removePage2(){
+  _page2Base64 = null;
+  const thumb = document.getElementById('page2Thumb');
+  if(thumb) thumb.style.display = 'none';
+  const btn = document.getElementById('processBtn');
+  if(btn) btn.innerHTML = '🔍 Analizar con Claude';
+  showToast('📄 Página 2 eliminada');
 }
 
 // Legacy merge — kept for backward compat but no longer primary flow
@@ -1946,7 +1968,10 @@ Responde ÚNICAMENTE con JSON válido (sin texto antes ni después, sin markdown
     _page2Base64 = null;
     renderResults(parsed);
   }catch(e){showToast('❌ '+e.message,5000);}
-  finally{btn.innerHTML='🔍 Analizar con Claude';btn.disabled=false;}
+  finally{btn.innerHTML='🔍 Analizar con Claude';btn.disabled=false;
+    // Clear page2 UI after analysis
+    const p2t = document.getElementById('page2Thumb'); if(p2t) p2t.style.display='none';
+  }
 }
 
 // ══════════════════════════════════════════════
@@ -2001,12 +2026,7 @@ function renderResults(parsed){
   }).join('');
   document.getElementById('resultsSection').style.display='block';
   document.getElementById('adjustSection').style.display='block';
-  document.getElementById('addPage2Btn').style.display = 'inline-flex';
-  // Show page indicator if we analyzed with 2 pages
-  if(_page2Base64 === null && currentBase64){
-    const p2i = document.getElementById('page2Indicator');
-    if(p2i) p2i.style.display = 'none';
-  }
+  // Page 2 thumb is in preview section — no action needed here
   renderAdjList();
   updateGastosPanel();
   document.getElementById('resultsSection').scrollIntoView({behavior:'smooth'});
