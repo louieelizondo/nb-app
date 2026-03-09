@@ -386,15 +386,21 @@ function claudeAnalyze(body) {
   const prompt = body.prompt;
   if (!imageBase64 || !prompt) throw new Error('Missing image_base64 or prompt');
 
+  // Build content array — support 1 or 2 images (multi-page invoices)
+  var contentArr = [
+    { type: 'image', source: { type: 'base64', media_type: body.media_type || 'image/jpeg', data: imageBase64 } }
+  ];
+  if (body.image_base64_page2) {
+    contentArr.push({ type: 'image', source: { type: 'base64', media_type: body.media_type || 'image/jpeg', data: body.image_base64_page2 } });
+  }
+  contentArr.push({ type: 'text', text: prompt });
+
   const payload = {
     model: body.model || 'claude-sonnet-4-6',
     max_tokens: body.max_tokens || 4096,
     messages: [{
       role: 'user',
-      content: [
-        { type: 'image', source: { type: 'base64', media_type: body.media_type || 'image/jpeg', data: imageBase64 } },
-        { type: 'text', text: prompt }
-      ]
+      content: contentArr
     }]
   };
 
@@ -455,33 +461,34 @@ function updatePrices(body) {
   const nameCol = 0;     // A = ingredient name
   const costPaqCol = 2;  // C = whole-package cost (CostoPaq)
   const fechaCol = 3;    // D = last price date
+  const unidadCol = 6;   // G = Unidad (unit of purchase: KG, CAJA, BULTO, etc.)
 
-  let renamed = 0;
   items.forEach(item => {
     const bdName = (item.bd_name || '').trim().toLowerCase();
     // Use precio_unitario (whole-package price from invoice), NOT precio_base (per-kg/L)
     const newPrice = item.precio_unitario || item.price;
-    const invoiceName = (item.invoice_name || '').trim();
+    const unidadCompra = (item.unidad_compra || '').trim().toUpperCase();
     if (!bdName || !newPrice) return;
 
-    for (let i = 1; i < data.length; i++) {
-      const cellName = String(data[i][nameCol] || '').trim().toLowerCase();
+    for (var i = 1; i < data.length; i++) {
+      var cellName = String(data[i][nameCol] || '').trim().toLowerCase();
       if (cellName === bdName) {
         mp.getRange(i + 1, costPaqCol + 1).setValue(newPrice);  // Col C: Costo x Paquete
         mp.getRange(i + 1, fechaCol + 1).setValue(new Date());   // Col D: Fecha actualizada
-        // Rename col A to formal invoice name if provided and different
-        if (invoiceName && invoiceName.toLowerCase() !== cellName) {
-          mp.getRange(i + 1, nameCol + 1).setValue(invoiceName); // Col A: nombre formal
-          renamed++;
+        // Update unit of purchase (Col G) if provided
+        if (unidadCompra) {
+          mp.getRange(i + 1, unidadCol + 1).setValue(unidadCompra);
         }
+        // NOTE: Col A (name) is NO LONGER renamed — names stay canonical
+        // Col H (Costo/kg) should be a formula: =IF(G="KG",C, IF(AND(C>0,F>0),C/F,""))
         updated++;
         break;
       }
     }
   });
 
-  log('UPDATE_PRICES', updated + ' updated, ' + renamed + ' renamed in MATERIA PRIMA');
-  return { ok: true, updated, renamed, message: updated + ' prices updated, ' + renamed + ' renamed' };
+  log('UPDATE_PRICES', updated + ' updated in MATERIA PRIMA');
+  return { ok: true, updated: updated, message: updated + ' prices updated' };
 }
 
 /**

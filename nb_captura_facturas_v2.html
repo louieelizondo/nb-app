@@ -42,6 +42,10 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; b
 .btn-small  { padding: 5px 12px; font-size: 12px; }
 .btn-xs     { padding: 3px 9px;  font-size: 11px; }
 
+/* EDITABLE TOTAL */
+.editable-total { cursor:pointer; transition: background 0.15s; }
+.editable-total:hover { background:#fff3e0 !important; }
+
 /* CAPTURE OPTIONS */
 .capture-options { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px; }
 .capture-card { background: white; border: 2px solid #e0e0e0; border-radius: 14px; padding: 24px 16px; text-align: center; cursor: pointer; transition: all 0.2s; }
@@ -507,6 +511,17 @@ tr:last-child td { border-bottom: none; }
       <div style="margin-top:12px">
         <button class="btn btn-outline" onclick="openAdjModal()">➕ Agregar ajuste</button>
       </div>
+    </div>
+  </div>
+
+  <!-- TODAY'S INVOICES -->
+  <div class="card" id="todayInvoicesCard">
+    <button class="panel-toggle" onclick="togglePanel('todayInvoicesBody','tiArrow')">
+      <span>📋 Facturas de Hoy <span id="todayInvoicesCount" style="font-size:12px;color:#777">(0)</span></span>
+      <span id="tiArrow">▶</span>
+    </button>
+    <div class="panel-body hidden" id="todayInvoicesBody">
+      <div id="todayInvoicesList"></div>
     </div>
   </div>
 
@@ -1293,8 +1308,13 @@ function ssOpen(rowIdx, anchorEl, invoiceDesc, currentBdName) {
     if (ing && currentItems[rowIdx]) currentItems[rowIdx]._match={...ing,matchType:'learned',score:1};
     rerenderRow(rowIdx);
     showToast('📚 "'+normalize(invoiceDesc)+'" → '+bdName);
-    // Rename ingredient in MATERIA PRIMA Sheet so names match going forward
-    renameIngredientInSheet(bdName, invoiceDesc);
+    // Auto-save invoice description as preferred name (non-destructive)
+    const prefs = getPrefNames();
+    const nKey = normalize(bdName);
+    if(!prefs[nKey] && normalize(invoiceDesc) !== nKey){
+      prefs[nKey] = invoiceDesc.trim();
+      localStorage.setItem('nb_pref_names', JSON.stringify(prefs));
+    }
     ssClose();
   };
 }
@@ -1457,6 +1477,8 @@ function capturePhoto(){
 // ══════════════════════════════════════════════
 function handleFile(e){if(e.target.files[0])processFile(e.target.files[0]);}
 function processFile(file){
+  // If in page2 mode, route to page2 handler
+  if(_page2Mode){ processFilePage2(file); return; }
   const r=new FileReader();
   r.onload=e=>{
     const u=e.target.result; currentBase64=u.split(',')[1];
@@ -1481,7 +1503,7 @@ function resetAll(){
   document.getElementById('fileInput').value='';
   document.getElementById('gastosPanel').style.display='none';
   const p2btn = document.getElementById('addPage2Btn'); if(p2btn) p2btn.style.display='none';
-  _page2Mode = false;
+  _page2Mode = false; _page2Base64 = null;
   currentBase64=null; currentItems=[]; currentAdjustments=[]; adjNextId=0; currentInvoiceTotal=0; lastParsed=null;
   ssClose(); supClose();
 }
@@ -1489,37 +1511,34 @@ function resetAll(){
 // ══════════════════════════════════════════════
 // TWO-PAGE INVOICE SUPPORT
 // ══════════════════════════════════════════════
-let _page2Mode = false; // true while we're appending page 2
+let _page2Mode = false; // true while we're capturing page 2
+let _page2Base64 = null; // base64 of page 2 image (held until analysis)
 
 function addPage2() {
   _page2Mode = true;
+  _page2Base64 = null;
   showToast('📄 Captura la página 2 de la factura', 3000);
-  // Re-open camera / file selector
+  // Re-open camera / file selector — photo goes to _page2Base64 via processFilePage2
   openCamera();
 }
 
-// Called after parsing completes — if in page2 mode, merge rather than replace
-function mergeOrReplaceItems(parsed) {
-  if (_page2Mode && currentItems.length > 0) {
+// Called when page 2 photo is ready — stores it and re-analyzes both pages together
+function processFilePage2(file){
+  const r = new FileReader();
+  r.onload = e => {
+    _page2Base64 = e.target.result.split(',')[1];
     _page2Mode = false;
-    const page1Count = currentItems.length;
-    // Add a visual separator item
-    currentItems.push({ _pageSeparator: true, descripcion: '─── Página 2 ───' });
-    const newItems = (parsed.items || []).map(it => ({
-      ...it,
-      _match: findMatch(it.descripcion),
-      _page: 2
-    }));
-    currentItems.push(...newItems);
-    // Update total
-    currentInvoiceTotal += (parsed.total || 0);
-    // Re-render the table
-    renderResultsTable();
-    showToast(`✅ Página 2 agregada: ${newItems.length} productos más`, 3000);
-    document.getElementById('resultsSection').scrollIntoView({ behavior: 'smooth' });
-    return true; // merged
-  }
-  return false; // normal replace
+    // Show small thumbnail indicator
+    showToast('📄 Página 2 capturada — re-analizando ambas páginas…', 3000);
+    // Re-analyze with both images
+    processInvoice();
+  };
+  r.readAsDataURL(file);
+}
+
+// Legacy merge — kept for backward compat but no longer primary flow
+function mergeOrReplaceItems(parsed) {
+  return false; // always replace (both pages analyzed together now)
 }
 
 function renderResultsTable() {
@@ -1823,12 +1842,14 @@ function chHTML(fp,bc){
 function buildRowInner(i,item,m,ch,fp,bc,ub,cls,lbl){
   const esc = s => s.replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/"/g,'&quot;');
   const bdCell = m
-    ? `<div class="pref-wrap"><span class="pref-name">${getDisplayName(m.n)}</span><button class="pref-btn" title="Renombrar en BD" onclick="startPrefRename(${i},this,'${esc(m.n)}')">✏️</button></div>`
+    ? `<div class="pref-wrap"><span class="pref-name">${getDisplayName(m.n)}</span><button class="pref-btn" title="Nombre favorito" onclick="startPrefRename(${i},this,'${esc(m.n)}')">✏️</button></div>`
     : '<span style="color:#ccc">Sin match</span>';
-  // Show precio_base with its base unit; also show precio_unitario if different
-  const fpLabel = item.precio_base && item.precio_base !== item.precio_unitario
-    ? `$${fp.toFixed(2)}/${ub} <span style="font-size:10px;color:#aaa">(unit: $${(item.precio_unitario||0).toFixed(2)})</span>`
-    : `$${fp.toFixed(2)}${ub?'/'+ub:''}`;
+  // Show precio_unitario (as-is from invoice) + unit of purchase; show base price if different
+  const invoiceUnit = item.unidad || '';
+  const hasDiffBase = item.precio_base && Math.abs(item.precio_base - item.precio_unitario) > 0.01;
+  const fpLabel = hasDiffBase
+    ? `$${(item.precio_unitario||0).toFixed(2)}/${invoiceUnit||'unit'} <span style="font-size:10px;color:#1565c0">(≈$${fp.toFixed(2)}/${ub})</span>`
+    : `$${fp.toFixed(2)}${invoiceUnit?'/'+invoiceUnit:(ub?'/'+ub:'')}`;
   return `<td class="editable-cell" title="Click para editar" onclick="startCellEdit(${i},'desc',this)"><strong>${item.descripcion}</strong><span class="cell-edit-hint">✏️</span></td>
 <td>${bdCell}</td>
 <td class="editable-cell" data-label="Cantidad" title="Click para editar" onclick="startCellEdit(${i},'qty',this)">${item.cantidad||'—'} ${item.unidad||''}<span class="cell-edit-hint">✏️</span></td>
@@ -1878,8 +1899,9 @@ async function processInvoice(){
   if(!scriptUrl){showToast('❌ Configura la Script URL primero');return;}
   if(!currentBase64){showToast('❌ Sube una imagen');return;}
   const btn=document.getElementById('processBtn');
-  btn.innerHTML='<span class="spinner"></span> Analizando...'; btn.disabled=true;
-  const prompt=`Analiza esta factura/remisión de proveedor de alimentos mexicano. Extrae TODOS los productos.
+  const hasPage2 = !!_page2Base64;
+  btn.innerHTML='<span class="spinner"></span> Analizando'+(hasPage2?' 2 páginas':'')+'...'; btn.disabled=true;
+  const prompt=`Analiza esta factura/remisión de proveedor de alimentos mexicano.${hasPage2 ? ' Son 2 páginas de la MISMA factura — combina toda la información en un solo resultado.' : ''} Extrae TODOS los productos.
 
 REGLAS CRÍTICAS para precios:
 - precio_unitario: precio por UNA unidad exactamente como aparece en la factura (por garrafa, por caja, por pieza, por kg, etc.)
@@ -1896,19 +1918,23 @@ REGLAS CRÍTICAS para precios:
 - unidad_base: "L" para líquidos, "KG" para sólidos a granel, "PZA" para contables
 - numero_factura: el folio/número de la factura si aparece claramente, sino null
 - tipo_documento: "Factura" si tiene RFC/datos fiscales, "Remisión" si es nota de remisión, "Ticket" si es tira pequeña, "Recibo" en otros casos
+${hasPage2 ? '- IMPORTANTE: El total debe ser el total FINAL de la factura completa (ambas páginas). Si el total solo aparece en la segunda página, usa ese.' : ''}
 
 Responde ÚNICAMENTE con JSON válido (sin texto antes ni después, sin markdown):
 {"proveedor":"nombre del proveedor","numero_factura":"folio o null","tipo_documento":"Factura/Remisión/Ticket/Recibo","fecha":"YYYY-MM-DD","total":número,"moneda":"MXN","items":[{"descripcion":"nombre exacto del producto","cantidad":número,"unidad":"unidad como viene en factura","precio_unitario":número,"precio_total":número,"precio_base":número,"unidad_base":"L/KG/PZA"}]}`;
   try{
-    // Route through Apps Script proxy (API key lives server-side)
+    // Build payload — support 1 or 2 images
+    const payload = {
+      action: 'claude_analyze',
+      image_base64: currentBase64,
+      prompt: prompt
+    };
+    if(hasPage2) payload.image_base64_page2 = _page2Base64;
+
     const resp = await fetch(scriptUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain' },
-      body: JSON.stringify({
-        action: 'claude_analyze',
-        image_base64: currentBase64,
-        prompt: prompt
-      })
+      body: JSON.stringify(payload)
     });
     if(!resp.ok) throw new Error('HTTP ' + resp.status);
     const data = await resp.json();
@@ -1916,6 +1942,8 @@ Responde ÚNICAMENTE con JSON válido (sin texto antes ni después, sin markdown
     if(!data.ok || !data.result) throw new Error('Respuesta inesperada del servidor');
     const raw = data.result.content[0].text.trim();
     let parsed; try{const mx=raw.match(/```(?:json)?\n?([\s\S]*?)```/)||raw.match(/([\s\S]*)/);parsed=JSON.parse(mx?mx[1]:raw);}catch{throw new Error('Respuesta no válida.');}
+    // Clear page2 state after successful analysis
+    _page2Base64 = null;
     renderResults(parsed);
   }catch(e){showToast('❌ '+e.message,5000);}
   finally{btn.innerHTML='🔍 Analizar con Claude';btn.disabled=false;}
@@ -1961,7 +1989,7 @@ function renderResults(parsed){
   } else {
     supChipHTML=`<div id="supChip" class="stat-chip sup-chip sup-none" onclick="openSupplierAssign(this,'${currentSupplier.replace(/'/g,"\\'")}')">🏪 <strong>${currentSupplier}</strong><span class="sup-assign-tag">Asignar</span></div>`;
   }
-  document.getElementById('statsRow').innerHTML=supChipHTML+`<div class="stat-chip">📅 ${parsed.fecha||'—'}</div><div class="stat-chip">💰 $${(parsed.total||0).toFixed(2)}</div><div class="stat-chip" style="background:#e8eaf6">📚 Aprendidos: <strong>${learned}</strong></div><div class="stat-chip" style="background:#e8f5e9">✓ Exactos: <strong>${exact}</strong></div><div class="stat-chip" style="background:#fff8e1">≈ Parciales: <strong>${fuzzy}</strong></div>${none?'<div class="stat-chip" style="background:#ffebee">✗ Sin match: <strong>'+none+'</strong></div>':''}`;
+  document.getElementById('statsRow').innerHTML=supChipHTML+`<div class="stat-chip">📅 ${parsed.fecha||'—'}</div><div class="stat-chip editable-total" id="totalChip" onclick="startTotalEdit()" title="Click para editar total">💰 <span id="totalDisplay">$${currentInvoiceTotal.toFixed(2)}</span> <span class="cell-edit-hint">✏️</span></div><div class="stat-chip" style="background:#e8eaf6">📚 Aprendidos: <strong>${learned}</strong></div><div class="stat-chip" style="background:#e8f5e9">✓ Exactos: <strong>${exact}</strong></div><div class="stat-chip" style="background:#fff8e1">≈ Parciales: <strong>${fuzzy}</strong></div>${none?'<div class="stat-chip" style="background:#ffebee">✗ Sin match: <strong>'+none+'</strong></div>':''}`;
   document.getElementById('resultsBody').innerHTML=currentItems.map((it,i)=>{
     const m=it._match,bc=m?m.c:0;
     const fp=it.precio_base||it.precio_unitario||0;
@@ -1974,6 +2002,11 @@ function renderResults(parsed){
   document.getElementById('resultsSection').style.display='block';
   document.getElementById('adjustSection').style.display='block';
   document.getElementById('addPage2Btn').style.display = 'inline-flex';
+  // Show page indicator if we analyzed with 2 pages
+  if(_page2Base64 === null && currentBase64){
+    const p2i = document.getElementById('page2Indicator');
+    if(p2i) p2i.style.display = 'none';
+  }
   renderAdjList();
   updateGastosPanel();
   document.getElementById('resultsSection').scrollIntoView({behavior:'smooth'});
@@ -2032,6 +2065,36 @@ function exportCSV(){
   }
   const csv='\uFEFF'+rows.map(r=>r.map(v=>'"'+String(v||'').replace(/"/g,'""')+'"').join(',')).join('\n');
   const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));a.download='NB_Factura_'+new Date().toISOString().slice(0,10)+'.csv';a.click();
+}
+
+// ══════════════════════════════════════════════
+// TODAY'S INVOICES PANEL
+// ══════════════════════════════════════════════
+function renderTodayInvoices(){
+  const today = new Date().toISOString().slice(0,10);
+  const gastos = JSON.parse(localStorage.getItem('nb_gastos')||'[]');
+  const todays = gastos.filter(g => (g.created_at||'').slice(0,10) === today || g.fecha_compra === today);
+  document.getElementById('todayInvoicesCount').textContent = '('+todays.length+')';
+  const el = document.getElementById('todayInvoicesList');
+  if(!todays.length){
+    el.innerHTML = '<p style="font-size:13px;color:#999;font-style:italic">Sin facturas hoy.</p>';
+    return;
+  }
+  let totalHoy = 0;
+  el.innerHTML = '<div style="display:grid;grid-template-columns:1fr auto auto auto;gap:4px 12px;font-size:12px;align-items:center">'
+    + '<div style="font-weight:700;color:#555;padding-bottom:4px;border-bottom:1px solid #e0e0e0">Proveedor</div>'
+    + '<div style="font-weight:700;color:#555;padding-bottom:4px;border-bottom:1px solid #e0e0e0">Folio</div>'
+    + '<div style="font-weight:700;color:#555;padding-bottom:4px;border-bottom:1px solid #e0e0e0;text-align:right">Total</div>'
+    + '<div style="font-weight:700;color:#555;padding-bottom:4px;border-bottom:1px solid #e0e0e0">Fecha</div>'
+    + todays.map(g => {
+      totalHoy += (g.monto_pagar || g.monto_factura || 0);
+      return `<div style="padding:3px 0">${g.proveedor||'—'}</div>`
+        + `<div style="padding:3px 0;color:#777">${g.folio||'—'}</div>`
+        + `<div style="padding:3px 0;text-align:right;font-weight:600">$${(g.monto_pagar||g.monto_factura||0).toFixed(2)}</div>`
+        + `<div style="padding:3px 0;color:#777">${g.fecha_compra||'—'}</div>`;
+    }).join('')
+    + `<div style="grid-column:1/-1;border-top:2px solid #2e6b2e;padding-top:6px;margin-top:4px;font-weight:700;color:#2e6b2e;text-align:right">Total hoy: $${totalHoy.toFixed(2)}</div>`
+    + '</div>';
 }
 
 // ══════════════════════════════════════════════
@@ -2101,6 +2164,37 @@ function saveCellEdit(idx, field, tdEl) {
   rerenderRow(idx);
 }
 
+// ── Editable invoice total ──
+function startTotalEdit(){
+  const chip = document.getElementById('totalChip');
+  if(!chip || chip.querySelector('input')) return;
+  chip.innerHTML = `<div class="cell-inline-edit" style="min-width:auto">
+    <span style="font-size:13px">💰 $</span>
+    <input id="totalEditInput" type="number" value="${currentInvoiceTotal.toFixed(2)}" step="0.01" style="width:100px;font-weight:700"
+      onkeydown="if(event.key==='Enter'){event.preventDefault();saveTotalEdit();}
+                 if(event.key==='Escape')cancelTotalEdit();">
+    <button class="cell-save-btn" onclick="saveTotalEdit()">✓</button>
+    <button class="cell-cancel-btn" onclick="cancelTotalEdit()">✕</button>
+  </div>`;
+  setTimeout(()=>{ const inp=document.getElementById('totalEditInput'); if(inp){inp.focus();inp.select();} },30);
+}
+function saveTotalEdit(){
+  const inp = document.getElementById('totalEditInput');
+  if(!inp) return;
+  const v = parseFloat(inp.value);
+  if(!isNaN(v) && v >= 0){
+    currentInvoiceTotal = v;
+    showToast('💰 Total actualizado: $'+v.toFixed(2));
+  }
+  cancelTotalEdit();
+  renderAdjList(); // recalc adjusted totals
+  updateGastosPanel();
+}
+function cancelTotalEdit(){
+  const chip = document.getElementById('totalChip');
+  if(chip) chip.innerHTML = `💰 <span id="totalDisplay">$${currentInvoiceTotal.toFixed(2)}</span> <span class="cell-edit-hint">✏️</span>`;
+}
+
 // ── Supplier chip edit button ──
 function openSupplierEdit() {
   const sup = currentSupplier || '';
@@ -2149,9 +2243,47 @@ function savePrefRename(idx, bdName){
   const prefs = getPrefNames();
   prefs[normalize(bdName)] = newName;
   localStorage.setItem('nb_pref_names', JSON.stringify(prefs));
-  // Re-render every row that uses this BD ingredient
-  currentItems.forEach((_,i)=>{ if(currentItems[i]._match?.n===bdName) rerenderRow(i); });
-  showToast('✅ Nombre preferido: '+newName);
+  // Also rename in MATERIA PRIMA sheet (col A) so the DB has the clean, chosen name
+  renameToPrefName(bdName, newName);
+  // Update local DB to match
+  const ing = INGREDIENTS_DB.find(i=>i.n===bdName);
+  if(ing) ing.n = newName;
+  // Update all learned mappings that pointed to the old name
+  const maps = getLearnedMappings();
+  let mapsChanged = false;
+  Object.keys(maps).forEach(k => {
+    if(maps[k] === bdName){ maps[k] = newName; mapsChanged = true; }
+  });
+  if(mapsChanged) localStorage.setItem('nb_invoice_mappings', JSON.stringify(maps));
+  // Update local cache
+  localStorage.setItem(CACHE_KEY, JSON.stringify(INGREDIENTS_DB));
+  // Re-render every row that uses this BD ingredient (now with new name)
+  currentItems.forEach((_,i)=>{
+    if(currentItems[i]._match?.n===bdName){
+      currentItems[i]._match.n = newName;
+      rerenderRow(i);
+    }
+  });
+  showToast('✅ Renombrado en BD: '+newName);
+}
+
+async function renameToPrefName(oldName, newName){
+  const scriptUrl = getScriptUrl();
+  if(!scriptUrl) return;
+  if(!newName || !oldName) return;
+  if(normalize(newName) === normalize(oldName)) return;
+  try {
+    const resp = await fetch(scriptUrl, {
+      method:'POST', headers:{'Content-Type':'text/plain'},
+      body: JSON.stringify({ action:'rename_ingredient', old_name: oldName, new_name: newName })
+    });
+    const data = await resp.json();
+    if(data.ok && data.renamed){
+      console.log(`✅ Ingredient renamed in sheet: "${oldName}" → "${newName}"`);
+    } else {
+      console.log('Rename skipped:', data.message);
+    }
+  } catch(e){ console.log('Rename failed:', e.message); }
 }
 
 // ══════════════════════════════════════════════
@@ -2327,7 +2459,7 @@ function updateGastosPanel(){
       <div class="gsm-chips" id="tipoDocChips">${tipoChips}</div>
     </div>
     <div class="gsm-item"><span class="gsm-label">Fecha compra</span><span class="gsm-value">${fechaCompra}</span></div>
-    <div class="gsm-item"><span class="gsm-label">Total factura</span><span class="gsm-value">$${currentInvoiceTotal.toFixed(2)}</span></div>
+    <div class="gsm-item" style="cursor:pointer" onclick="startTotalEdit();document.getElementById('totalChip')?.scrollIntoView({behavior:'smooth'})" title="Click para editar"><span class="gsm-label">Total factura ✏️</span><span class="gsm-value">$${currentInvoiceTotal.toFixed(2)}</span></div>
     <div class="gsm-item"><span class="gsm-label">Total a pagar</span><span class="gsm-value highlight">$${finalTotal.toFixed(2)}</span></div>
     <div class="gsm-item" style="grid-column:1/-1"><span class="gsm-label">Crédito</span><span class="gsm-value" style="font-size:12px">${creditLabel}</span></div>
   `;
@@ -2344,12 +2476,21 @@ function setTipoDoc(tipo) {
 
 async function syncPricesToMateriaPrima(scriptUrl){
   // Build price update items from matched invoice items
+  // Backend update_prices should write:
+  //   col C (CostoPaq) = precio_unitario (as-is from invoice, per package/caja/bulto/kg)
+  //   col D (Fecha) = today's date
+  //   col G (Unidad) = unidad_compra (KG, CAJA, BULTO, PZA, etc.)
+  //   col H (Costo/kg) = if unidad_compra is KG → same as precio_unitario
+  //                       if CAJA/BULTO → precio_unitario / VolUnid (col F, if available)
   const priceItems = currentItems
     .filter(it => it._match && it._match.n && it.precio_unitario)
     .map(it => ({
       bd_name: it._match.n,
-      precio_unitario: it.precio_unitario,  // whole-package price → writes to CostoPaq (col C)
-      invoice_name: (it.descripcion || '').trim()  // formal invoice name → renames col A
+      precio_unitario: it.precio_unitario,    // → CostoPaq (col C)
+      unidad_compra: (it.unidad || '').trim(), // → Unidad (col G)
+      cantidad: it.cantidad || 0,
+      precio_base: it.precio_base || null,     // normalized per-unit price (per kg/L/pza)
+      unidad_base: (it.unidad_base || '').trim() // KG, L, PZA
     }));
   if(!priceItems.length){ console.log('No matched items to sync prices'); return; }
   try {
@@ -2358,49 +2499,13 @@ async function syncPricesToMateriaPrima(scriptUrl){
       body: JSON.stringify({ action: 'update_prices', items: priceItems })
     });
     const data = await resp.json();
-    if(data.ok) console.log(`✅ Prices synced: ${data.updated} updated, ${data.renamed||0} renamed`);
+    if(data.ok) console.log(`✅ Prices synced: ${data.updated} updated`);
     else console.log('Price sync error:', data.error);
   } catch(e){ console.log('Price sync failed:', e.message); }
 }
 
-/**
- * Rename ingredient in MATERIA PRIMA Sheet to match invoice name.
- * After renaming, update local INGREDIENTS_DB and remove the learned mapping
- * (since names now match directly → exact match next time).
- */
-async function renameIngredientInSheet(oldBdName, invoiceDesc){
-  const scriptUrl = getScriptUrl();
-  if(!scriptUrl) return;
-  // Use the raw invoice description as the new canonical name
-  const newName = (invoiceDesc||'').trim();
-  if(!newName || !oldBdName) return;
-  if(normalize(newName) === normalize(oldBdName)) return; // already same
-  try {
-    const resp = await fetch(scriptUrl, {
-      method:'POST', headers:{'Content-Type':'text/plain'},
-      body: JSON.stringify({ action:'rename_ingredient', old_name: oldBdName, new_name: newName })
-    });
-    const data = await resp.json();
-    if(data.ok && data.renamed){
-      console.log(`✅ Ingredient renamed: "${oldBdName}" → "${newName}"`);
-      // Update local DB so future matches in this session work
-      const ing = INGREDIENTS_DB.find(i=>i.n===oldBdName);
-      if(ing) ing.n = newName;
-      // Remove the learned mapping since names now match directly
-      const maps = getLearnedMappings();
-      const nKey = normalize(invoiceDesc);
-      if(maps[nKey]){
-        delete maps[nKey];
-        localStorage.setItem('nb_invoice_mappings', JSON.stringify(maps));
-        renderMappings();
-      }
-      // Update cache
-      localStorage.setItem(CACHE_KEY, JSON.stringify(INGREDIENTS_DB));
-    } else {
-      console.log('Rename skipped:', data.message);
-    }
-  } catch(e){ console.log('Rename failed:', e.message); }
-}
+// DEPRECATED: renameIngredientInSheet removed — now using preferred names (non-destructive)
+// The canonical ingredient name in MATERIA PRIMA stays unchanged; display names are in localStorage 'nb_pref_names'
 
 function enviarGasto(){
   const forma     = document.getElementById('gastoForma').value;
@@ -2476,6 +2581,7 @@ function enviarGasto(){
   const savedForma = forma;
   const savedBase64 = currentBase64;  // capture before resetAll() clears it
   resetAll();   // ← clears screen NOW; user can start next invoice immediately
+  renderTodayInvoices(); // refresh today's invoices panel
 
   // POST to Apps Script in background (with retry)
   const scriptUrl = getScriptUrl();
@@ -2602,7 +2708,7 @@ window.addEventListener('load',()=> requireNbAuth(function appInit(){
     document.getElementById('apiKeyBar').classList.add('ok');
   }
   loadCachedIngredients(); // also calls buildSuppliersFromDB inside
-  renderMappings(); renderHistory();
+  renderMappings(); renderHistory(); renderTodayInvoices();
   pruneLocalStorage();
   // One-time migration: strip base64 foto from existing gastos to free storage
   try {
