@@ -909,6 +909,11 @@ function paySelected(){
       const g = allGastos.find(x=>x.id===id); if(!g) return;
       g.estado = 'Pagado';
       g.fecha_pago_real = today;
+      // If sin asignar, also set fecha_pago so it doesn't reappear
+      if(!g.fecha_pago || g.fecha_pago === g.fecha_compra || g.fecha_pago === '') {
+        g.fecha_pago = today;
+        pushDateToSheet(g.id, today, 'Pagado');
+      }
       pushStatusToSheet(g.id, 'Pagado', today, '');
     });
     saveGastos(); clearSelection(); applyFilters();
@@ -1317,6 +1322,14 @@ async function confirmPay(){
   g.estado = 'Pagado';
   g.fecha_pago_real = document.getElementById('payDate').value || todayStr();
   g.comprobante = document.getElementById('payRef').value.trim();
+
+  // If fecha_pago is empty or same as fecha_compra (sin asignar), set it to today
+  // so it stops appearing in the "Sin asignar" filter after sync
+  if(!g.fecha_pago || g.fecha_pago === g.fecha_compra || g.fecha_pago === '') {
+    g.fecha_pago = g.fecha_pago_real;
+    // Also push the date to the sheet
+    pushDateToSheet(g.id, g.fecha_pago, 'Pagado');
+  }
 
   // Check for PDF file
   const pdfInput = document.getElementById('payPdf');
