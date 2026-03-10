@@ -1425,8 +1425,9 @@ async function syncFromSheet(){
       monto_pagar  : parseFloat(g.Monto_Pagar || g.monto_pagar || 0),
       forma_pago   : g.Forma_Pago || g.forma_pago || '',
       categoria    : g.Categoria || g.categoria || '',
-      // Phase 2.5: Trust the sheet's Estado value for ALL payment types
-      estado       : g.Estado || g.estado || 'Pendiente',
+      // Phase 2.5: Trust sheet's Estado if present; infer from forma_pago only as fallback for empty cells
+      estado       : g.Estado || g.estado
+        || ((g.Forma_Pago||g.forma_pago||'').toLowerCase().includes('transferencia') ? 'Pendiente' : 'Pagado'),
       fecha_pago   : fmtDate(g.Fecha_Pago || g.fecha_pago),
       credit_days  : parseInt(g.Credit_Days || g.credit_days || 0),
       comprobante  : g.Comprobante || g.comprobante || '',
