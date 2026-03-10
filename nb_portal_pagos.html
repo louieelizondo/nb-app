@@ -340,6 +340,7 @@ tbody tr.editing { background:#fffde7 !important; }
       <button class="chip chip-vencido" onclick="setStatusFilter('Vencido',this)">Vencidos</button>
       <button class="chip" onclick="setStatusFilter('Pagado',this)">Pagados</button>
       <button class="chip" onclick="setStatusFilter('remision',this)" style="border-color:#6a1b9a;color:#6a1b9a">📋 Remisiones</button>
+      <button class="chip" onclick="setStatusFilter('recientes',this)" style="border-color:#1565c0;color:#1565c0">🆕 Recientes</button>
       <button class="chip active" onclick="setStatusFilter('all',this)">Todos</button>
     </div>
     <select id="formaFilter" onchange="applyFilters()" style="min-width:140px">
@@ -610,11 +611,13 @@ async function processSyncQueue(){
         const op = batch.find(b => b.queue_id === r.queue_id);
         if(op && op.id) updateLocalVersion(op.id, r.result.version);
       });
-      // Handle version conflicts — remove from queue (don't retry) and warn user
+      // Phase 2.6: Handle version conflicts — auto-sync and show clear message
       const conflicts = data.results.filter(r => !r.ok && r.result && r.result.conflict);
       if(conflicts.length > 0){
         conflicts.forEach(c => doneIds.add(c.queue_id)); // remove from queue, no retry
-        showToast('⚠️ Conflicto de versión: otro dispositivo editó estos datos. Sincroniza para obtener la versión actual.', 6000);
+        showToast('🔄 Datos actualizados desde otro dispositivo. Sincronizando…', 4000);
+        // Auto-sync to get latest data
+        setTimeout(() => syncFromSheet(), 500);
       }
       syncQueue = syncQueue.filter(item => !doneIds.has(item.queue_id));
       // Items that failed (non-conflict) stay in queue for retry
@@ -881,11 +884,16 @@ function applyFilters(){
   const search = (document.getElementById('searchInput').value || '').toLowerCase().trim();
   filteredGastos = allGastos.filter(g => {
     if(currentStatusFilter === 'sin_fecha'){
-      // Show only Transferencia invoices without a real payment date assigned
+      // Phase 2.2: Show Transferencia invoices that need a payment date assigned
       if(g.estado === 'Pagado') return false;
       const isTransfer = (g.forma_pago||'').toLowerCase().includes('transferencia');
       if(!isTransfer) return false;
-      if(g.fecha_pago && g.fecha_pago !== g.fecha_compra) return false; // has a real date
+      // After Phase 1.3, transferencia with 0 credit days has empty fecha_pago
+      if(g.fecha_pago && g.fecha_pago !== g.fecha_compra && g.fecha_pago !== '') return false; // has a real date
+    } else if(currentStatusFilter === 'recientes'){
+      // Phase 2.7: Show invoices from last 48 hours by created_at
+      const created = g.created_at ? new Date(g.created_at).getTime() : 0;
+      if(Date.now() - created > 48 * 60 * 60 * 1000) return false;
     } else if(currentStatusFilter === 'remision'){
       // Show remisiones pending CFDI conversion
       if((g.tipo_documento||'') !== 'Remisión' && (g.tipo_documento||'') !== 'Remision') return false;
@@ -893,8 +901,23 @@ function applyFilters(){
     if(forma && g.forma_pago !== forma) return false;
     if(year && !(g.fecha_compra||'').startsWith(year) && !(g.fecha_pago||'').startsWith(year)) return false;
     if(search){
+      // Phase 2 enhanced search: text + numeric + date matching
       const hay = [g.proveedor,g.folio,g.proveedor_raw,g.categoria].join(' ').toLowerCase();
-      if(!hay.includes(search)) return false;
+      if(hay.includes(search)) { /* text match — ok */ }
+      else {
+        // Numeric search: match against monto_pagar
+        const searchNum = parseFloat(search.replace(/[$,]/g,''));
+        if(!isNaN(searchNum) && searchNum > 0){
+          const monto = g.monto_pagar || g.monto_factura || 0;
+          if(Math.abs(monto - searchNum) > 0.50) return false;
+        }
+        // Date fragment search: match against fecha_compra or fecha_pago
+        else if(search.match(/^\d{4}/) || search.match(/^\d{1,2}\s*(ene|feb|mar|abr|may|jun|jul|ago|sep|oct|nov|dic)/i)){
+          const dates = [g.fecha_compra||'', g.fecha_pago||''].join(' ').toLowerCase();
+          if(!dates.includes(search)) return false;
+        }
+        else return false;
+      }
     }
     return true;
   });
@@ -919,8 +942,9 @@ function buildYearFilter(){
   const thisYear = new Date().getFullYear().toString();
   if(!years.size) years.add(thisYear);
   const sel = document.getElementById('yearFilter');
-  sel.innerHTML = '<option value="">Todos los años</option>' +
-    [...years].sort().reverse().map(y => `<option value="${y}" ${y===thisYear?'selected':''}>${y}</option>`).join('');
+  // Phase 2.1: Default to "Todos los años" so no invoices get hidden
+  sel.innerHTML = '<option value="" selected>Todos los años</option>' +
+    [...years].sort().reverse().map(y => `<option value="${y}">${y}</option>`).join('');
 }
 
 // ── Render ──
@@ -1046,7 +1070,7 @@ function renderTable(){
       : '';
 
     // Mobile card content
-    const mobileCard = `<td class="mobile-card" onclick="mobileCardTap(event, '${g.id}')">
+    const mobileCard = `<td class="mobile-card" onclick="mobileCardTap(event, '${g.id}')" ontouchstart="mobileCardDown(event, '${g.id}')" ontouchend="mobileCardUp()">
       <div style="display:flex;align-items:flex-start;gap:12px">
         <input type="checkbox" class="row-check row-check-item" ${isChecked?'checked':''} onchange="event.stopPropagation();toggleSelect('${g.id}',this.checked)" style="margin-top:3px">
         <div style="flex:1;min-width:0">
@@ -1110,6 +1134,7 @@ function renderTable(){
             </select>
           </div>
           <div class="edit-field"><label>Días crédito</label><input type="number" id="ed_credit" value="${g.credit_days||0}"></div>
+          <div class="edit-field"><label>Fecha pago</label><input type="date" id="ed_fecha_pago" value="${g.fecha_pago||''}"></div>
         </div>
         <div class="edit-actions">
           <button class="btn btn-cancel" onclick="event.stopPropagation();toggleEdit(null)">Cancelar</button>
@@ -1142,8 +1167,8 @@ function renderTable(){
 
 // ── Row click → inline edit ──
 function rowClick(event, id){
-  // Don't open edit if user clicked a button, link, checkbox, or date-link
-  if(event.target.closest('button, a, .date-link, input, .badge')) return;
+  // Phase 2.3: Reduced guard targets — only skip for buttons, links, checkboxes, and inputs
+  if(event.target.closest('button, a, .date-link, input')) return;
   toggleEdit(editingId === id ? null : id);
 }
 
@@ -1178,6 +1203,8 @@ function saveEdit(id){
   g.forma_pago = document.getElementById('ed_forma').value;
   g.categoria = document.getElementById('ed_cat').value;
   g.credit_days = parseInt(document.getElementById('ed_credit').value)||0;
+  // Phase 2.8: Also save fecha_pago from edit
+  g.fecha_pago = document.getElementById('ed_fecha_pago').value || '';
   saveGastos();
   editingId = null;
   applyFilters();
@@ -1187,17 +1214,31 @@ function saveEdit(id){
     Proveedor: g.proveedor, Folio: g.folio, Tipo_Documento: g.tipo_documento,
     Fecha_Compra: g.fecha_compra, Monto_Factura: g.monto_factura,
     Ajustes: g.ajustes, Monto_Pagar: g.monto_pagar,
-    Forma_Pago: g.forma_pago, Categoria: g.categoria, Credit_Days: g.credit_days
+    Forma_Pago: g.forma_pago, Categoria: g.categoria, Credit_Days: g.credit_days,
+    Fecha_Pago: g.fecha_pago
   });
 }
 
-// Mobile card tap = toggle selection
+// Phase 2.3: Mobile card tap = open edit panel (not just toggle selection)
+// Long press or checkbox tap → selection mode
+let _mobileTimer = null;
+let _mobileLongPress = false;
 function mobileCardTap(event, id){
-  // Don't toggle if user tapped a button/link
+  // Don't trigger if user tapped a button/link/checkbox
   if(event.target.closest('button, a, .date-link, input')) return;
-  const cb = event.currentTarget.querySelector('.row-check-item');
-  if(cb){ cb.checked = !cb.checked; toggleSelect(id, cb.checked); }
+  if(_mobileLongPress) { _mobileLongPress = false; return; }
+  // Single tap → open edit panel
+  toggleEdit(editingId === id ? null : id);
 }
+function mobileCardDown(event, id){
+  _mobileLongPress = false;
+  _mobileTimer = setTimeout(() => {
+    _mobileLongPress = true;
+    const cb = event.currentTarget.querySelector('.row-check-item');
+    if(cb){ cb.checked = !cb.checked; toggleSelect(id, cb.checked); }
+  }, 500);
+}
+function mobileCardUp(){ clearTimeout(_mobileTimer); }
 
 // ── Modals ──
 function openPayModal(id){
@@ -1384,9 +1425,8 @@ async function syncFromSheet(){
       monto_pagar  : parseFloat(g.Monto_Pagar || g.monto_pagar || 0),
       forma_pago   : g.Forma_Pago || g.forma_pago || '',
       categoria    : g.Categoria || g.categoria || '',
-      estado       : (g.Forma_Pago||g.forma_pago||'').toLowerCase().includes('transferencia')
-        ? (g.Estado || g.estado || 'Pendiente')
-        : 'Pagado',
+      // Phase 2.5: Trust the sheet's Estado value for ALL payment types
+      estado       : g.Estado || g.estado || 'Pendiente',
       fecha_pago   : fmtDate(g.Fecha_Pago || g.fecha_pago),
       credit_days  : parseInt(g.Credit_Days || g.credit_days || 0),
       comprobante  : g.Comprobante || g.comprobante || '',
@@ -1401,6 +1441,8 @@ async function syncFromSheet(){
     merged.forEach(g => { if(!g.foto_url && localMap[g.id]) g.foto = localMap[g.id]; });
     allGastos = [...merged, ...localOnly];
     saveGastos();
+    // Phase 2.1: Rebuild year filter after sync (includes years from new data)
+    buildYearFilter();
     applyFilters();
 
     status.textContent = `✅ Sincronizado · ${merged.length} del Sheet + ${localOnly.length} locales`;

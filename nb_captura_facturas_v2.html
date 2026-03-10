@@ -411,6 +411,31 @@ tr:last-child td { border-bottom: none; }
 .btn-gastos { background: #2e6b2e; color: white; padding: 13px 24px; border: none; border-radius: 10px; font-size: 15px; font-weight: 700; cursor: pointer; width: 100%; transition: background 0.15s; }
 .btn-gastos:hover { background: #256025; }
 .btn-gastos:disabled { background: #bbb; cursor: not-allowed; }
+
+/* INVOICE HEADER CARD */
+.invoice-header-card { background: white; border: 2px solid #81c784; border-radius: 14px; padding: 20px; margin-bottom: 16px; display: none; }
+.invoice-header-card.visible { display: block; }
+.ihc-title { font-size: 16px; font-weight: 700; color: #2e6b2e; margin-bottom: 14px; display: flex; align-items: center; gap: 8px; }
+.ihc-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px; }
+.ihc-field { display: flex; flex-direction: column; gap: 4px; }
+.ihc-field.full-width { grid-column: 1 / -1; }
+.ihc-label { font-size: 11px; color: #777; text-transform: uppercase; letter-spacing: .4px; font-weight: 600; }
+.ihc-input { padding: 9px 12px; border: 1.5px solid #ccc; border-radius: 8px; font-size: 14px; font-weight: 600; background: white; }
+.ihc-input:focus { border-color: #2e6b2e; outline: none; }
+.ihc-input.date-warning { border-color: #f57f17; background: #fff8e1; animation: dateWarn 1s ease-in-out 3; }
+@keyframes dateWarn { 0%,100%{background:#fff8e1} 50%{background:#ffecb3} }
+.ihc-date-warn { font-size: 11px; color: #e65100; background: #fff3e0; padding: 4px 10px; border-radius: 6px; margin-top: 2px; display: none; }
+.ihc-date-warn.visible { display: block; }
+.ihc-supplier-wrap { display: flex; align-items: center; gap: 8px; }
+.ihc-supplier-badge { font-size: 11px; padding: 3px 8px; border-radius: 12px; font-weight: 700; white-space: nowrap; }
+.ihc-badge-matched { background: #e8f5e9; color: #1b5e20; }
+.ihc-badge-new { background: #fff3e0; color: #e65100; }
+.ihc-tipo-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.ihc-summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 16px; background: #f1f8e9; border-radius: 10px; margin-bottom: 14px; flex-wrap: wrap; }
+.ihc-total-big { font-size: 22px; font-weight: 800; color: #2e6b2e; }
+.ihc-credit-info { font-size: 12px; color: #555; }
+.ihc-duplicate-warn { background: #ffebee; border: 1.5px solid #ef9a9a; border-radius: 8px; padding: 10px 14px; margin-bottom: 12px; font-size: 13px; color: #c62828; display: none; }
+.ihc-duplicate-warn.visible { display: block; }
 </style>
 </head>
 <body>
@@ -468,6 +493,69 @@ tr:last-child td { border-bottom: none; }
         </div>
       </div>
     </div>
+  </div>
+
+  <!-- INVOICE HEADER CARD (Phase 1.1) -->
+  <div id="invoiceHeaderCard" class="invoice-header-card">
+    <div class="ihc-title">📋 Datos de Factura</div>
+    <div id="ihcDuplicateWarn" class="ihc-duplicate-warn">⚠️ <strong>Posible duplicado:</strong> <span id="ihcDupText"></span></div>
+    <div class="ihc-grid">
+      <div class="ihc-field">
+        <span class="ihc-label">📅 Fecha de compra</span>
+        <input type="date" class="ihc-input" id="ihcFecha" onchange="onIhcFechaChange()">
+        <div id="ihcDateWarn" class="ihc-date-warn">⚠️ ¿Fecha correcta? Claude extrajo <span id="ihcDateWarnText"></span></div>
+      </div>
+      <div class="ihc-field">
+        <span class="ihc-label">🏪 Proveedor</span>
+        <div class="ihc-supplier-wrap">
+          <input type="text" class="ihc-input" id="ihcProveedor" style="flex:1" placeholder="Nombre del proveedor">
+          <span id="ihcSupBadge" class="ihc-supplier-badge" style="display:none"></span>
+        </div>
+      </div>
+      <div class="ihc-field">
+        <span class="ihc-label">🔢 Folio / # Factura</span>
+        <input type="text" class="ihc-input" id="ihcFolio" placeholder="Folio o número">
+      </div>
+      <div class="ihc-field">
+        <span class="ihc-label">💰 Total factura</span>
+        <input type="number" class="ihc-input" id="ihcTotal" step="0.01" min="0" onchange="onIhcTotalChange()">
+      </div>
+      <div class="ihc-field full-width">
+        <span class="ihc-label">📄 Tipo de documento</span>
+        <div class="ihc-tipo-chips" id="ihcTipoChips">
+          <button class="gsm-chip gsm-chip-active" onclick="setIhcTipo('Factura',this)">Factura</button>
+          <button class="gsm-chip" onclick="setIhcTipo('Remisión',this)">Remisión</button>
+          <button class="gsm-chip" onclick="setIhcTipo('Ticket',this)">Ticket</button>
+          <button class="gsm-chip" onclick="setIhcTipo('Recibo',this)">Recibo</button>
+        </div>
+      </div>
+      <div class="ihc-field">
+        <span class="ihc-label">💳 Forma de Pago</span>
+        <select class="ihc-input" id="ihcForma">
+          <option value="">— Seleccionar —</option>
+          <option value="Transferencia">Transferencia</option>
+          <option value="Tarjeta crédito">Tarjeta crédito</option>
+          <option value="Tarjeta débito">Tarjeta débito</option>
+          <option value="Efectivo">Efectivo</option>
+          <option value="Cheque">Cheque</option>
+        </select>
+      </div>
+      <div class="ihc-field">
+        <span class="ihc-label">📂 Categoría</span>
+        <select class="ihc-input" id="ihcCategoria">
+          <option value="Adquisición de mercancías">Adquisición de mercancías</option>
+          <option value="Gastos generales">Gastos generales</option>
+        </select>
+      </div>
+    </div>
+    <div class="ihc-summary" id="ihcSummary">
+      <div>
+        <div style="font-size:11px;color:#777;text-transform:uppercase">Total a pagar</div>
+        <div class="ihc-total-big" id="ihcTotalPagar">$0.00</div>
+      </div>
+      <div id="ihcCreditInfo" class="ihc-credit-info"></div>
+    </div>
+    <button class="btn-gastos" id="ihcEnviarBtn" onclick="enviarGasto()">📤 Enviar a Portal de Pagos</button>
   </div>
 
   <!-- RESULTS -->
@@ -1507,6 +1595,9 @@ function resetAll(){
   document.getElementById('adjustSection').style.display='none';
   document.getElementById('fileInput').value='';
   document.getElementById('gastosPanel').style.display='none';
+  document.getElementById('invoiceHeaderCard').classList.remove('visible');
+  document.getElementById('ihcDuplicateWarn').classList.remove('visible');
+  document.getElementById('ihcDateWarn').classList.remove('visible');
   const p2thumb = document.getElementById('page2Thumb'); if(p2thumb) p2thumb.style.display='none';
   const procBtn = document.getElementById('processBtn'); if(procBtn) procBtn.innerHTML='🔍 Analizar con Claude';
   _page2Mode = false; _page2Base64 = null;
@@ -1676,6 +1767,14 @@ function findSupplierMatch(invoiceSup){
   for(const s of SUPPLIERS_DB){const sn=normalize(s);if((sn.length>3)&&(sn.includes(n)||n.includes(sn)))return{name:s,matchType:'partial'};}
   const words=n.split(/\s+/).filter(w=>w.length>2);
   if(words.length){let best=null,bs=0;for(const s of SUPPLIERS_DB){const sw=normalize(s).split(/\s+/);const ov=words.filter(w=>sw.includes(w)).length;const sc=ov/Math.max(words.length,sw.length||1);if(sc>bs){bs=sc;best=s;}}if(bs>=0.4)return{name:best,matchType:'fuzzy'};}
+  // Phase 1.4: Also check against unique proveedores from allGastos (localStorage)
+  try {
+    const gastos = JSON.parse(localStorage.getItem('nb_gastos')||'[]');
+    const uniqueProvs = [...new Set(gastos.map(g=>g.proveedor).filter(Boolean))];
+    for(const p of uniqueProvs) if(normalize(p)===n) return{name:p,matchType:'exact'};
+    for(const p of uniqueProvs){const pn=normalize(p);if((pn.length>3)&&(pn.includes(n)||n.includes(pn)))return{name:p,matchType:'partial'};}
+    if(words.length){let best=null,bs=0;for(const p of uniqueProvs){const pw=normalize(p).split(/\s+/);const ov=words.filter(w=>pw.includes(w)).length;const sc=ov/Math.max(words.length,pw.length||1);if(sc>bs){bs=sc;best=p;}}if(bs>=0.4)return{name:best,matchType:'fuzzy'};}
+  } catch(e) { console.log('allGastos supplier lookup error:', e); }
   return null;
 }
 
@@ -1923,7 +2022,11 @@ async function processInvoice(){
   const btn=document.getElementById('processBtn');
   const hasPage2 = !!_page2Base64;
   btn.innerHTML='<span class="spinner"></span> Analizando'+(hasPage2?' 2 páginas':'')+'...'; btn.disabled=true;
+  const todayStr = new Date().toISOString().slice(0,10);
+  const currentYear = new Date().getFullYear();
   const prompt=`Analiza esta factura/remisión de proveedor de alimentos mexicano.${hasPage2 ? ' Son 2 páginas de la MISMA factura — combina toda la información en un solo resultado.' : ''} Extrae TODOS los productos.
+
+Hoy es ${todayStr}. Las fechas deben ser recientes (últimos 60 días normalmente). Si el año no es claramente visible, usa ${currentYear}. NUNCA asumas un año anterior al actual a menos que sea claramente legible.
 
 REGLAS CRÍTICAS para precios:
 - precio_unitario: precio por UNA unidad exactamente como aparece en la factura (por garrafa, por caja, por pieza, por kg, etc.)
@@ -2015,6 +2118,10 @@ function renderResults(parsed){
     supChipHTML=`<div id="supChip" class="stat-chip sup-chip sup-none" onclick="openSupplierAssign(this,'${currentSupplier.replace(/'/g,"\\'")}')">🏪 <strong>${currentSupplier}</strong><span class="sup-assign-tag">Asignar</span></div>`;
   }
   document.getElementById('statsRow').innerHTML=supChipHTML+`<div class="stat-chip">📅 ${parsed.fecha||'—'}</div><div class="stat-chip editable-total" id="totalChip" onclick="startTotalEdit()" title="Click para editar total">💰 <span id="totalDisplay">$${currentInvoiceTotal.toFixed(2)}</span> <span class="cell-edit-hint">✏️</span></div><div class="stat-chip" style="background:#e8eaf6">📚 Aprendidos: <strong>${learned}</strong></div><div class="stat-chip" style="background:#e8f5e9">✓ Exactos: <strong>${exact}</strong></div><div class="stat-chip" style="background:#fff8e1">≈ Parciales: <strong>${fuzzy}</strong></div>${none?'<div class="stat-chip" style="background:#ffebee">✗ Sin match: <strong>'+none+'</strong></div>':''}`;
+
+  // ── Phase 1.1: Populate Invoice Header Card ──
+  populateInvoiceHeaderCard(parsed);
+
   document.getElementById('resultsBody').innerHTML=currentItems.map((it,i)=>{
     const m=it._match,bc=m?m.c:0;
     const fp=it.precio_base||it.precio_unitario||0;
@@ -2029,7 +2136,9 @@ function renderResults(parsed){
   // Page 2 thumb is in preview section — no action needed here
   renderAdjList();
   updateGastosPanel();
-  document.getElementById('resultsSection').scrollIntoView({behavior:'smooth'});
+  // Show the header card and scroll to it
+  document.getElementById('invoiceHeaderCard').classList.add('visible');
+  document.getElementById('invoiceHeaderCard').scrollIntoView({behavior:'smooth'});
 }
 
 // ══════════════════════════════════════════════
@@ -2062,7 +2171,12 @@ function renderHistory(){
   document.getElementById('historyCount').textContent='('+h.length+')';
   const el=document.getElementById('historyList');
   if(!h.length){el.innerHTML='<p class="mapping-empty">Sin historial.</p>';return;}
-  el.innerHTML='<div class="history-row hdr"><span>Fecha</span><span>Ingrediente</span><span>Precio</span><span>Unidad</span><span>Proveedor</span></div>'+h.slice(-60).reverse().map(r=>`<div class="history-row"><span>${r.date}</span><span>${r.bd_name}</span><span>$${parseFloat(r.price).toFixed(2)}</span><span>${r.unit}</span><span>${r.provider}</span></div>`).join('');
+  // Phase 1.5: Show all history, with "Ver todo" toggle if >10
+  const sorted = [...h].reverse();
+  const showAll = sorted.length <= 10 || document.getElementById('historyBody')?.dataset.showAll === 'true';
+  const visible = showAll ? sorted : sorted.slice(0, 10);
+  el.innerHTML='<div class="history-row hdr"><span>Fecha</span><span>Ingrediente</span><span>Precio</span><span>Unidad</span><span>Proveedor</span></div>'+visible.map(r=>`<div class="history-row"><span>${r.date}</span><span>${r.bd_name}</span><span>$${parseFloat(r.price).toFixed(2)}</span><span>${r.unit}</span><span>${r.provider}</span></div>`).join('')
+    + (sorted.length > 10 && !showAll ? `<div style="text-align:center;margin-top:8px"><button class="btn btn-outline btn-small" onclick="document.getElementById('historyBody').dataset.showAll='true';renderHistory()">Ver todo (${sorted.length})</button></div>` : '');
 }
 function exportCSV(){
   if(!currentItems.length){showToast('Sin datos');return;}
@@ -2431,10 +2545,148 @@ function getSupplierFormaPago(supplierName) {
   return '';
 }
 
+// ══════════════════════════════════════════════
+// INVOICE HEADER CARD (Phase 1.1, 1.2, 1.6)
+// ══════════════════════════════════════════════
+function populateInvoiceHeaderCard(parsed) {
+  const card = document.getElementById('invoiceHeaderCard');
+  // Fecha
+  const fechaInput = document.getElementById('ihcFecha');
+  const fechaRaw = parsed.fecha || new Date().toISOString().slice(0,10);
+  fechaInput.value = fechaRaw;
+  // Date sanity check (Phase 1.2)
+  checkDateSanity(fechaRaw);
+  // Proveedor
+  const provInput = document.getElementById('ihcProveedor');
+  const supBadge = document.getElementById('ihcSupBadge');
+  const sup = currentSupMatch ? currentSupMatch.name : (currentSupplier || '');
+  provInput.value = sup;
+  if (currentSupMatch) {
+    supBadge.style.display = 'inline-block';
+    supBadge.className = 'ihc-supplier-badge ihc-badge-matched';
+    supBadge.textContent = currentSupMatch.matchType === 'learned' ? '📚 Guardado' : currentSupMatch.matchType === 'exact' ? '✓ Exacto' : '≈ Parcial';
+  } else if (currentSupplier) {
+    supBadge.style.display = 'inline-block';
+    supBadge.className = 'ihc-supplier-badge ihc-badge-new';
+    supBadge.textContent = '⚠️ Nuevo proveedor';
+  } else {
+    supBadge.style.display = 'none';
+  }
+  // Folio
+  document.getElementById('ihcFolio').value = parsed.numero_factura || '';
+  // Total
+  document.getElementById('ihcTotal').value = currentInvoiceTotal.toFixed(2);
+  // Tipo documento chips
+  const tipoVal = parsed.tipo_documento || 'Factura';
+  document.querySelectorAll('#ihcTipoChips .gsm-chip').forEach(btn => {
+    btn.classList.toggle('gsm-chip-active', btn.textContent === tipoVal);
+  });
+  // Auto-populate forma de pago from PROVEEDORES
+  const autoForma = getSupplierFormaPago(sup);
+  const formaSelect = document.getElementById('ihcForma');
+  if (autoForma) formaSelect.value = autoForma;
+  // Auto-populate categoría from PROVEEDORES
+  const provInfo = getProveedorInfo(sup);
+  if (provInfo && provInfo.catGasto) {
+    const catSelect = document.getElementById('ihcCategoria');
+    for (const opt of catSelect.options) {
+      if (normalize(opt.value) === normalize(provInfo.catGasto) || opt.value === provInfo.catGasto) {
+        catSelect.value = opt.value; break;
+      }
+    }
+  }
+  // Update summary
+  updateIhcSummary();
+  // Duplicate detection (Phase 1.6)
+  checkDuplicateInvoice(sup, currentInvoiceTotal, fechaRaw);
+}
+
+function checkDateSanity(dateStr) {
+  const warnEl = document.getElementById('ihcDateWarn');
+  const fechaInput = document.getElementById('ihcFecha');
+  if (!dateStr) { warnEl.classList.remove('visible'); fechaInput.classList.remove('date-warning'); return; }
+  const invoiceDate = new Date(dateStr + 'T12:00:00');
+  const today = new Date();
+  const diffDays = Math.round((today - invoiceDate) / (1000*60*60*24));
+  if (diffDays > 60 || diffDays < -30) {
+    document.getElementById('ihcDateWarnText').textContent = dateStr;
+    warnEl.classList.add('visible');
+    fechaInput.classList.add('date-warning');
+  } else {
+    warnEl.classList.remove('visible');
+    fechaInput.classList.remove('date-warning');
+  }
+}
+
+function onIhcFechaChange() {
+  const val = document.getElementById('ihcFecha').value;
+  if (lastParsed) lastParsed.fecha = val;
+  checkDateSanity(val);
+  updateIhcSummary();
+}
+
+function onIhcTotalChange() {
+  const val = parseFloat(document.getElementById('ihcTotal').value) || 0;
+  currentInvoiceTotal = val;
+  // Update the stats row total too
+  const td = document.getElementById('totalDisplay');
+  if (td) td.textContent = '$' + val.toFixed(2);
+  updateIhcSummary();
+}
+
+function setIhcTipo(tipo, btn) {
+  if (lastParsed) lastParsed.tipo_documento = tipo;
+  document.querySelectorAll('#ihcTipoChips .gsm-chip').forEach(b => b.classList.toggle('gsm-chip-active', b === btn));
+}
+
+function updateIhcSummary() {
+  const sup = document.getElementById('ihcProveedor').value || '';
+  const creditDays = getSupplierCreditDays(sup);
+  const fechaCompra = document.getElementById('ihcFecha').value || new Date().toISOString().slice(0,10);
+  const adjTotal = getAdjTotal();
+  const finalTotal = Math.max(0, currentInvoiceTotal - adjTotal);
+  document.getElementById('ihcTotalPagar').textContent = '$' + finalTotal.toFixed(2);
+  let creditLabel = '⚡ Pago inmediato';
+  if (creditDays > 0) {
+    const d = new Date(fechaCompra + 'T12:00:00');
+    d.setDate(d.getDate() + creditDays);
+    creditLabel = `⏳ Crédito ${creditDays} días (pago ~${d.toISOString().slice(0,10)})`;
+  }
+  document.getElementById('ihcCreditInfo').textContent = creditLabel;
+}
+
+function checkDuplicateInvoice(proveedor, total, fecha) {
+  const warnEl = document.getElementById('ihcDuplicateWarn');
+  const textEl = document.getElementById('ihcDupText');
+  if (!proveedor || !total) { warnEl.classList.remove('visible'); return; }
+  const gastos = JSON.parse(localStorage.getItem('nb_gastos') || '[]');
+  const normalProv = normalize(proveedor);
+  const duplicates = gastos.filter(g => {
+    if (normalize(g.proveedor||'') !== normalProv) return false;
+    if (Math.abs((g.monto_pagar || g.monto_factura || 0) - total) > 0.50) return false;
+    // Check if fecha is within 3 days
+    if (fecha && g.fecha_compra) {
+      const diff = Math.abs(new Date(fecha+'T12:00:00') - new Date(g.fecha_compra+'T12:00:00')) / (1000*60*60*24);
+      if (diff > 3) return false;
+    }
+    return true;
+  });
+  if (duplicates.length > 0) {
+    const dup = duplicates[0];
+    textEl.textContent = `Ya existe una factura de "${dup.proveedor}" por $${(dup.monto_pagar||dup.monto_factura||0).toFixed(2)} del ${dup.fecha_compra} (folio: ${dup.folio||'sin folio'})`;
+    warnEl.classList.add('visible');
+  } else {
+    warnEl.classList.remove('visible');
+  }
+}
+
 function updateGastosPanel(){
   const panel = document.getElementById('gastosPanel');
   if(!currentItems.length || !lastParsed){ panel.style.display='none'; return; }
-  panel.style.display='block';
+  // Phase 1.1: Hide old gastos panel — header card handles everything now
+  panel.style.display='none';
+  // Keep updating header card summary for adjustments
+  updateIhcSummary();
   const adjTotal   = getAdjTotal();
   const finalTotal = Math.max(0, currentInvoiceTotal - adjTotal);
   const sup = currentSupMatch ? currentSupMatch.name : (currentSupplier||'—');
@@ -2528,19 +2780,34 @@ async function syncPricesToMateriaPrima(scriptUrl){
 // The canonical ingredient name in MATERIA PRIMA stays unchanged; display names are in localStorage 'nb_pref_names'
 
 function enviarGasto(){
-  const forma     = document.getElementById('gastoForma').value;
-  const categoria = document.getElementById('gastoCategoria').value;
+  // Phase 1.1: Read from Invoice Header Card instead of old gastos panel
+  const forma     = document.getElementById('ihcForma').value || document.getElementById('gastoForma').value;
+  const categoria = document.getElementById('ihcCategoria').value || document.getElementById('gastoCategoria').value;
   if(!forma){ showToast('⚠️ Selecciona la forma de pago', 3000); return; }
   const adjTotal   = getAdjTotal();
   const finalTotal = Math.max(0, currentInvoiceTotal - adjTotal);
-  const sup        = currentSupMatch ? currentSupMatch.name : (currentSupplier||'');
+  // Read supplier from header card input (user may have edited it)
+  const ihcProv = document.getElementById('ihcProveedor').value.trim();
+  const sup = ihcProv || (currentSupMatch ? currentSupMatch.name : (currentSupplier||''));
   const creditDays = getSupplierCreditDays(sup);
-  const fechaCompra = lastParsed.fecha || new Date().toISOString().slice(0,10);
-  let fechaPago = fechaCompra;
-  if(creditDays > 0){
-    const d = new Date(fechaCompra + 'T12:00:00');
-    d.setDate(d.getDate() + creditDays);
-    fechaPago = d.toISOString().slice(0,10);
+  // Read fecha from header card (user may have corrected it)
+  const fechaCompra = document.getElementById('ihcFecha').value || lastParsed.fecha || new Date().toISOString().slice(0,10);
+  // Phase 1.3: Fix fecha_pago for Transferencia
+  let fechaPago = '';
+  const isTransferencia = forma.toLowerCase().includes('transferencia');
+  if (isTransferencia) {
+    if (creditDays > 0) {
+      // Has credit days → set due date
+      const d = new Date(fechaCompra + 'T12:00:00');
+      d.setDate(d.getDate() + creditDays);
+      fechaPago = d.toISOString().slice(0,10);
+    } else {
+      // No credit days → leave empty, mom assigns it
+      fechaPago = '';
+    }
+  } else {
+    // Efectivo, tarjeta, etc. → already paid at purchase
+    fechaPago = fechaCompra;
   }
   // Create thumbnail of invoice photo (compressed, max 800px wide)
   let fotoThumb = '';
@@ -2562,7 +2829,7 @@ function enviarGasto(){
   }
   const gasto = {
     id           : 'G' + Date.now(),
-    folio        : lastParsed.numero_factura || '',
+    folio        : document.getElementById('ihcFolio').value || lastParsed.numero_factura || '',
     tipo_documento: lastParsed.tipo_documento || '',
     proveedor    : sup,
     proveedor_raw: currentSupplier||'',
