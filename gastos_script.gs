@@ -301,7 +301,7 @@ function updateStatus(body) {
 
 function updateDate(body) {
   const { id, fecha_pago, estado, version } = body;
-  if (!id || !fecha_pago) throw new Error('Missing id or fecha_pago');
+  if (!id || (!fecha_pago && !estado)) throw new Error('Missing id and both fecha_pago/estado');
   const sheet = getOrCreateTab(FACTURAS_TAB, FACTURAS_HEADERS);
   const data  = sheet.getDataRange().getValues();
 
@@ -311,8 +311,10 @@ function updateDate(body) {
       const vc = checkVersionAndBump(sheet, i + 1, version);
       if (!vc.ok) return vc;
 
-      const fpCol = FACTURAS_HEADERS.indexOf('Fecha_Pago') + 1;
-      sheet.getRange(i + 1, fpCol).setValue(fecha_pago);
+      if (fecha_pago) {
+        const fpCol = FACTURAS_HEADERS.indexOf('Fecha_Pago') + 1;
+        sheet.getRange(i + 1, fpCol).setValue(fecha_pago);
+      }
       if (estado) {
         const esCol = FACTURAS_HEADERS.indexOf('Estado') + 1;
         sheet.getRange(i + 1, esCol).setValue(estado);
@@ -998,20 +1000,117 @@ function processSyncBatch(body) {
   const ops = body.operations || [];
   if (!ops.length) return { ok: true, results: [], message: 'No operations' };
 
+  // ── Optimized path: batch FACTURAS updates with a SINGLE sheet read ──
+  const facturasActions = new Set(['update_status', 'update_date', 'update_factura']);
+  const facturasOps = ops.filter(op => facturasActions.has(op.action));
+  const otherOps    = ops.filter(op => !facturasActions.has(op.action));
+
   const results = [];
-  for (const op of ops) {
+
+  // Process FACTURAS ops efficiently — one sheet read for all of them
+  if (facturasOps.length > 0) {
+    try {
+      const sheet = getOrCreateTab(FACTURAS_TAB, FACTURAS_HEADERS);
+      const data  = sheet.getDataRange().getValues();
+      const vCol  = FACTURAS_HEADERS.indexOf('Version') + 1;
+
+      // Build row-index map: id → sheet row index (1-based)
+      const rowMap = {};
+      for (let i = 1; i < data.length; i++) {
+        rowMap[String(data[i][0])] = i; // 0-based data index; sheet row = i+1
+      }
+
+      for (const op of facturasOps) {
+        try {
+          const rowIdx = rowMap[String(op.id)];
+          if (rowIdx === undefined) {
+            results.push({ queue_id: op.queue_id || null, ok: false, error: 'Not found: ' + op.id });
+            continue;
+          }
+          const sheetRow = rowIdx + 1;
+
+          // Version check & bump
+          let newVersion = null;
+          if (vCol > 0) {
+            const sheetVersion = parseInt(data[rowIdx][vCol - 1]) || 0;
+            const cv = op.version !== undefined && op.version !== null && op.version !== '' ? parseInt(op.version) : NaN;
+            if (!isNaN(cv) && cv !== sheetVersion) {
+              results.push({ queue_id: op.queue_id || null, ok: false, result: {
+                ok: false, conflict: true, sheetVersion, clientVersion: cv,
+                message: 'Conflict: v' + cv + ' vs v' + sheetVersion
+              }});
+              continue;
+            }
+            newVersion = sheetVersion + 1;
+            sheet.getRange(sheetRow, vCol).setValue(newVersion);
+            data[rowIdx][vCol - 1] = newVersion; // keep map updated
+          }
+
+          // Dispatch by action type (NO extra sheet reads)
+          if (op.action === 'update_status') {
+            if (!op.estado) { results.push({ queue_id: op.queue_id || null, ok: false, error: 'Missing estado' }); continue; }
+            // Save comprobante PDF if provided
+            let compValue = op.comprobante || '';
+            if (op.pdf_base64 && op.pdf_base64.length > 100) {
+              try {
+                const folioCol = FACTURAS_HEADERS.indexOf('Folio');
+                const rowFolio = folioCol >= 0 ? String(data[rowIdx][folioCol] || '') : '';
+                compValue = saveComprobanteToDrive(op.id, op.pdf_base64, op.proveedor || 'pago', rowFolio);
+              } catch(err) { log('COMP_PDF_ERROR', op.id + ': ' + err.message); }
+            }
+            const estadoCol = FACTURAS_HEADERS.indexOf('Estado') + 1;
+            const realCol   = FACTURAS_HEADERS.indexOf('Fecha_Pago_Real') + 1;
+            const compCol   = FACTURAS_HEADERS.indexOf('Comprobante') + 1;
+            sheet.getRange(sheetRow, estadoCol).setValue(op.estado);
+            if (op.fecha_pago_real) sheet.getRange(sheetRow, realCol).setValue(op.fecha_pago_real);
+            if (compValue) sheet.getRange(sheetRow, compCol).setValue(compValue);
+            results.push({ queue_id: op.queue_id || null, ok: true, result: { ok: true, message: 'Status updated', version: newVersion } });
+
+          } else if (op.action === 'update_date') {
+            if (!op.fecha_pago && !op.estado) { results.push({ queue_id: op.queue_id || null, ok: false, error: 'Missing fecha_pago and estado' }); continue; }
+            if (op.fecha_pago) {
+              const fpCol = FACTURAS_HEADERS.indexOf('Fecha_Pago') + 1;
+              sheet.getRange(sheetRow, fpCol).setValue(op.fecha_pago);
+            }
+            if (op.estado) {
+              const esCol = FACTURAS_HEADERS.indexOf('Estado') + 1;
+              sheet.getRange(sheetRow, esCol).setValue(op.estado);
+            }
+            results.push({ queue_id: op.queue_id || null, ok: true, result: { ok: true, message: 'Date updated', version: newVersion } });
+
+          } else if (op.action === 'update_factura') {
+            const editableFields = ['Proveedor','Folio','Tipo_Documento','Fecha_Compra','Monto_Factura','Ajustes','Monto_Pagar','Forma_Pago','Categoria','Credit_Days','Fecha_Pago','Estado'];
+            editableFields.forEach(field => {
+              if (op[field] !== undefined) {
+                const col = FACTURAS_HEADERS.indexOf(field) + 1;
+                if (col > 0) sheet.getRange(sheetRow, col).setValue(op[field]);
+              }
+            });
+            results.push({ queue_id: op.queue_id || null, ok: true, result: { ok: true, message: 'Factura updated', version: newVersion } });
+          }
+        } catch(err) {
+          results.push({ queue_id: op.queue_id || null, ok: false, error: err.message });
+        }
+      }
+    } catch(sheetErr) {
+      // If the sheet itself fails, mark all facturas ops as failed
+      facturasOps.forEach(op => {
+        results.push({ queue_id: op.queue_id || null, ok: false, error: 'Sheet error: ' + sheetErr.message });
+      });
+    }
+  }
+
+  // Process non-FACTURAS ops normally (create, inventory, orders, etc.)
+  for (const op of otherOps) {
     try {
       let result;
       switch (op.action) {
         case 'create':         result = createFactura(op); break;
-        case 'update_status':  result = updateStatus(op); break;
-        case 'update_date':    result = updateDate(op); break;
-        case 'update_factura': result = updateFactura(op); break;
         case 'log_inventory':  result = logInventoryCounts(op); break;
         case 'save_order':     result = saveOrder(op); break;
         case 'update_order':   result = updateOrder(op); break;
         case 'audit':          result = writeAudit(op); break;
-        // Cortes & Ingresos (offline-sync support)
+        case 'add_proveedor':  result = addProveedorFromPortal ? addProveedorFromPortal(op) : { ok: false, error: 'Not implemented' }; break;
         case 'save_corte_individual': result = saveCorteIndividual(op); break;
         case 'save_corte_tienda':     result = saveCorteTienda(op); break;
         case 'save_arqueo':           result = saveArqueo(op); break;
@@ -1019,7 +1118,6 @@ function processSyncBatch(body) {
         case 'save_ingreso':          result = saveIngreso(op); break;
         default: result = { ok: false, error: 'Unknown action: ' + op.action };
       }
-      // If the inner function returned a conflict, bubble it up as not-ok
       if (result && result.conflict) {
         results.push({ queue_id: op.queue_id || null, ok: false, result });
       } else {

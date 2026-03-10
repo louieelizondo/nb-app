@@ -590,18 +590,27 @@ function enqueueSync(payload){
   processSyncQueue(); // try immediately
 }
 
+let _syncProcessing = false;
 async function processSyncQueue(){
   const url = getScriptUrl();
-  if(!url || syncQueue.length === 0) { updateSyncIndicator(); return; }
+  if(!url || syncQueue.length === 0 || _syncProcessing) { updateSyncIndicator(); return; }
+  _syncProcessing = true;
+  updateSyncIndicator();
 
-  // Take up to 10 items for a batch
-  const batch = syncQueue.slice(0, 10);
+  // Larger batches — backend now reads sheet once for all FACTURAS ops
+  const BATCH_SIZE = 25;
+  const batch = syncQueue.slice(0, BATCH_SIZE);
   try {
+    // 45-second timeout to avoid hanging forever
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 45000);
     const resp = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain' },
-      body: JSON.stringify({ action: 'sync_batch', operations: batch })
+      body: JSON.stringify({ action: 'sync_batch', operations: batch }),
+      signal: controller.signal
     });
+    clearTimeout(timeoutId);
     const data = await resp.json();
     if(data.ok && data.results){
       // Remove successfully processed items
@@ -611,24 +620,28 @@ async function processSyncQueue(){
         const op = batch.find(b => b.queue_id === r.queue_id);
         if(op && op.id) updateLocalVersion(op.id, r.result.version);
       });
-      // Phase 2.6: Handle version conflicts — auto-sync and show clear message
+      // Handle version conflicts — remove from queue + auto-sync
       const conflicts = data.results.filter(r => !r.ok && r.result && r.result.conflict);
       if(conflicts.length > 0){
-        conflicts.forEach(c => doneIds.add(c.queue_id)); // remove from queue, no retry
-        showToast('🔄 Datos actualizados desde otro dispositivo. Sincronizando…', 4000);
-        // Auto-sync to get latest data
+        conflicts.forEach(c => doneIds.add(c.queue_id));
+        showToast('🔄 Conflictos resueltos: ' + conflicts.length + '. Sincronizando…', 4000);
         setTimeout(() => syncFromSheet(), 500);
       }
+      // Also remove items with permanent errors (not-found, missing fields) — no point retrying
+      const permErrors = data.results.filter(r => !r.ok && !r.result?.conflict && (r.error||'').match(/Not found|Missing/i));
+      permErrors.forEach(e => doneIds.add(e.queue_id));
+
       syncQueue = syncQueue.filter(item => !doneIds.has(item.queue_id));
-      // Items that failed (non-conflict) stay in queue for retry
-      const failed = data.results.filter(r => !r.ok && !(r.result && r.result.conflict));
-      if(failed.length > 0) console.warn('Sync failures:', failed);
+      const failed = data.results.filter(r => !r.ok && !(r.result && r.result.conflict) && !permErrors.includes(r));
+      if(failed.length > 0) console.warn('Sync failures (will retry):', failed);
     }
     saveSyncQueue();
-    // If more items remain, process next batch
-    if(syncQueue.length > 0) setTimeout(processSyncQueue, 1000);
+    _syncProcessing = false;
+    updateSyncIndicator();
+    if(syncQueue.length > 0) setTimeout(processSyncQueue, 800);
   } catch(e){
-    console.log('Sync queue offline, will retry:', e.message);
+    _syncProcessing = false;
+    console.log('Sync queue error, will retry:', e.message);
     updateSyncIndicator();
     scheduleSyncRetry();
   }
@@ -652,10 +665,39 @@ function updateSyncIndicator(){
     txt.textContent = 'Sin conexión';
   } else if(syncQueue.length > 0){
     el.className = 'sync-indicator pending';
-    txt.textContent = syncQueue.length + ' pendiente' + (syncQueue.length > 1 ? 's' : '');
+    txt.textContent = (_syncProcessing ? '⏳ ' : '') + syncQueue.length + ' pendiente' + (syncQueue.length > 1 ? 's' : '');
+    el.title = 'Toca para opciones de cola';
+    el.onclick = showSyncQueueMenu;
   } else {
     el.className = 'sync-indicator synced';
     txt.textContent = 'Sincronizado';
+    el.title = '';
+    el.onclick = null;
+  }
+}
+
+function showSyncQueueMenu(){
+  if(syncQueue.length === 0) return;
+  const actions = [
+    '🔄 Reintentar ahora',
+    '🗑️ Vaciar cola (' + syncQueue.length + ' items)',
+    'Cancelar'
+  ];
+  const choice = prompt(
+    'Cola de sincronización: ' + syncQueue.length + ' pendientes\n\n' +
+    '1 = Reintentar ahora\n' +
+    '2 = Vaciar cola (descarta cambios no sincronizados)\n' +
+    '0 = Cancelar'
+  );
+  if(choice === '1'){
+    processSyncQueue();
+  } else if(choice === '2'){
+    if(confirm('¿Seguro? Se perderán ' + syncQueue.length + ' cambios no sincronizados.\nLos datos en la hoja de cálculo NO se afectan.')){
+      syncQueue = [];
+      saveSyncQueue();
+      updateSyncIndicator();
+      showToast('Cola vaciada. Sincroniza para recargar datos.', 3000);
+    }
   }
 }
 
