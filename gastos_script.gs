@@ -89,6 +89,11 @@ function doGet(e) {
       case 'get_faltante_history': return jsonResp(getFaltanteHistory(e.parameter));
       case 'get_mesa_sales':       return jsonResp(getMesaSales(e.parameter));
       case 'get_config_cajas':     return jsonResp({ cajas: getConfigCajas() });
+      // Shopify API
+      case 'get_shopify_daily_summary': return jsonResp(getShopifyDailySummary(e.parameter));
+      case 'get_shopify_products':      return jsonResp(getShopifyProducts(e.parameter));
+      case 'get_shopify_inventory':     return jsonResp(getShopifyInventory(e.parameter));
+      case 'shopify_health':            return jsonResp(shopifyHealthCheck());
       default:              return jsonResp({ error: 'Unknown action: ' + action }, 400);
     }
   } catch(err) {
@@ -341,11 +346,12 @@ function updateFactura(body) {
   const sheet = getOrCreateTab(FACTURAS_TAB, FACTURAS_HEADERS);
   const data  = sheet.getDataRange().getValues();
 
-  // Fields that can be updated via inline edit
+  // Fields that can be updated via inline edit (Phase 2.8: added Fecha_Pago, Estado)
   const editableFields = [
     'Proveedor', 'Folio', 'Tipo_Documento', 'Fecha_Compra',
     'Monto_Factura', 'Ajustes', 'Monto_Pagar',
-    'Forma_Pago', 'Categoria', 'Credit_Days'
+    'Forma_Pago', 'Categoria', 'Credit_Days',
+    'Fecha_Pago', 'Estado'
   ];
 
   for (let i = 1; i < data.length; i++) {
