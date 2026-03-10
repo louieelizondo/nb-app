@@ -620,12 +620,11 @@ async function processSyncQueue(){
         const op = batch.find(b => b.queue_id === r.queue_id);
         if(op && op.id) updateLocalVersion(op.id, r.result.version);
       });
-      // Handle version conflicts — remove from queue + auto-sync
+      // Handle version conflicts — remove from queue (sync after queue fully drains)
       const conflicts = data.results.filter(r => !r.ok && r.result && r.result.conflict);
       if(conflicts.length > 0){
         conflicts.forEach(c => doneIds.add(c.queue_id));
-        showToast('🔄 Conflictos resueltos: ' + conflicts.length + '. Sincronizando…', 4000);
-        setTimeout(() => syncFromSheet(), 500);
+        showToast('🔄 Conflictos resueltos: ' + conflicts.length, 3000);
       }
       // Also remove items with permanent errors (not-found, missing fields) — no point retrying
       const permErrors = data.results.filter(r => !r.ok && !r.result?.conflict && (r.error||'').match(/Not found|Missing/i));
@@ -638,7 +637,13 @@ async function processSyncQueue(){
     saveSyncQueue();
     _syncProcessing = false;
     updateSyncIndicator();
-    if(syncQueue.length > 0) setTimeout(processSyncQueue, 800);
+    if(syncQueue.length > 0) {
+      setTimeout(processSyncQueue, 800);
+    } else {
+      // Queue fully drained — auto-sync to get latest data from sheet
+      showToast('✅ Cola procesada. Recargando datos…', 2000);
+      setTimeout(() => syncFromSheet(true), 1000);
+    }
   } catch(e){
     _syncProcessing = false;
     console.log('Sync queue error, will retry:', e.message);
@@ -671,32 +676,40 @@ function updateSyncIndicator(){
   } else {
     el.className = 'sync-indicator synced';
     txt.textContent = 'Sincronizado';
-    el.title = '';
-    el.onclick = null;
+    el.title = 'Toca para herramientas de sync';
+    el.onclick = showSyncQueueMenu;
   }
 }
 
 function showSyncQueueMenu(){
-  if(syncQueue.length === 0) return;
-  const actions = [
-    '🔄 Reintentar ahora',
-    '🗑️ Vaciar cola (' + syncQueue.length + ' items)',
-    'Cancelar'
-  ];
+  const qLen = syncQueue.length;
+  const total = allGastos.length;
   const choice = prompt(
-    'Cola de sincronización: ' + syncQueue.length + ' pendientes\n\n' +
-    '1 = Reintentar ahora\n' +
-    '2 = Vaciar cola (descarta cambios no sincronizados)\n' +
+    'Herramientas de sincronización\n' +
+    (qLen > 0 ? 'Cola: ' + qLen + ' pendientes\n' : '') +
+    'Datos locales: ' + total + ' facturas\n\n' +
+    '1 = ' + (qLen > 0 ? 'Reintentar cola ahora' : 'Sincronizar ahora') + '\n' +
+    (qLen > 0 ? '2 = Vaciar cola (descarta cambios no sincronizados)\n' : '') +
+    '3 = 🔥 Resync completo (borra datos locales + recarga del Sheet)\n' +
     '0 = Cancelar'
   );
   if(choice === '1'){
-    processSyncQueue();
-  } else if(choice === '2'){
-    if(confirm('¿Seguro? Se perderán ' + syncQueue.length + ' cambios no sincronizados.\nLos datos en la hoja de cálculo NO se afectan.')){
+    if(qLen > 0) processSyncQueue();
+    else syncFromSheet(true);
+  } else if(choice === '2' && qLen > 0){
+    if(confirm('¿Seguro? Se perderán ' + qLen + ' cambios no sincronizados.\nLos datos en la hoja de cálculo NO se afectan.')){
       syncQueue = [];
       saveSyncQueue();
       updateSyncIndicator();
       showToast('Cola vaciada. Sincroniza para recargar datos.', 3000);
+    }
+  } else if(choice === '3'){
+    if(confirm('⚠️ Esto borra TODOS los datos locales y recarga del Sheet.\n¿Continuar?')){
+      syncQueue = [];
+      saveSyncQueue();
+      allGastos = [];
+      saveGastos();
+      syncFromSheet(true);
     }
   }
 }
@@ -1417,9 +1430,14 @@ function saveScriptUrl(){
 }
 function getScriptUrl(){ return localStorage.getItem('nb_script_url')||''; }
 
-async function syncFromSheet(){
+async function syncFromSheet(force){
   const url = getScriptUrl();
   if(!url){ showToast('Configura la Script URL primero'); return; }
+  // Block sync while queue is processing (prevents overwriting local paid changes)
+  if(!force && syncQueue.length > 0){
+    showToast('⏳ Esperando a que la cola se vacíe antes de sincronizar…', 3000);
+    return;
+  }
   const btn = document.getElementById('syncBtn');
   const status = document.getElementById('syncStatus');
   btn.innerHTML = '<span class="sync-spinner"></span> Sincronizando…';
@@ -1483,6 +1501,13 @@ async function syncFromSheet(){
     allGastos.forEach(g => { if(g.foto) localMap[g.id] = g.foto; });
     merged.forEach(g => { if(!g.foto_url && localMap[g.id]) g.foto = localMap[g.id]; });
     allGastos = [...merged, ...localOnly];
+    // Deduplicate by ID (safety net against localStorage bloat)
+    const seenIds = new Set();
+    allGastos = allGastos.filter(g => {
+      if(seenIds.has(g.id)) return false;
+      seenIds.add(g.id);
+      return true;
+    });
     saveGastos();
     // Phase 2.1: Rebuild year filter after sync (includes years from new data)
     buildYearFilter();

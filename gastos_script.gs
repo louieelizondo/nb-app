@@ -1029,12 +1029,13 @@ function processSyncBatch(body) {
           }
           const sheetRow = rowIdx + 1;
 
-          // Version check & bump
+          // Version check & bump (skip for update_status — idempotent, safe to force)
           let newVersion = null;
+          const skipVersionCheck = (op.action === 'update_status');
           if (vCol > 0) {
             const sheetVersion = parseInt(data[rowIdx][vCol - 1]) || 0;
             const cv = op.version !== undefined && op.version !== null && op.version !== '' ? parseInt(op.version) : NaN;
-            if (!isNaN(cv) && cv !== sheetVersion) {
+            if (!skipVersionCheck && !isNaN(cv) && cv !== sheetVersion) {
               results.push({ queue_id: op.queue_id || null, ok: false, result: {
                 ok: false, conflict: true, sheetVersion, clientVersion: cv,
                 message: 'Conflict: v' + cv + ' vs v' + sheetVersion
