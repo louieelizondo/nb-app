@@ -366,7 +366,7 @@ tbody tr.editing { background:#fffde7 !important; }
         <th>Fecha Compra</th>
         <th>Monto</th>
         <th>Forma</th>
-        <th>Categoría</th>
+        <!-- Categoría hidden to save horizontal space -->
         <th>Estado</th>
         <th>Acciones</th>
       </tr></thead>
@@ -1212,7 +1212,7 @@ function renderTable(){
         ${g.ajustes?`<div style="font-size:10px;color:#c62828">−$${g.ajustes.toFixed(2)} ajuste</div>`:''}
       </td>
       <td><span class="fp-chip ${fpClass}">${fpIcons[fpKey]} ${g.forma_pago}</span></td>
-      <td style="font-size:11px;color:#7a6b5d">${g.categoria||'—'}</td>
+      <!-- Categoría hidden from table; still in edit panel + mobile card -->
       <td>${estadoBadge}${compRef}</td>
       <td style="white-space:nowrap">${actions}${cfdiBtn}${fotoBtn}</td>
       ${mobileCard}
