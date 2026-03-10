@@ -1154,7 +1154,7 @@ function renderTable(){
       <div class="edit-row">
         <div class="edit-grid">
           <div class="edit-field"><label>Proveedor</label><input type="text" id="ed_prov" value="${(g.proveedor||'').replace(/"/g,'&quot;')}"></div>
-          <div class="edit-field"><label>Folio</label><input type="text" id="ed_folio" value="${(g.folio||'').replace(/"/g,'&quot;')}"></div>
+          <div class="edit-field"><label>Folio</label><input type="text" id="ed_folio" value="${String(g.folio||'').replace(/"/g,'&quot;')}"></div>
           <div class="edit-field"><label>Tipo documento</label><input type="text" id="ed_tipo" value="${(g.tipo_documento||'').replace(/"/g,'&quot;')}"></div>
           <div class="edit-field"><label>Fecha compra</label><input type="date" id="ed_fecha" value="${g.fecha_compra||''}"></div>
           <div class="edit-field"><label>Monto factura</label><input type="number" id="ed_monto" step="0.01" value="${g.monto_factura||g.monto_pagar||0}" oninput="recalcEdit()"></div>
@@ -1457,7 +1457,7 @@ async function syncFromSheet(){
 
     const merged = sheetGastos.map(g => ({
       id           : g.ID || g.id || '',
-      folio        : g.Folio || g.folio || '',
+      folio        : String(g.Folio || g.folio || ''),
       tipo_documento: g.Tipo_Documento || g.tipo_documento || '',
       proveedor    : g.Proveedor || g.proveedor || '',
       proveedor_raw: g.Proveedor_Raw || g.proveedor_raw || '',
