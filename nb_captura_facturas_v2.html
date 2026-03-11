@@ -2792,23 +2792,14 @@ function enviarGasto(){
   const creditDays = getSupplierCreditDays(sup);
   // Read fecha from header card (user may have corrected it)
   const fechaCompra = document.getElementById('ihcFecha').value || lastParsed.fecha || new Date().toISOString().slice(0,10);
-  // Phase 1.3: Fix fecha_pago for Transferencia
+  // Phase 2.5: Transferencia ALWAYS leaves fecha_pago empty — mom assigns manually
   let fechaPago = '';
   const isTransferencia = forma.toLowerCase().includes('transferencia');
-  if (isTransferencia) {
-    if (creditDays > 0) {
-      // Has credit days → set due date
-      const d = new Date(fechaCompra + 'T12:00:00');
-      d.setDate(d.getDate() + creditDays);
-      fechaPago = d.toISOString().slice(0,10);
-    } else {
-      // No credit days → leave empty, mom assigns it
-      fechaPago = '';
-    }
-  } else {
+  if (!isTransferencia) {
     // Efectivo, tarjeta, etc. → already paid at purchase
     fechaPago = fechaCompra;
   }
+  // Transferencia: fechaPago stays '' regardless of creditDays
   // Create thumbnail of invoice photo (compressed, max 800px wide)
   let fotoThumb = '';
   if(currentBase64){
