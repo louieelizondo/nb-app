@@ -56,7 +56,10 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; b
 .badge-pend { background: #fff3e0; color: #e65100; }
 .badge-paid { background: #e8f5e9; color: #2e7d32; }
 .ic-forma { font-size: 11px; color: #7a6b5d; padding: 3px 8px; background: #f5f0eb; border-radius: 8px; }
-.ic-date { font-size: 11px; color: #999; }
+.ic-date { font-size: 13px; color: #666; font-weight: 600; }
+.ic-date .arrow { color: #999; margin: 0 4px; }
+.ic-date .due { color: #c62828; }
+.ic-date .due.ok { color: #2e7d32; }
 .ic-actions { display: flex; gap: 6px; margin-left: auto; }
 .btn-pay { padding: 6px 14px; border: none; border-radius: 8px; background: #43a047; color: white; font-size: 12px; font-weight: 700; cursor: pointer; }
 .btn-pay:hover { background: #2e7d32; }
@@ -396,8 +399,8 @@ function renderList() {
       <div class="ic-meta">
         <span class="ic-badge ${isPaid ? 'badge-paid' : 'badge-pend'}">${isPaid ? 'PAGADO' : 'PENDIENTE'}</span>
         <span class="ic-forma">${fpLabel}</span>
-        <span class="ic-date">${formatDate(f.fecha_compra)}</span>
-        ${f.comprobante ? '<span class="ic-date">📎</span>' : ''}
+        <span class="ic-date">${buildDateDisplay(f)}</span>
+        ${f.comprobante ? '<span class="ic-date" style="font-size:14px">📎</span>' : ''}
         <div class="ic-actions">
           ${!isPaid
             ? `<button class="btn-pay" onclick="event.stopPropagation();openPayModal('${f.id}')">💰 Pagar</button>
@@ -685,6 +688,24 @@ function formatDate(d) {
   const [y, m, dd] = d.split('-');
   const months = ['', 'Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
   return `${parseInt(dd)} ${months[parseInt(m)]} ${y}`;
+}
+function buildDateDisplay(f) {
+  const compra = formatDate(f.fecha_compra);
+  if (f.estado === 'Pagado') {
+    // Paid: show compra → paid date
+    return f.fecha_pago
+      ? `${compra} <span class="arrow">→</span> <span class="due ok">${formatDate(f.fecha_pago)}</span>`
+      : compra;
+  }
+  // Pending: show compra → due date (if exists)
+  if (f.fecha_pago) {
+    const today = todayStr();
+    const isOverdue = f.fecha_pago < today;
+    const isDueSoon = !isOverdue && f.fecha_pago <= new Date(Date.now() + 3*86400000).toISOString().slice(0,10);
+    const cls = isOverdue ? 'due' : (isDueSoon ? 'due' : 'due ok');
+    return `${compra} <span class="arrow">→</span> <span class="${cls}">${formatDate(f.fecha_pago)}${isOverdue ? ' ⚠️' : ''}</span>`;
+  }
+  return compra;
 }
 function esc(s) { return (s || '').replace(/"/g, '&quot;').replace(/'/g, '&#39;'); }
 function fileToBase64(file) {
