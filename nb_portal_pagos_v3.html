@@ -199,11 +199,16 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; b
       <option>Tarjeta débito</option>
       <option>Cheque</option>
     </select>
-    <label>Tipo</label>
+    <label>Tipo de documento</label>
     <select id="manTipo">
       <option>Factura</option>
       <option>Remisión</option>
       <option>Gasto</option>
+    </select>
+    <label>Categoría</label>
+    <select id="manCat">
+      <option>Adquisición de mercancías</option>
+      <option>Gastos generales</option>
     </select>
     <div class="modal-actions">
       <button class="modal-btn cancel" onclick="closeModal('manualModal')">Cancelar</button>
@@ -640,6 +645,7 @@ async function confirmManual() {
   const fechaPago = document.getElementById('manFechaPago').value;
   const forma = document.getElementById('manForma').value;
   const tipo = document.getElementById('manTipo').value;
+  const categoria = document.getElementById('manCat').value;
 
   if (!proveedor) { showToast('Proveedor es obligatorio', 3000, true); return; }
   if (!monto || monto <= 0) { showToast('Monto debe ser mayor a 0', 3000, true); return; }
@@ -662,7 +668,7 @@ async function confirmManual() {
     credit_days: 0,
     comprobante: '',
     created_at: new Date().toISOString(),
-    categoria: tipo === 'Gasto' ? 'Gastos generales' : 'Adquisición de mercancías'
+    categoria: categoria
   };
   if (desc) entry.descripcion = desc;
 
