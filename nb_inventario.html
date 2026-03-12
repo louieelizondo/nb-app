@@ -540,6 +540,14 @@ body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif
     <div style="text-align:center;padding:12px;display:flex;flex-wrap:wrap;gap:8px;justify-content:center">
       <button onclick="seedProductsToSheet()" id="seedBtn" style="background:var(--orange);color:white;border:none;padding:10px 20px;border-radius:8px;font-size:13px;cursor:pointer;display:none">⬆️ Subir productos al Sheet</button>
       <button onclick="sincronizarDesdeMP()" id="syncMPBtn" style="background:#5c6bc0;color:white;border:none;padding:10px 20px;border-radius:8px;font-size:13px;cursor:pointer">🔄 Sync desde Materia Prima</button>
+      <button onclick="syncShopifyProducts()" id="syncShopifyBtn" style="background:#96bf48;color:white;border:none;padding:10px 20px;border-radius:8px;font-size:13px;cursor:pointer">🛍️ Shopify Stock</button>
+    </div>
+    <div id="shopifyProductsPanel" style="display:none;margin-top:12px;border:2px solid #96bf48;border-radius:12px;overflow:hidden">
+      <div style="background:#96bf48;color:white;padding:10px 14px;display:flex;justify-content:space-between;align-items:center">
+        <span style="font-weight:700;font-size:14px">🛍️ Productos Shopify</span>
+        <span id="shopifyProdStatus" style="font-size:12px;opacity:0.9"></span>
+      </div>
+      <div id="shopifyProductsList" style="padding:8px;max-height:400px;overflow-y:auto;font-size:13px"></div>
     </div>
   </div>
 </div>
@@ -629,9 +637,11 @@ body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif
 const STORAGE_KEY = 'nb_inventario_counts';
 const STORAGE_TS = 'nb_inventario_ts';
 const STORAGE_DONE = 'nb_inventario_done_sections';
+const STORAGE_PREV = 'nb_inventario_prev_counts'; // yesterday's counts as defaults
 
 let currentCategory = null;
 let counts = {};      // { productIndex: count }
+let prevCounts = {};  // { productIndex: count } — yesterday's counts (fallback defaults)
 let variantNotes = {}; // { productIndex: "variant text" }
 let doneSections = {}; // { "category|location": true }
 
@@ -678,6 +688,25 @@ function loadState() {
     if (savedDone) doneSections = JSON.parse(savedDone);
     const savedVars = localStorage.getItem('nb_inventario_variants');
     if (savedVars) variantNotes = JSON.parse(savedVars);
+    const savedPrev = localStorage.getItem(STORAGE_PREV);
+    if (savedPrev) prevCounts = JSON.parse(savedPrev);
+
+    // Day rollover: if last save was a different day, archive counts as "yesterday"
+    const lastTs = localStorage.getItem(STORAGE_TS);
+    if (lastTs) {
+      const lastDay = lastTs.slice(0, 10);
+      const today = new Date().toISOString().slice(0, 10);
+      if (lastDay !== today && Object.keys(counts).length > 0) {
+        prevCounts = { ...counts };
+        localStorage.setItem(STORAGE_PREV, JSON.stringify(prevCounts));
+        counts = {};
+        doneSections = {};
+        variantNotes = {};
+        localStorage.setItem(STORAGE_KEY, '{}');
+        localStorage.setItem(STORAGE_DONE, '{}');
+        localStorage.setItem('nb_inventario_variants', '{}');
+      }
+    }
   } catch(e) {}
 }
 
@@ -890,7 +919,7 @@ function renderSections() {
         <div class="items-wrap">`;
 
     items.forEach(item => {
-      const count = counts[item.idx] !== undefined ? counts[item.idx] : item.inv;
+      const count = counts[item.idx] !== undefined ? counts[item.idx] : (prevCounts[item.idx] !== undefined ? prevCounts[item.idx] : item.inv);
       const maxBadge = item.max > 0
         ? `<span id="maxbadge-${item.idx}" class="max-tap" onclick="toggleMinMax(${item.idx})">Máx: ${item.max} ✏️</span>`
         : `<span id="maxbadge-${item.idx}" class="no-max-tap" onclick="toggleMinMax(${item.idx})">⚙️ Fijar máx</span>`;
@@ -910,7 +939,7 @@ function renderSections() {
               <button onclick="adj(${item.idx},-1)">−</button>
               <input type="number" id="cnt-${item.idx}" value="${count}"
                      onchange="setCount(${item.idx},this.value)"
-                     inputmode="decimal" step="0.5" min="0">
+                     inputmode="numeric" step="1" min="0">
               <button onclick="adj(${item.idx},1)">+</button>
             </div>
           </div>
@@ -955,9 +984,13 @@ function toggleSection(encodedKey) {
 function adj(idx, delta) {
   const input = document.getElementById('cnt-' + idx);
   let val = parseFloat(input.value) || 0;
-  val = Math.max(0, val + delta);
-  // Round to nearest 0.5
-  val = Math.round(val * 2) / 2;
+  // If value has a fraction, snap to nearest whole in the direction of delta first
+  if (val % 1 !== 0) {
+    val = delta > 0 ? Math.ceil(val) : Math.floor(val);
+  } else {
+    val = val + delta;
+  }
+  val = Math.max(0, val);
   input.value = val;
   counts[idx] = val;
   saveState();
@@ -1006,13 +1039,14 @@ function resetSection(encodedKey) {
   const key = decodeKey(encodedKey);
   const [cat, loc] = [key.split('|')[0], key.split('|').slice(1).join('|')];
 
-  // Reset counts and variant notes for items in this section
+  // Reset counts — fall back to yesterday's counts, then to min inventory
   PRODUCTS.forEach((p, i) => {
     if (p.c === cat && p.l === loc) {
       delete counts[i];
       delete variantNotes[i];
+      const fallback = prevCounts[i] !== undefined ? prevCounts[i] : p.inv;
       const input = document.getElementById('cnt-' + i);
-      if (input) input.value = p.inv;
+      if (input) input.value = fallback;
       const varInput = document.getElementById('var-' + i);
       if (varInput) varInput.value = '';
     }
@@ -1135,7 +1169,7 @@ function renderSummaryContent() {
           <input type="checkbox" ${excl ? '' : 'checked'} onchange="toggleShoppingExclusion(${item.idx})">
           <span class="item-label">${item.name}${nfBadge}</span>
           <span class="qty" style="display:flex;align-items:center;gap:4px">
-            <input type="number" value="${effQty}" min="0" step="0.5"
+            <input type="number" value="${effQty}" min="0" step="1"
               style="width:52px;border:1px solid #ddd;border-radius:6px;padding:2px 4px;font-size:14px;font-weight:700;text-align:center;background:${shoppingQtyOverrides[item.idx]!==undefined?'#fff8e1':'white'}"
               oninput="updateShoppingQty(${item.idx},this.value)"
               onchange="updateShoppingQty(${item.idx},this.value)">
@@ -1773,10 +1807,10 @@ function renderPedir() {
           <input type="checkbox" ${excluded ? '' : 'checked'} onchange="togglePedirItem(${p.idx})">
           <span class="item-text">${p.n}${p.isUrgent ? ' <span style="color:var(--red);font-size:10px">● agotado</span>' : ''}${p.outOfSeason ? ' <span style="color:#ff9800;font-size:10px;background:#fff3e0;padding:1px 5px;border-radius:8px">⏳ fuera de temp.</span>' : ''}</span>
           <div class="pedir-qty-stepper">
-            <button onclick="adjustPedirQty(${p.idx},-0.5)">−</button>
-            <input type="number" class="pedir-qty-input" value="${qty}" min="0" step="0.5" inputmode="decimal"
+            <button onclick="adjustPedirQty(${p.idx},-1)">−</button>
+            <input type="number" class="pedir-qty-input" value="${qty}" min="0" step="1" inputmode="numeric"
               onchange="setPedirQty(${p.idx}, this.value)" onclick="this.select()">
-            <button onclick="adjustPedirQty(${p.idx},0.5)">+</button>
+            <button onclick="adjustPedirQty(${p.idx},1)">+</button>
           </div>
           <span style="font-size:12px;color:var(--gray)">${p.u||''}</span>
         </div>`;
@@ -1788,10 +1822,10 @@ function renderPedir() {
         <input type="checkbox" checked onchange="removeManualPedirItem('${supplierEsc}',${mi})">
         <span class="item-text" style="font-style:italic">${m.name}</span>
         <div class="pedir-qty-stepper manual">
-          <button onclick="adjustManualPedirQty('${supplierEsc}',${mi},-0.5)">−</button>
-          <input type="number" class="pedir-qty-input" value="${m.qty}" min="0" step="0.5" inputmode="decimal"
+          <button onclick="adjustManualPedirQty('${supplierEsc}',${mi},-1)">−</button>
+          <input type="number" class="pedir-qty-input" value="${m.qty}" min="0" step="1" inputmode="numeric"
             onchange="setManualPedirQty('${supplierEsc}',${mi},this.value)" onclick="this.select()">
-          <button onclick="adjustManualPedirQty('${supplierEsc}',${mi},0.5)">+</button>
+          <button onclick="adjustManualPedirQty('${supplierEsc}',${mi},1)">+</button>
         </div>
         <span style="font-size:12px;color:var(--gray)">${m.unit||''}</span>
       </div>`).join('');
@@ -1902,20 +1936,26 @@ function adjustPedirQty(idx, delta) {
   const current = pedirQtyOverrides[idx] !== undefined
     ? pedirQtyOverrides[idx]
     : (getNeedsOrder().find(p => p.idx === idx)?.needed || 0);
-  // Snap to nearest 0.5 first, then apply delta — normalizes messy decimals on first tap
-  const snapped = Math.round(parseFloat(current) * 2) / 2;
-  const newVal = Math.max(0, snapped + delta);
-  pedirQtyOverrides[idx] = newVal;
+  let val = parseFloat(current) || 0;
+  // If fractional, snap to whole in direction of delta; otherwise add delta
+  if (val % 1 !== 0) {
+    val = delta > 0 ? Math.ceil(val) : Math.floor(val);
+  } else {
+    val = val + delta;
+  }
+  pedirQtyOverrides[idx] = Math.max(0, val);
   renderPedir();
 }
 
 function adjustManualPedirQty(supplier, idx, delta) {
   if (!pedirManualItems[supplier] || !pedirManualItems[supplier][idx]) return;
-  const current = pedirManualItems[supplier][idx].qty || 0;
-  // Snap to nearest 0.5 first, then apply delta
-  const snapped = Math.round(parseFloat(current) * 2) / 2;
-  const newVal = Math.max(0, snapped + delta);
-  pedirManualItems[supplier][idx].qty = newVal;
+  let val = parseFloat(pedirManualItems[supplier][idx].qty) || 0;
+  if (val % 1 !== 0) {
+    val = delta > 0 ? Math.ceil(val) : Math.floor(val);
+  } else {
+    val = val + delta;
+  }
+  pedirManualItems[supplier][idx].qty = Math.max(0, val);
   renderPedir();
 }
 
@@ -2651,6 +2691,142 @@ async function pushProductToSheet(p, isUpdate) {
       const d2 = await resp2.json(); if(d2.ok) console.log('➕ Product added:', p.id);
     }
   } catch(e) { console.log('Product push error:', e); }
+}
+
+// ============ SHOPIFY PRODUCT SYNC ============
+async function syncShopifyProducts() {
+  const url = getScriptUrl();
+  if (!url) { toast('Configura el Script URL primero'); return; }
+  const panel = document.getElementById('shopifyProductsPanel');
+  const list = document.getElementById('shopifyProductsList');
+  const status = document.getElementById('shopifyProdStatus');
+  const btn = document.getElementById('syncShopifyBtn');
+
+  // Toggle panel if already visible and loaded
+  if (panel.style.display !== 'none' && list.innerHTML && !btn.disabled) {
+    panel.style.display = 'none';
+    return;
+  }
+
+  panel.style.display = 'block';
+  list.innerHTML = '<div style="text-align:center;padding:20px;color:var(--gray)">⏳ Cargando productos de Shopify...</div>';
+  status.textContent = 'Sincronizando...';
+  btn.disabled = true;
+  btn.textContent = '⏳ Cargando...';
+
+  try {
+    // Fetch products and inventory in parallel
+    const [prodResp, invResp] = await Promise.all([
+      fetch(url + '?action=get_shopify_products').then(r => r.json()),
+      fetch(url + '?action=get_shopify_inventory').then(r => r.json()).catch(() => ({ ok: false }))
+    ]);
+
+    if (!prodResp.ok) throw new Error(prodResp.error || 'Error al obtener productos');
+
+    const products = prodResp.products || [];
+    // Build inventory lookup: variantId -> { locationName: qty }
+    const invMap = {};
+    if (invResp.ok && invResp.locations) {
+      invResp.locations.forEach(loc => {
+        (loc.items || []).forEach(item => {
+          if (!invMap[item.variantId]) invMap[item.variantId] = {};
+          invMap[item.variantId][loc.name] = item.available;
+        });
+      });
+    }
+
+    if (products.length === 0) {
+      list.innerHTML = '<div style="text-align:center;padding:20px;color:var(--gray)">No se encontraron productos en Shopify</div>';
+      status.textContent = '0 productos';
+      btn.textContent = '🛍️ Shopify Stock';
+      btn.disabled = false;
+      return;
+    }
+
+    // Render products table
+    let totalVariants = 0;
+    let lowStockCount = 0;
+    let html = '<table style="width:100%;border-collapse:collapse;font-size:12px">';
+    html += '<thead><tr style="background:#f5f5f5;text-align:left">';
+    html += '<th style="padding:8px 6px;border-bottom:2px solid #ddd">Producto</th>';
+    html += '<th style="padding:8px 6px;border-bottom:2px solid #ddd;text-align:center;white-space:nowrap">Precio</th>';
+    html += '<th style="padding:8px 6px;border-bottom:2px solid #ddd;text-align:center">Stock</th>';
+    html += '<th style="padding:8px 6px;border-bottom:2px solid #ddd;text-align:center">Estado</th>';
+    html += '</tr></thead><tbody>';
+
+    products.forEach(p => {
+      const variants = p.variants || [];
+      if (variants.length <= 1) {
+        // Single variant product
+        const v = variants[0] || {};
+        totalVariants++;
+        const qty = v.inventoryQuantity || 0;
+        const inv = invMap[v.id] || {};
+        const totalInv = Object.values(inv).reduce((s, n) => s + n, 0);
+        const stockDisplay = totalInv > 0 ? totalInv : qty;
+        const isLow = stockDisplay <= 3 && stockDisplay > 0;
+        const isOut = stockDisplay <= 0;
+        if (isLow || isOut) lowStockCount++;
+
+        const statusBadge = isOut ? '<span style="background:#ef5350;color:white;padding:2px 6px;border-radius:4px;font-size:10px">Agotado</span>'
+          : isLow ? '<span style="background:#ff9800;color:white;padding:2px 6px;border-radius:4px;font-size:10px">Bajo</span>'
+          : '<span style="background:#4caf50;color:white;padding:2px 6px;border-radius:4px;font-size:10px">OK</span>';
+
+        html += `<tr style="border-bottom:1px solid #eee">
+          <td style="padding:6px">${p.title}</td>
+          <td style="padding:6px;text-align:center">$${parseFloat(v.price || 0).toFixed(0)}</td>
+          <td style="padding:6px;text-align:center;font-weight:600;${isOut?'color:#ef5350':isLow?'color:#ff9800':''}">${stockDisplay}</td>
+          <td style="padding:6px;text-align:center">${statusBadge}</td>
+        </tr>`;
+      } else {
+        // Multi-variant: show parent row + children
+        html += `<tr style="border-bottom:1px solid #eee;background:#fafafa">
+          <td style="padding:6px;font-weight:600" colspan="4">${p.title} <span style="color:var(--gray);font-weight:400;font-size:11px">(${variants.length} variantes)</span></td>
+        </tr>`;
+        variants.forEach(v => {
+          totalVariants++;
+          const qty = v.inventoryQuantity || 0;
+          const inv = invMap[v.id] || {};
+          const totalInv = Object.values(inv).reduce((s, n) => s + n, 0);
+          const stockDisplay = totalInv > 0 ? totalInv : qty;
+          const isLow = stockDisplay <= 3 && stockDisplay > 0;
+          const isOut = stockDisplay <= 0;
+          if (isLow || isOut) lowStockCount++;
+
+          const statusBadge = isOut ? '<span style="background:#ef5350;color:white;padding:2px 6px;border-radius:4px;font-size:10px">Agotado</span>'
+            : isLow ? '<span style="background:#ff9800;color:white;padding:2px 6px;border-radius:4px;font-size:10px">Bajo</span>'
+            : '<span style="background:#4caf50;color:white;padding:2px 6px;border-radius:4px;font-size:10px">OK</span>';
+
+          html += `<tr style="border-bottom:1px solid #f0f0f0">
+            <td style="padding:4px 6px 4px 20px;color:#555">↳ ${v.title}${v.sku ? ' <span style="color:#aaa;font-size:10px">' + v.sku + '</span>' : ''}</td>
+            <td style="padding:4px 6px;text-align:center">$${parseFloat(v.price || 0).toFixed(0)}</td>
+            <td style="padding:4px 6px;text-align:center;font-weight:600;${isOut?'color:#ef5350':isLow?'color:#ff9800':''}">${stockDisplay}</td>
+            <td style="padding:4px 6px;text-align:center">${statusBadge}</td>
+          </tr>`;
+        });
+      }
+    });
+
+    html += '</tbody></table>';
+
+    // Summary bar
+    const summary = `<div style="padding:8px 10px;background:#f5f5f5;border-bottom:1px solid #eee;font-size:12px;display:flex;gap:12px;flex-wrap:wrap">
+      <span><strong>${products.length}</strong> productos</span>
+      <span><strong>${totalVariants}</strong> variantes</span>
+      ${lowStockCount > 0 ? `<span style="color:#ef5350"><strong>${lowStockCount}</strong> ⚠️ bajo/agotado</span>` : '<span style="color:#4caf50">✅ Todo en stock</span>'}
+    </div>`;
+
+    list.innerHTML = summary + html;
+    status.textContent = `${products.length} productos`;
+
+  } catch(e) {
+    console.error('Shopify sync error:', e);
+    list.innerHTML = `<div style="text-align:center;padding:20px;color:#ef5350">❌ ${e.message || 'Error de conexión'}</div>`;
+    status.textContent = 'Error';
+  }
+
+  btn.textContent = '🛍️ Shopify Stock';
+  btn.disabled = false;
 }
 
 async function seedProductsToSheet() {
