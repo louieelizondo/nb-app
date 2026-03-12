@@ -1585,9 +1585,11 @@ function processFile(file){
   }; r.readAsDataURL(file);
 }
 function resetAll(){
-  // Sync prices + dates + names to MATERIA PRIMA before clearing (even without sending to Portal)
+  // Only sync prices to MATERIA PRIMA if categoría is materia prima (not gastos generales)
   const sUrl = getScriptUrl();
-  if(sUrl && currentItems && currentItems.length) syncPricesToMateriaPrima(sUrl);
+  const cat = (document.getElementById('ihcCategoria').value || document.getElementById('gastoCategoria').value || '').toLowerCase();
+  const isMateriaPrima = cat.includes('adquisición') || cat.includes('mercancía');
+  if(sUrl && currentItems && currentItems.length && isMateriaPrima) syncPricesToMateriaPrima(sUrl);
 
   document.getElementById('captureOptions').style.display='grid';
   document.getElementById('previewSection').style.display='none';
@@ -1946,8 +1948,8 @@ function rerenderRow(idx){
   const item=currentItems[idx]; if(!item)return;
   const tr=document.getElementById('row_'+idx); if(!tr)return;
   const m=item._match,bc=m?m.c:0;
-  // Use precio_base for comparison (normalized unit price) — falls back to precio_unitario
-  const fp=item.precio_base||item.precio_unitario||0;
+  // Compare precio_unitario (invoice package price) vs CostoPaq (BD package price) — same units
+  const fp=item.precio_unitario||item.precio_base||0;
   const ub=item.unidad_base||item.unidad||'';
   let ch=chHTML(fp,bc);
   const need=!m||['fuzzy','contains','none'].includes(m.matchType);
@@ -1966,17 +1968,18 @@ function buildRowInner(i,item,m,ch,fp,bc,ub,cls,lbl){
   const bdCell = m
     ? `<div class="pref-wrap"><span class="pref-name">${getDisplayName(m.n)}</span><button class="pref-btn" title="Nombre favorito" onclick="startPrefRename(${i},this,'${esc(m.n)}')">✏️</button></div>`
     : '<span style="color:#ccc">Sin match</span>';
-  // Show precio_unitario (as-is from invoice) + unit of purchase; show base price if different
+  // Show precio_unitario (package price, comparable to CostoPaq) + base price if different
   const invoiceUnit = item.unidad || '';
-  const hasDiffBase = item.precio_base && Math.abs(item.precio_base - item.precio_unitario) > 0.01;
+  const basePrice = item.precio_base || 0;
+  const hasDiffBase = basePrice && Math.abs(basePrice - fp) > 0.01;
   const fpLabel = hasDiffBase
-    ? `$${(item.precio_unitario||0).toFixed(2)}/${invoiceUnit||'unit'} <span style="font-size:10px;color:#1565c0">(≈$${fp.toFixed(2)}/${ub})</span>`
+    ? `$${fp.toFixed(2)}/${invoiceUnit||'unit'} <span style="font-size:10px;color:#1565c0">(≈$${basePrice.toFixed(2)}/${ub})</span>`
     : `$${fp.toFixed(2)}${invoiceUnit?'/'+invoiceUnit:(ub?'/'+ub:'')}`;
   return `<td class="editable-cell" title="Click para editar" onclick="startCellEdit(${i},'desc',this)"><strong>${item.descripcion}</strong><span class="cell-edit-hint">✏️</span></td>
 <td>${bdCell}</td>
 <td class="editable-cell" data-label="Cantidad" title="Click para editar" onclick="startCellEdit(${i},'qty',this)">${item.cantidad||'—'} ${item.unidad||''}<span class="cell-edit-hint">✏️</span></td>
 <td class="editable-cell" data-label="Precio Factura" title="Click para editar precio" onclick="startCellEdit(${i},'price',this)">${fpLabel}<span class="cell-edit-hint">✏️</span></td>
-<td data-label="Precio BD">${bc>0?'$'+bc.toFixed(2)+(ub?'/'+ub:''):'—'}</td>
+<td data-label="Precio BD">${bc>0?'$'+bc.toFixed(2)+(invoiceUnit?'/'+invoiceUnit:''):'—'}</td>
 <td data-label="Cambio">${ch}</td>
 <td data-label="Match">${badgeHTML(m?m.matchType:'none',m?m.score:0)}</td>
 <td><button class="${cls}" onclick="openCorrection(${i},this)">${lbl}</button></td>`;
@@ -2125,7 +2128,7 @@ function renderResults(parsed){
 
   document.getElementById('resultsBody').innerHTML=currentItems.map((it,i)=>{
     const m=it._match,bc=m?m.c:0;
-    const fp=it.precio_base||it.precio_unitario||0;
+    const fp=it.precio_unitario||it.precio_base||0;
     const ub=it.unidad_base||it.unidad||'';
     const cls=m?.matchType==='learned'?'corr-trigger learned':'corr-trigger';
     const need=!m||['fuzzy','contains','none'].includes(m.matchType);
@@ -2294,7 +2297,7 @@ function saveCellEdit(idx, field, tdEl) {
     item.cantidad = qty; item.unidad = unit;
   } else if (field === 'price') {
     const v = parseFloat(document.getElementById(`cei_${idx}_price`)?.value);
-    if (!isNaN(v) && v > 0) { item.precio_unitario = v; item.precio_base = v; }
+    if (!isNaN(v) && v > 0) { item.precio_unitario = v; item.precio_base = null; /* clear base — user edited package price */ }
   }
   rerenderRow(idx);
 }
@@ -2378,11 +2381,8 @@ function savePrefRename(idx, bdName){
   const prefs = getPrefNames();
   prefs[normalize(bdName)] = newName;
   localStorage.setItem('nb_pref_names', JSON.stringify(prefs));
-  // Also rename in MATERIA PRIMA sheet (col A) so the DB has the clean, chosen name
-  renameToPrefName(bdName, newName);
-  // Update local DB to match
-  const ing = INGREDIENTS_DB.find(i=>i.n===bdName);
-  if(ing) ing.n = newName;
+  // NOTE: No longer renames in MATERIA PRIMA sheet — canonical names stay untouched
+  // renameToPrefName(bdName, newName);  // DISABLED — was causing name drift in the DB
   // Update all learned mappings that pointed to the old name
   const maps = getLearnedMappings();
   let mapsChanged = false;
