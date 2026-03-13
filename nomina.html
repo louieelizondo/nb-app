@@ -1,0 +1,847 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Nómina — Natural Balance</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@300;400;600&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #f5f0e8;
+      --surface: #ffffff;
+      --border: #e0d8cc;
+      --text: #1a1714;
+      --muted: #8a8278;
+      --accent: #1a6b3c;
+      --accent-light: #e8f5ee;
+      --danger: #c0392b;
+      --mono: 'IBM Plex Mono', monospace;
+      --sans: 'IBM Plex Sans', sans-serif;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--sans);
+      font-weight: 300;
+      min-height: 100vh;
+      padding: 2rem;
+    }
+
+    header {
+      max-width: 900px;
+      margin: 0 auto 2.5rem;
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      border-bottom: 2px solid var(--text);
+      padding-bottom: 1rem;
+    }
+
+    .logo {
+      font-family: var(--mono);
+      font-weight: 600;
+      font-size: 1rem;
+      letter-spacing: -0.02em;
+    }
+
+    .logo span { color: var(--accent); }
+
+    .header-right {
+      font-family: var(--mono);
+      font-size: 0.75rem;
+      color: var(--muted);
+    }
+
+    h1 {
+      font-family: var(--mono);
+      font-weight: 600;
+      font-size: clamp(1.5rem, 3vw, 2rem);
+      letter-spacing: -0.03em;
+      margin-bottom: 0.25rem;
+    }
+
+    .subtitle {
+      font-size: 0.85rem;
+      color: var(--muted);
+      margin-bottom: 2rem;
+    }
+
+    .main { max-width: 900px; margin: 0 auto; }
+
+    /* EMPLOYEE INPUTS */
+    .employees-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .employee-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1.25rem;
+      position: relative;
+      transition: border-color 0.15s;
+    }
+
+    .employee-card:focus-within { border-color: var(--accent); }
+
+    .employee-num {
+      font-family: var(--mono);
+      font-size: 0.7rem;
+      color: var(--muted);
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      margin-bottom: 0.75rem;
+    }
+
+    .input-group { position: relative; }
+
+    .input-group label {
+      display: block;
+      font-size: 0.75rem;
+      color: var(--muted);
+      margin-bottom: 0.3rem;
+    }
+
+    .input-row {
+      display: flex;
+      gap: 0.5rem;
+      margin-bottom: 0.6rem;
+    }
+
+    .input-row input {
+      flex: 1;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 0.5rem 0.75rem;
+      font-family: var(--mono);
+      font-size: 0.9rem;
+      color: var(--text);
+      outline: none;
+      transition: border-color 0.15s;
+      width: 100%;
+    }
+
+    .input-row input:focus { border-color: var(--accent); }
+    .input-row input::placeholder { color: var(--muted); }
+
+    .name-input {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 0.5rem 0.75rem;
+      font-family: var(--sans);
+      font-size: 0.85rem;
+      color: var(--text);
+      outline: none;
+      width: 100%;
+      transition: border-color 0.15s;
+      margin-bottom: 0.6rem;
+    }
+
+    .name-input:focus { border-color: var(--accent); }
+    .name-input::placeholder { color: var(--muted); }
+
+    .currency-badge {
+      background: var(--accent-light);
+      color: var(--accent);
+      font-family: var(--mono);
+      font-size: 0.8rem;
+      font-weight: 600;
+      padding: 0.5rem 0.6rem;
+      border-radius: 4px;
+      border: 1px solid rgba(26,107,60,0.2);
+      white-space: nowrap;
+    }
+
+    /* ACTIONS */
+    .actions {
+      display: flex;
+      gap: 0.75rem;
+      margin-bottom: 2.5rem;
+      flex-wrap: wrap;
+    }
+
+    .btn {
+      font-family: var(--mono);
+      font-size: 0.85rem;
+      font-weight: 600;
+      padding: 0.7rem 1.4rem;
+      border-radius: 4px;
+      border: none;
+      cursor: pointer;
+      transition: all 0.15s;
+      letter-spacing: 0.02em;
+    }
+
+    .btn-primary {
+      background: var(--accent);
+      color: white;
+    }
+
+    .btn-primary:hover { background: #155c33; transform: translateY(-1px); }
+
+    .btn-ghost {
+      background: transparent;
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+
+    .btn-ghost:hover { border-color: var(--text); }
+
+    .btn-danger {
+      background: transparent;
+      color: var(--danger);
+      border: 1px solid rgba(192,57,43,0.3);
+    }
+
+    .btn-danger:hover { background: rgba(192,57,43,0.05); }
+
+    /* RESULTS */
+    #results { display: none; }
+
+    .results-header {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      margin-bottom: 1.5rem;
+      padding-bottom: 0.75rem;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .results-header h2 {
+      font-family: var(--mono);
+      font-size: 1.1rem;
+      font-weight: 600;
+    }
+
+    .total-badge {
+      font-family: var(--mono);
+      font-size: 1.1rem;
+      font-weight: 600;
+      color: var(--accent);
+    }
+
+    /* INDIVIDUAL BREAKDOWN */
+    .breakdowns {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 1rem;
+      margin-bottom: 2rem;
+    }
+
+    .breakdown-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+      animation: fadeUp 0.4s ease both;
+    }
+
+    .breakdown-header {
+      background: var(--text);
+      color: white;
+      padding: 0.8rem 1.1rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .breakdown-name {
+      font-family: var(--mono);
+      font-size: 0.85rem;
+      font-weight: 600;
+    }
+
+    .breakdown-amount {
+      font-family: var(--mono);
+      font-size: 0.9rem;
+      color: #c8f060;
+    }
+
+    .breakdown-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    .breakdown-table tr {
+      border-bottom: 1px solid var(--border);
+    }
+
+    .breakdown-table tr:last-child { border-bottom: none; }
+
+    .breakdown-table td {
+      padding: 0.5rem 1.1rem;
+      font-family: var(--mono);
+      font-size: 0.82rem;
+    }
+
+    .breakdown-table td:first-child { color: var(--muted); }
+    .breakdown-table td:last-child { text-align: right; font-weight: 600; }
+
+    .denomination-label {
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+
+    .bill-tag {
+      background: var(--accent-light);
+      color: var(--accent);
+      font-size: 0.65rem;
+      padding: 0.1rem 0.3rem;
+      border-radius: 2px;
+      font-weight: 600;
+    }
+
+    .coin-tag {
+      background: #fff8e6;
+      color: #b8860b;
+      font-size: 0.65rem;
+      padding: 0.1rem 0.3rem;
+      border-radius: 2px;
+      font-weight: 600;
+    }
+
+    .zero-row td { opacity: 0.3; }
+
+    /* SUMMARY TABLE */
+    .summary-section {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+      margin-bottom: 2rem;
+    }
+
+    .summary-table-wrap {
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    .summary-title {
+      background: var(--accent);
+      color: white;
+      padding: 0.9rem 1.25rem;
+      font-family: var(--mono);
+      font-size: 0.9rem;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+
+    .summary-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    .summary-table th {
+      background: var(--bg);
+      font-family: var(--mono);
+      font-size: 0.72rem;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted);
+      padding: 0.65rem 1.25rem;
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .summary-table th:not(:first-child) { text-align: right; }
+
+    .summary-table td {
+      font-family: var(--mono);
+      font-size: 0.82rem;
+      padding: 0.6rem 1.25rem;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .summary-table td:not(:first-child) { text-align: right; }
+
+    .summary-table tr:last-child td { border-bottom: none; }
+
+    .summary-table .total-row {
+      background: var(--accent-light);
+      font-weight: 600;
+    }
+
+    .summary-table .total-row td { color: var(--accent); }
+
+    .check-section {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1.25rem;
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+
+    .check-section label {
+      font-family: var(--mono);
+      font-size: 0.8rem;
+      color: var(--muted);
+      white-space: nowrap;
+    }
+
+    .check-section input {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 0.5rem 0.75rem;
+      font-family: var(--mono);
+      font-size: 0.9rem;
+      color: var(--text);
+      outline: none;
+      width: 160px;
+    }
+
+    .check-section input:focus { border-color: var(--accent); }
+
+    .diff-display {
+      font-family: var(--mono);
+      font-size: 0.9rem;
+      font-weight: 600;
+      padding: 0.5rem 1rem;
+      border-radius: 4px;
+      display: none;
+    }
+
+    .diff-ok { background: var(--accent-light); color: var(--accent); display: block; }
+    .diff-warn { background: #fef0ee; color: var(--danger); display: block; }
+
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(12px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* PRINT REPORT */
+    .print-report { display: none; }
+
+    @media print {
+      body { background: white; padding: 0.5rem; font-size: 11px; }
+      .actions, .employees-grid, header, .subtitle, h1, #results, .check-section { display: none !important; }
+      .print-report { display: block !important; }
+
+      .print-report h2 {
+        font-family: var(--mono); font-size: 14px; font-weight: 600;
+        text-align: center; margin-bottom: 2px;
+      }
+      .print-report .print-date {
+        font-family: var(--mono); font-size: 10px; color: #666;
+        text-align: center; margin-bottom: 12px;
+      }
+
+      /* Bank summary table */
+      .print-bank {
+        margin-bottom: 8px;
+        page-break-after: always;
+      }
+      .print-bank h3 {
+        font-family: var(--mono); font-size: 12px; font-weight: 600;
+        border-bottom: 2px solid #333; padding-bottom: 4px; margin-bottom: 8px;
+        text-transform: uppercase; letter-spacing: 0.05em;
+      }
+      .print-bank table {
+        width: 100%; border-collapse: collapse;
+        font-family: var(--mono); font-size: 11px;
+      }
+      .print-bank th, .print-bank td {
+        border: 1px solid #555; padding: 5px 10px; text-align: left;
+      }
+      .print-bank th {
+        background: #eee; font-size: 10px; font-weight: 600;
+        text-transform: uppercase; letter-spacing: 0.05em;
+      }
+      .print-bank .total-row td {
+        font-weight: 900; background: #ddd; font-size: 12px;
+      }
+      .print-bank .amount-col { text-align: right; font-variant-numeric: tabular-nums; }
+
+      /* Individual slips */
+      .print-slips-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+      }
+      .print-slip {
+        border: 2px dashed #999;
+        padding: 10px;
+        page-break-inside: avoid;
+        font-family: var(--mono);
+      }
+      .print-slip-header {
+        display: flex; justify-content: space-between; align-items: center;
+        border-bottom: 1.5px solid #333; padding-bottom: 4px; margin-bottom: 6px;
+      }
+      .print-slip-name { font-size: 12px; font-weight: 600; }
+      .print-slip-amount { font-size: 16px; font-weight: 900; }
+      .print-slip-period { font-size: 9px; color: #666; margin-bottom: 6px; }
+      .print-slip table {
+        width: 100%; border-collapse: collapse; font-size: 10px;
+      }
+      .print-slip th, .print-slip td {
+        border: 1px solid #aaa; padding: 3px 6px;
+      }
+      .print-slip th {
+        background: #f0f0f0; font-size: 9px; text-transform: uppercase;
+      }
+      .print-slip .slip-total td {
+        font-weight: 900; background: #eee;
+      }
+      .print-slip-footer {
+        margin-top: 8px; font-size: 9px;
+        display: flex; justify-content: space-between; align-items: center;
+      }
+    }
+
+    @media (max-width: 600px) {
+      body { padding: 1rem; }
+      .actions { flex-direction: column; }
+      .btn { text-align: center; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">natural<span>balance</span>.club</div>
+  <div class="header-right" id="fecha"></div>
+</header>
+
+<div class="main">
+  <h1>💵 Nómina Viernes</h1>
+  <p class="subtitle">Ingresa los sueldos semanales de tus empleados</p>
+
+  <div class="employees-grid" id="employeeGrid"></div>
+
+  <div class="actions">
+    <button class="btn btn-primary" onclick="calculate()">Calcular desglose →</button>
+    <button class="btn btn-ghost" onclick="addEmployee()" id="addBtn">+ Agregar empleado</button>
+    <button class="btn btn-danger" onclick="clearAll()">Limpiar todo</button>
+    <button class="btn btn-ghost" onclick="printReport()">🖨 Imprimir</button>
+  </div>
+
+  <div id="results">
+    <div class="results-header">
+      <h2>Desglose individual</h2>
+      <div class="total-badge" id="grandTotalBadge"></div>
+    </div>
+
+    <div class="breakdowns" id="breakdowns"></div>
+
+    <div class="summary-section">
+      <div class="summary-title">📊 Resumen total de billetes y monedas</div>
+      <div class="summary-table-wrap">
+        <table class="summary-table" id="summaryTable"></table>
+      </div>
+    </div>
+
+    <div class="check-section">
+      <label>Comparar con monto del cheque:</label>
+      <div style="display:flex; align-items:center; gap:0.4rem;">
+        <span style="font-family:var(--mono); font-size:0.85rem; color:var(--muted);">$</span>
+        <input type="number" id="checkAmount" placeholder="0.00" oninput="compareCheck()" />
+        <span style="font-family:var(--mono); font-size:0.85rem; color:var(--muted);">MXN</span>
+      </div>
+      <div class="diff-display" id="diffDisplay"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+  // Mexican denominations: bills then coins
+  const DENOMS = [
+    { value: 500,  label: '$500',   type: 'bill' },
+    { value: 200,  label: '$200',   type: 'bill' },
+    { value: 100,  label: '$100',   type: 'bill' },
+    { value: 50,   label: '$50',    type: 'bill' },
+    { value: 20,   label: '$20',    type: 'bill' },
+    { value: 10,   label: '$10',    type: 'coin' },
+    { value: 5,    label: '$5',     type: 'coin' },
+    { value: 2,    label: '$2',     type: 'coin' },
+    { value: 1,    label: '$1',     type: 'coin' },
+    { value: 0.5,  label: '50¢',   type: 'coin' },
+  ];
+
+  let employeeCount = 1;
+  let grandTotal = 0;
+
+  // Set today's date
+  const today = new Date();
+  document.getElementById('fecha').textContent = today.toLocaleDateString('es-MX', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+
+  function buildEmployeeCard(num) {
+    return `
+      <div class="employee-card" id="card-${num}">
+        <div class="employee-num">Empleado ${num}</div>
+        <input class="name-input" id="name-${num}" type="text" placeholder="Nombre (opcional)" />
+        <div class="input-row">
+          <input type="number" id="salary-${num}" placeholder="Salario semanal" min="0" step="0.50" />
+          <div class="currency-badge">MXN</div>
+        </div>
+      </div>
+    `;
+  }
+
+  function initGrid() {
+    const grid = document.getElementById('employeeGrid');
+    grid.innerHTML = '';
+    for (let i = 1; i <= 3; i++) {
+      grid.innerHTML += buildEmployeeCard(i);
+    }
+    employeeCount = 3;
+    updateAddBtn();
+  }
+
+  function addEmployee() {
+    if (employeeCount >= 10) return;
+    employeeCount++;
+    document.getElementById('employeeGrid').insertAdjacentHTML('beforeend', buildEmployeeCard(employeeCount));
+    updateAddBtn();
+  }
+
+  function updateAddBtn() {
+    const btn = document.getElementById('addBtn');
+    if (employeeCount >= 10) {
+      btn.disabled = true;
+      btn.textContent = 'Máximo 10 empleados';
+      btn.style.opacity = '0.4';
+    } else {
+      btn.disabled = false;
+      btn.textContent = `+ Agregar empleado (${employeeCount}/10)`;
+      btn.style.opacity = '1';
+    }
+  }
+
+  function breakdown(amount) {
+    // Work in centavos to avoid float issues
+    let remaining = Math.round(amount * 100);
+    const result = [];
+    for (const d of DENOMS) {
+      const dCents = Math.round(d.value * 100);
+      const count = Math.floor(remaining / dCents);
+      result.push({ ...d, count });
+      remaining -= count * dCents;
+    }
+    return result;
+  }
+
+  function formatMXN(n) {
+    return new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(n);
+  }
+
+  function calculate() {
+    const employees = [];
+    for (let i = 1; i <= employeeCount; i++) {
+      const nameEl = document.getElementById(`name-${i}`);
+      const salEl = document.getElementById(`salary-${i}`);
+      if (!salEl) continue;
+      const salary = parseFloat(salEl.value);
+      if (!salary || salary <= 0) continue;
+      const name = nameEl?.value?.trim() || `Empleado ${i}`;
+      employees.push({ name, salary });
+    }
+
+    if (employees.length === 0) {
+      alert('Ingresa al menos un salario para continuar.');
+      return;
+    }
+
+    grandTotal = employees.reduce((s, e) => s + e.salary, 0);
+    document.getElementById('grandTotalBadge').textContent = `Total: ${formatMXN(grandTotal)}`;
+
+    // Individual breakdowns
+    const bContainer = document.getElementById('breakdowns');
+    bContainer.innerHTML = '';
+    employees.forEach((emp, idx) => {
+      const bd = breakdown(emp.salary);
+      const rows = bd.map(d => {
+        const tag = d.type === 'bill'
+          ? `<span class="bill-tag">BILLETE</span>`
+          : `<span class="coin-tag">MONEDA</span>`;
+        const rowClass = d.count === 0 ? 'zero-row' : '';
+        return `<tr class="${rowClass}">
+          <td><div class="denomination-label">${tag} ${d.label}</div></td>
+          <td>${d.count === 0 ? '—' : `× ${d.count}`}</td>
+        </tr>`;
+      }).join('');
+
+      bContainer.innerHTML += `
+        <div class="breakdown-card" style="animation-delay:${idx * 0.08}s">
+          <div class="breakdown-header">
+            <div class="breakdown-name">${emp.name}</div>
+            <div class="breakdown-amount">${formatMXN(emp.salary)}</div>
+          </div>
+          <table class="breakdown-table">${rows}</table>
+        </div>
+      `;
+    });
+
+    // Summary table — total pieces per denomination
+    const totals = DENOMS.map(d => ({ ...d, count: 0 }));
+    employees.forEach(emp => {
+      const bd = breakdown(emp.salary);
+      bd.forEach((d, i) => { totals[i].count += d.count; });
+    });
+
+    const empHeaders = employees.map(e => `<th>${e.name}<br><span style="font-weight:300;color:var(--accent)">${formatMXN(e.salary)}</span></th>`).join('');
+    let tableHTML = `<thead><tr><th>Denominación</th>${empHeaders}<th>Total piezas</th></tr></thead><tbody>`;
+
+    totals.forEach((t, i) => {
+      const tag = t.type === 'bill'
+        ? `<span class="bill-tag">BILLETE</span>`
+        : `<span class="coin-tag">MONEDA</span>`;
+      const empCols = employees.map((emp, ei) => {
+        const bd = breakdown(emp.salary);
+        const cnt = bd[i].count;
+        return `<td>${cnt === 0 ? '—' : cnt}</td>`;
+      }).join('');
+      const rowClass = t.count === 0 ? 'zero-row' : '';
+      tableHTML += `<tr class="${rowClass}"><td><div class="denomination-label">${tag} ${t.label}</div></td>${empCols}<td><strong>${t.count === 0 ? '—' : t.count}</strong></td></tr>`;
+    });
+
+    // Total row
+    const empTotals = employees.map(e => `<td><strong>${formatMXN(e.salary)}</strong></td>`).join('');
+    tableHTML += `<tr class="total-row"><td>TOTAL</td>${empTotals}<td>${formatMXN(grandTotal)}</td></tr>`;
+    tableHTML += '</tbody>';
+
+    document.getElementById('summaryTable').innerHTML = tableHTML;
+    document.getElementById('checkAmount').value = '';
+    document.getElementById('diffDisplay').className = 'diff-display';
+
+    const resultsEl = document.getElementById('results');
+    resultsEl.style.display = 'block';
+    resultsEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  function compareCheck() {
+    const checkVal = parseFloat(document.getElementById('checkAmount').value);
+    const display = document.getElementById('diffDisplay');
+    if (!checkVal || grandTotal === 0) { display.className = 'diff-display'; return; }
+    const diff = Math.round((checkVal - grandTotal) * 100) / 100;
+    if (diff === 0) {
+      display.textContent = '✓ Cuadra exacto';
+      display.className = 'diff-display diff-ok';
+    } else if (diff > 0) {
+      display.textContent = `+${formatMXN(diff)} de sobra`;
+      display.className = 'diff-display diff-warn';
+    } else {
+      display.textContent = `${formatMXN(diff)} de diferencia`;
+      display.className = 'diff-display diff-warn';
+    }
+  }
+
+  function clearAll() {
+    initGrid();
+    document.getElementById('results').style.display = 'none';
+    grandTotal = 0;
+  }
+
+  function printReport() {
+    const employees = [];
+    for (let i = 1; i <= employeeCount; i++) {
+      const nameEl = document.getElementById(`name-${i}`);
+      const salEl = document.getElementById(`salary-${i}`);
+      if (!salEl) continue;
+      const salary = parseFloat(salEl.value);
+      if (!salary || salary <= 0) continue;
+      const name = nameEl?.value?.trim() || `Empleado ${i}`;
+      employees.push({ name, salary });
+    }
+
+    if (employees.length === 0) {
+      alert('Ingresa al menos un salario para imprimir.');
+      return;
+    }
+
+    const total = employees.reduce((s, e) => s + e.salary, 0);
+    const fechaStr = today.toLocaleDateString('es-MX', {
+      weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
+    });
+
+    let html = '';
+
+    // ── PAGE 1: BANK SUMMARY ──
+    html += `<div class="print-bank">`;
+    html += `<h2>Natural Balance Club — Nómina Semanal</h2>`;
+    html += `<div class="print-date">${fechaStr}</div>`;
+    html += `<h3>Resumen para Banco</h3>`;
+    html += `<table><thead><tr><th>#</th><th>Empleado</th><th class="amount-col">Neto a Pagar</th></tr></thead><tbody>`;
+
+    employees.forEach((emp, i) => {
+      html += `<tr><td>${i + 1}</td><td>${emp.name}</td><td class="amount-col">${formatMXN(emp.salary)}</td></tr>`;
+    });
+
+    html += `<tr class="total-row"><td colspan="2" style="text-align:right;">TOTAL NÓMINA</td><td class="amount-col">${formatMXN(total)}</td></tr>`;
+    html += `</tbody></table>`;
+
+    // Denomination totals for bank
+    const denomTotals = DENOMS.map(d => ({ ...d, count: 0 }));
+    employees.forEach(emp => {
+      const bd = breakdown(emp.salary);
+      bd.forEach((d, i) => { denomTotals[i].count += d.count; });
+    });
+
+    html += `<h3 style="margin-top:16px;">Denominaciones a Solicitar</h3>`;
+    html += `<table><thead><tr><th>Denominación</th><th style="text-align:center;">Cantidad</th><th class="amount-col">Subtotal</th></tr></thead><tbody>`;
+
+    denomTotals.forEach(d => {
+      if (d.count > 0) {
+        html += `<tr><td>${d.label}</td><td style="text-align:center;">${d.count}</td><td class="amount-col">${formatMXN(d.count * d.value)}</td></tr>`;
+      }
+    });
+
+    html += `<tr class="total-row"><td colspan="2" style="text-align:right;">TOTAL</td><td class="amount-col">${formatMXN(total)}</td></tr>`;
+    html += `</tbody></table></div>`;
+
+    // ── PAGE 2+: INDIVIDUAL SLIPS ──
+    html += `<h2>Comprobantes Individuales</h2>`;
+    html += `<div class="print-date">${fechaStr} · Recortar por línea punteada</div>`;
+    html += `<div class="print-slips-grid">`;
+
+    employees.forEach(emp => {
+      const bd = breakdown(emp.salary);
+      html += `<div class="print-slip">`;
+      html += `<div class="print-slip-header"><span class="print-slip-name">${emp.name}</span><span class="print-slip-amount">${formatMXN(emp.salary)}</span></div>`;
+      html += `<div class="print-slip-period">Nómina Semanal · ${fechaStr}</div>`;
+      html += `<table><thead><tr><th>Denominación</th><th style="text-align:center;">Cant.</th><th style="text-align:right;">Subtotal</th></tr></thead><tbody>`;
+
+      bd.forEach(d => {
+        if (d.count > 0) {
+          html += `<tr><td>${d.label}</td><td style="text-align:center;">${d.count}</td><td style="text-align:right;">${formatMXN(d.count * d.value)}</td></tr>`;
+        }
+      });
+
+      html += `<tr class="slip-total"><td colspan="2" style="text-align:right;">Total</td><td style="text-align:right;">${formatMXN(emp.salary)}</td></tr>`;
+      html += `</tbody></table>`;
+      html += `<div class="print-slip-footer"><span>Firma: ___________________</span><span>NB Club</span></div>`;
+      html += `</div>`;
+    });
+
+    html += `</div>`;
+
+    let printDiv = document.getElementById('printReport');
+    if (!printDiv) {
+      printDiv = document.createElement('div');
+      printDiv.id = 'printReport';
+      printDiv.className = 'print-report';
+      document.body.appendChild(printDiv);
+    }
+    printDiv.innerHTML = html;
+    window.print();
+  }
+
+  initGrid();
+</script>
+</body>
+</html>
