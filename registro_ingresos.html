@@ -631,7 +631,13 @@
       </div>
     </div>
 
-    <h3>Resumen del Corte de Tienda</h3>
+    <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+      <h3 style="margin:0;">Resumen del Corte de Tienda</h3>
+      <button class="btn btn-secondary" id="btnPullShopify" onclick="pullFromShopify()" style="font-size:0.85rem; padding:6px 14px;">
+        ⟳ Pull from Shopify
+      </button>
+      <span id="shopifyPullStatus" style="font-size:0.8rem; color:#999;"></span>
+    </div>
     <div class="form-grid">
       <div class="form-group">
         <label>Pagos Recibidos</label>
@@ -962,15 +968,36 @@ function formatPeso(num) {
   return '$' + (num || 0).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
 }
 
+function normalizeDateStr(dateStr) {
+  if (!dateStr) return '';
+  const s = String(dateStr).trim();
+  // Already YYYY-MM-DD
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  // ISO timestamp like "2026-03-13T06:00:00.000Z" — extract date part
+  if (/^\d{4}-\d{2}-\d{2}T/.test(s)) return s.slice(0, 10);
+  // Try parsing as Date object string
+  const parsed = new Date(s);
+  if (!isNaN(parsed.getTime())) {
+    return parsed.toISOString().slice(0, 10);
+  }
+  return s;
+}
+
 function formatDate(dateStr) {
   if (!dateStr) return '';
-  const d = new Date(dateStr + 'T00:00:00');
+  const norm = normalizeDateStr(dateStr);
+  if (!norm) return '';
+  const d = new Date(norm + 'T00:00:00');
+  if (isNaN(d.getTime())) return norm; // fallback to raw string
   return d.toLocaleDateString('es-MX');
 }
 
 function getDayOfWeek(dateStr) {
   if (!dateStr) return '';
-  const d = new Date(dateStr + 'T00:00:00');
+  const norm = normalizeDateStr(dateStr);
+  if (!norm) return '';
+  const d = new Date(norm + 'T00:00:00');
+  if (isNaN(d.getTime())) return '';
   const days = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
   return days[d.getDay()];
 }
@@ -1051,6 +1078,58 @@ function initializeEventListeners() {
 function updateCorteModified() {
   corteModified = true;
   document.getElementById('corte-modified-badge').style.display = 'block';
+}
+
+async function pullFromShopify() {
+  const btn = document.getElementById('btnPullShopify');
+  const status = document.getElementById('shopifyPullStatus');
+  const fecha = document.getElementById('sobre2-fecha').value;
+  if (!fecha) { showToast('Selecciona una fecha primero', 'error'); return; }
+
+  btn.disabled = true;
+  btn.textContent = '⟳ Consultando Shopify...';
+  status.textContent = '';
+
+  try {
+    const resp = await fetch(config.scriptUrl + '?action=get_shopify_daily_summary&fecha=' + fecha + '&_t=' + Date.now());
+    const data = await resp.json();
+
+    if (!data.ok) {
+      if (data.error && data.error.includes('not configured')) {
+        showToast('Shopify no configurado en el backend', 'error');
+        status.textContent = '⚠️ No configurado';
+        status.style.color = '#ff9800';
+      } else {
+        throw new Error(data.error || 'Error desconocido');
+      }
+      return;
+    }
+
+    // Auto-fill payment fields from Shopify data
+    document.getElementById('corte-pagosRecibidos').value = data.totalSales || 0;
+    document.getElementById('corte-tarjeta').value = data.payments?.tarjeta || 0;
+    document.getElementById('corte-transferencias').value = data.payments?.transferencias || 0;
+    document.getElementById('corte-cashback').value = (data.payments?.cashback || 0) + (data.payments?.storeCredit || 0);
+
+    // Trigger the change events so calculated fields update
+    updateCorteModified();
+    ['corte-pagosRecibidos', 'corte-tarjeta', 'corte-transferencias', 'corte-cashback'].forEach(id => {
+      document.getElementById(id).dispatchEvent(new Event('change'));
+    });
+
+    const msg = `✅ ${data.orderCount} pedidos · $${data.totalSales.toLocaleString()} (Online: $${data.channels?.online?.toLocaleString() || 0} | POS: $${data.channels?.pos?.toLocaleString() || 0})`;
+    status.textContent = msg;
+    status.style.color = '#4caf50';
+    showToast('Datos de Shopify cargados: ' + data.orderCount + ' pedidos', 'success');
+  } catch (e) {
+    console.error('Shopify pull error:', e);
+    showToast('Error consultando Shopify: ' + e.message, 'error');
+    status.textContent = '❌ Error';
+    status.style.color = '#f44336';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '⟳ Pull from Shopify';
+  }
 }
 
 // TAB 1: PENDIENTES
