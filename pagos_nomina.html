@@ -1,0 +1,889 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="nb-brand.css">
+  <title>NB · Pagos de Nómina</title>
+  <style>
+    body { min-height: 100vh; }
+
+    .container { max-width: 1100px; margin: 0 auto; padding: 24px 24px 100px; }
+
+    /* ── HEADER AREA ── */
+    .page-header {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 24px; flex-wrap: wrap; gap: 12px;
+    }
+    .page-header h2 { font-size: 22px; font-weight: 800; letter-spacing: -0.5px; margin: 0; }
+    .page-header .subtitle { font-size: 13px; color: var(--text-muted); margin-top: 2px; }
+
+    /* ── CONFIG BAR ── */
+    .config-bar {
+      padding: 20px 24px;
+      margin-bottom: 20px;
+      display: flex; align-items: flex-end; gap: 16px; flex-wrap: wrap;
+    }
+    .config-bar .form-group { flex: 0 0 auto; }
+    .config-bar .form-group label { display: block; margin-bottom: 6px; }
+    .config-bar .form-group input,
+    .config-bar .form-group select { width: 180px; }
+
+    .employee-count-display {
+      font-size: 13px; font-weight: 600; color: var(--text-muted);
+      padding: 10px 0; margin-left: auto;
+    }
+    .employee-count-display span { color: var(--nb-700); font-weight: 800; }
+
+    /* ── EMPLOYEE CARDS ── */
+    .employees-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+
+    .employee-card {
+      background: var(--surface);
+      border: 1.5px solid var(--border-light);
+      border-radius: var(--r-xl);
+      box-shadow: var(--shadow-sm);
+      overflow: hidden;
+      transition: box-shadow var(--t-base), border-color var(--t-base);
+    }
+    .employee-card:hover {
+      box-shadow: var(--shadow-md);
+      border-color: var(--border);
+    }
+    .employee-card.has-data { border-left: 4px solid var(--nb-500); }
+
+    .emp-header {
+      display: flex; align-items: center; gap: 12px;
+      padding: 16px 20px;
+      background: var(--surface-2);
+      border-bottom: 1px solid var(--border-light);
+      cursor: pointer;
+      user-select: none;
+    }
+    .emp-number {
+      width: 32px; height: 32px;
+      background: var(--nb-100);
+      color: var(--nb-700);
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 800; font-size: 14px;
+      flex-shrink: 0;
+    }
+    .emp-header-info { flex: 1; }
+    .emp-header-name {
+      font-size: 15px; font-weight: 700; color: var(--text-primary);
+    }
+    .emp-header-amount {
+      font-size: 13px; color: var(--nb-700); font-weight: 600;
+      font-variant-numeric: tabular-nums;
+    }
+    .emp-toggle {
+      font-size: 18px; color: var(--text-muted); transition: transform var(--t-fast);
+    }
+    .emp-toggle.open { transform: rotate(180deg); }
+
+    .emp-body { padding: 20px; display: none; }
+    .emp-body.open { display: block; }
+
+    .emp-top-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin-bottom: 20px;
+    }
+
+    .emp-body .form-group label {
+      display: block; margin-bottom: 6px;
+    }
+    .emp-body .form-group input {
+      width: 100%; padding: 10px 14px;
+      border: 1.5px solid var(--border);
+      border-radius: var(--r-md);
+      font-size: 14px; font-weight: 500;
+      background: var(--surface);
+      color: var(--text-primary);
+      transition: border-color var(--t-fast), box-shadow var(--t-fast);
+      outline: none;
+    }
+    .emp-body .form-group input:focus {
+      border-color: var(--nb-500);
+      box-shadow: 0 0 0 3px rgba(74,175,80,0.12);
+    }
+    .emp-body .form-group input.money-input {
+      font-size: 20px; font-weight: 800; font-variant-numeric: tabular-nums;
+      text-align: right;
+    }
+
+    /* Denomination grid inside employee */
+    .denom-section h4 {
+      font-size: 12px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.6px; color: var(--text-muted); margin-bottom: 12px;
+    }
+    .denom-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 10px;
+    }
+    .denom-item {
+      background: var(--surface-2);
+      border: 1.5px solid var(--border);
+      border-radius: var(--r-lg);
+      padding: 10px 12px;
+      transition: border-color var(--t-fast);
+    }
+    .denom-item:focus-within {
+      border-color: var(--nb-400);
+      background: var(--nb-50);
+    }
+    .denom-label {
+      font-size: 10px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.5px; color: var(--text-muted); margin-bottom: 4px;
+    }
+    .denom-input {
+      font-family: inherit; font-size: 16px; font-weight: 700;
+      font-variant-numeric: tabular-nums;
+      color: var(--text-primary);
+      border: none; background: transparent; width: 100%;
+      outline: none; padding: 2px 0;
+    }
+    .denom-calc {
+      font-size: 10px; color: var(--text-muted); font-weight: 500; margin-top: 2px;
+    }
+    .denom-calc span { color: var(--nb-700); font-weight: 700; }
+
+    .emp-total-row {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-top: 16px; padding: 14px 18px;
+      background: var(--nb-50);
+      border: 1.5px solid var(--nb-200);
+      border-radius: var(--r-lg);
+    }
+    .emp-total-label {
+      font-size: 12px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.6px; color: var(--nb-700);
+    }
+    .emp-total-value {
+      font-size: 22px; font-weight: 900; color: var(--nb-900);
+      font-variant-numeric: tabular-nums; letter-spacing: -0.5px;
+    }
+    .emp-difference {
+      font-size: 12px; font-weight: 700; margin-left: 12px;
+      padding: 3px 10px; border-radius: var(--r-pill);
+    }
+    .emp-difference.ok { background: var(--nb-100); color: var(--nb-700); }
+    .emp-difference.off { background: var(--red-bg); color: var(--red); }
+
+    /* ── ACTIONS BAR ── */
+    .actions-bar {
+      display: flex; gap: 12px; flex-wrap: wrap;
+      margin-bottom: 24px;
+    }
+
+    /* ── SUMMARY CARDS ── */
+    .summary-row {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+
+    /* ── REMOVE BUTTON ── */
+    .btn-remove-emp {
+      background: none; border: none; cursor: pointer;
+      color: var(--text-muted); font-size: 18px;
+      padding: 4px 8px; border-radius: var(--r-md);
+      transition: all var(--t-fast);
+    }
+    .btn-remove-emp:hover { background: var(--red-bg); color: var(--red); }
+
+    /* ── PRINT STYLES ── */
+    @media print {
+      body { background: white !important; }
+      .topbar, .config-bar, .actions-bar, .employees-grid,
+      .summary-row, .page-header, .btn, .no-print { display: none !important; }
+
+      .print-area { display: block !important; }
+
+      .print-area table {
+        width: 100%; border-collapse: collapse;
+        font-size: 11px; font-family: Arial, sans-serif;
+        page-break-inside: avoid;
+      }
+      .print-area th, .print-area td {
+        border: 1px solid #333; padding: 6px 10px; text-align: left;
+      }
+      .print-area th {
+        background: #f0f0f0; font-weight: 700;
+        text-transform: uppercase; font-size: 10px;
+      }
+      .print-area .total-row td { font-weight: 900; background: #e8e8e8; }
+
+      .print-bank-section {
+        margin-bottom: 30px;
+        page-break-after: always;
+      }
+      .print-bank-section h3 {
+        font-size: 16px; margin-bottom: 10px;
+        border-bottom: 2px solid #333; padding-bottom: 6px;
+      }
+
+      .print-individual {
+        border: 2px dashed #999;
+        padding: 12px;
+        margin-bottom: 16px;
+        page-break-inside: avoid;
+      }
+      .print-individual h4 {
+        font-size: 14px; margin-bottom: 8px;
+        display: flex; justify-content: space-between; align-items: center;
+      }
+      .print-individual .emp-neto {
+        font-size: 18px; font-weight: 900;
+      }
+      .print-date {
+        font-size: 11px; color: #666; margin-bottom: 6px;
+      }
+      .print-header {
+        text-align: center; margin-bottom: 20px;
+      }
+      .print-header h2 { font-size: 18px; margin-bottom: 4px; }
+      .print-header p { font-size: 12px; color: #555; }
+
+      .print-individuals-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 12px;
+      }
+
+      .cut-line {
+        border-top: 2px dashed #999;
+        margin: 8px 0;
+      }
+    }
+
+    /* Hide print area on screen */
+    .print-area { display: none; }
+
+    /* ── RESPONSIVE ── */
+    @media (max-width: 768px) {
+      .denom-grid { grid-template-columns: repeat(3, 1fr); }
+      .emp-top-row { grid-template-columns: 1fr; }
+      .config-bar { flex-direction: column; align-items: stretch; }
+      .config-bar .form-group input,
+      .config-bar .form-group select { width: 100%; }
+      .employee-count-display { margin-left: 0; }
+    }
+    @media (max-width: 480px) {
+      .denom-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+  </style>
+</head>
+<body>
+
+<!-- TOPBAR -->
+<div class="topbar">
+  <div class="logo"></div>
+  <div>
+    <h1>Pagos de Nómina</h1>
+    <div class="topbar-sub">Natural Balance Club</div>
+  </div>
+  <div class="topbar-right" id="current-date"></div>
+</div>
+
+<div class="container">
+
+  <!-- CONFIG BAR -->
+  <div class="config-bar card">
+    <div class="form-group">
+      <label>Fecha de Pago</label>
+      <input type="date" id="fecha-pago">
+    </div>
+    <div class="form-group">
+      <label>Periodo</label>
+      <select id="periodo-tipo">
+        <option value="Semanal">Semanal</option>
+        <option value="Quincenal">Quincenal</option>
+        <option value="Mensual">Mensual</option>
+      </select>
+    </div>
+    <div class="employee-count-display">
+      Empleados: <span id="emp-count">0</span> / 10
+    </div>
+  </div>
+
+  <!-- SUMMARY ROW -->
+  <div class="summary-row" id="summary-row">
+    <div class="summary-card ok">
+      <div class="sc-label">Total Nómina</div>
+      <div class="sc-value" id="total-nomina">$0.00</div>
+    </div>
+    <div class="summary-card">
+      <div class="sc-label">Total en Billetes</div>
+      <div class="sc-value" id="total-billetes">$0.00</div>
+    </div>
+    <div class="summary-card">
+      <div class="sc-label">Total en Monedas</div>
+      <div class="sc-value" id="total-monedas">$0.00</div>
+    </div>
+    <div class="summary-card next">
+      <div class="sc-label">Empleados Capturados</div>
+      <div class="sc-value" id="total-empleados">0</div>
+    </div>
+  </div>
+
+  <!-- ACTIONS BAR -->
+  <div class="actions-bar no-print">
+    <button class="btn btn-primary" onclick="addEmployee()">＋ Agregar Empleado</button>
+    <button class="btn btn-secondary" onclick="expandAll()">▽ Expandir Todos</button>
+    <button class="btn btn-secondary" onclick="collapseAll()">△ Colapsar Todos</button>
+    <button class="btn btn-outline" onclick="printReport()" style="margin-left:auto;">🖨 Imprimir Reporte</button>
+    <button class="btn btn-danger" onclick="clearAll()">✕ Limpiar Todo</button>
+  </div>
+
+  <!-- EMPLOYEES GRID -->
+  <div class="employees-grid" id="employees-grid">
+    <!-- Employee cards inserted by JS -->
+  </div>
+
+</div>
+
+<!-- PRINT AREA (hidden on screen, shown on print) -->
+<div class="print-area" id="print-area"></div>
+
+<script>
+// ══════════════════════════════════════════════
+// STATE
+// ══════════════════════════════════════════════
+const DENOMS = [
+  { key: 'D_1000', label: '$1,000', value: 1000, type: 'bill' },
+  { key: 'D_500',  label: '$500',   value: 500,  type: 'bill' },
+  { key: 'D_200',  label: '$200',   value: 200,  type: 'bill' },
+  { key: 'D_100',  label: '$100',   value: 100,  type: 'bill' },
+  { key: 'D_50',   label: '$50',    value: 50,   type: 'bill' },
+  { key: 'D_20',   label: '$20',    value: 20,   type: 'bill' },
+  { key: 'D_10',   label: '$10',    value: 10,   type: 'coin' },
+  { key: 'D_5',    label: '$5',     value: 5,    type: 'coin' },
+  { key: 'D_2',    label: '$2',     value: 2,    type: 'coin' },
+  { key: 'D_1',    label: '$1',     value: 1,    type: 'coin' },
+  { key: 'D_050',  label: '$0.50',  value: 0.5,  type: 'coin' },
+];
+
+let employees = []; // Array of { id, name, amount, denoms: { D_1000: 0, ... }, open: true }
+let nextId = 1;
+
+// ══════════════════════════════════════════════
+// INIT
+// ══════════════════════════════════════════════
+document.addEventListener('DOMContentLoaded', () => {
+  // Set today's date
+  const today = new Date();
+  document.getElementById('fecha-pago').value = today.toISOString().split('T')[0];
+  document.getElementById('current-date').textContent = today.toLocaleDateString('es-MX', {
+    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
+  });
+
+  // Load from localStorage if available
+  loadState();
+
+  if (employees.length === 0) {
+    addEmployee(); // Start with one empty employee
+  }
+
+  render();
+});
+
+// ══════════════════════════════════════════════
+// LOCAL STORAGE PERSISTENCE
+// ══════════════════════════════════════════════
+function saveState() {
+  const state = {
+    employees,
+    nextId,
+    fecha: document.getElementById('fecha-pago').value,
+    periodo: document.getElementById('periodo-tipo').value
+  };
+  localStorage.setItem('nb_nomina_state', JSON.stringify(state));
+}
+
+function loadState() {
+  try {
+    const saved = localStorage.getItem('nb_nomina_state');
+    if (saved) {
+      const state = JSON.parse(saved);
+      employees = state.employees || [];
+      nextId = state.nextId || 1;
+      if (state.fecha) document.getElementById('fecha-pago').value = state.fecha;
+      if (state.periodo) document.getElementById('periodo-tipo').value = state.periodo;
+    }
+  } catch (e) { /* ignore */ }
+}
+
+// ══════════════════════════════════════════════
+// EMPLOYEE MANAGEMENT
+// ══════════════════════════════════════════════
+function addEmployee() {
+  if (employees.length >= 10) {
+    alert('Máximo 10 empleados permitidos');
+    return;
+  }
+  const denomObj = {};
+  DENOMS.forEach(d => denomObj[d.key] = 0);
+
+  employees.push({
+    id: nextId++,
+    name: '',
+    amount: 0,
+    denoms: denomObj,
+    open: true
+  });
+
+  // Collapse others when adding new
+  employees.forEach((e, i) => {
+    if (i < employees.length - 1) e.open = false;
+  });
+
+  render();
+  saveState();
+}
+
+function removeEmployee(id) {
+  if (!confirm('¿Eliminar este empleado?')) return;
+  employees = employees.filter(e => e.id !== id);
+  render();
+  saveState();
+}
+
+function toggleEmployee(id) {
+  const emp = employees.find(e => e.id === id);
+  if (emp) emp.open = !emp.open;
+  render();
+}
+
+function expandAll() {
+  employees.forEach(e => e.open = true);
+  render();
+}
+
+function collapseAll() {
+  employees.forEach(e => e.open = false);
+  render();
+}
+
+function clearAll() {
+  if (!confirm('¿Limpiar todos los datos de nómina? Esta acción no se puede deshacer.')) return;
+  employees = [];
+  nextId = 1;
+  localStorage.removeItem('nb_nomina_state');
+  addEmployee();
+  render();
+}
+
+// ══════════════════════════════════════════════
+// CALCULATIONS
+// ══════════════════════════════════════════════
+function calcDenomTotal(denoms) {
+  let total = 0;
+  DENOMS.forEach(d => {
+    total += (denoms[d.key] || 0) * d.value;
+  });
+  return total;
+}
+
+function calcBillTotal(denoms) {
+  let total = 0;
+  DENOMS.filter(d => d.type === 'bill').forEach(d => {
+    total += (denoms[d.key] || 0) * d.value;
+  });
+  return total;
+}
+
+function calcCoinTotal(denoms) {
+  let total = 0;
+  DENOMS.filter(d => d.type === 'coin').forEach(d => {
+    total += (denoms[d.key] || 0) * d.value;
+  });
+  return total;
+}
+
+function fmt(n) {
+  return '$' + n.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+// ══════════════════════════════════════════════
+// INPUT HANDLERS (preserve data)
+// ══════════════════════════════════════════════
+function onNameChange(id, value) {
+  const emp = employees.find(e => e.id === id);
+  if (emp) emp.name = value;
+  updateHeaders();
+  saveState();
+}
+
+function onAmountChange(id, value) {
+  const emp = employees.find(e => e.id === id);
+  if (emp) emp.amount = parseFloat(value) || 0;
+  updateTotalRow(id);
+  updateSummary();
+  updateHeaders();
+  saveState();
+}
+
+function onDenomChange(id, denomKey, value) {
+  const emp = employees.find(e => e.id === id);
+  if (emp) {
+    emp.denoms[denomKey] = parseInt(value) || 0;
+    updateDenomCalc(id, denomKey);
+    updateTotalRow(id);
+    updateSummary();
+  }
+  saveState();
+}
+
+function updateDenomCalc(empId, denomKey) {
+  const emp = employees.find(e => e.id === empId);
+  if (!emp) return;
+  const d = DENOMS.find(dd => dd.key === denomKey);
+  const calcEl = document.getElementById(`calc-${empId}-${denomKey}`);
+  if (calcEl && d) {
+    const sub = emp.denoms[denomKey] * d.value;
+    calcEl.innerHTML = `= <span>${fmt(sub)}</span>`;
+  }
+}
+
+function updateTotalRow(empId) {
+  const emp = employees.find(e => e.id === empId);
+  if (!emp) return;
+
+  const denomTotal = calcDenomTotal(emp.denoms);
+  const totalEl = document.getElementById(`total-${empId}`);
+  if (totalEl) totalEl.textContent = fmt(denomTotal);
+
+  const diff = denomTotal - emp.amount;
+  const diffEl = document.getElementById(`diff-${empId}`);
+  if (diffEl) {
+    if (emp.amount === 0) {
+      diffEl.textContent = '';
+      diffEl.className = 'emp-difference';
+    } else if (Math.abs(diff) < 0.01) {
+      diffEl.textContent = '✓ Exacto';
+      diffEl.className = 'emp-difference ok';
+    } else {
+      const sign = diff > 0 ? '+' : '';
+      diffEl.textContent = `${sign}${fmt(diff)}`;
+      diffEl.className = 'emp-difference off';
+    }
+  }
+
+  // Update card border
+  const card = document.getElementById(`card-${empId}`);
+  if (card) {
+    card.classList.toggle('has-data', emp.name.trim() !== '' || emp.amount > 0);
+  }
+}
+
+function updateHeaders() {
+  employees.forEach(emp => {
+    const nameEl = document.getElementById(`header-name-${emp.id}`);
+    const amtEl = document.getElementById(`header-amt-${emp.id}`);
+    if (nameEl) nameEl.textContent = emp.name || 'Sin nombre';
+    if (amtEl) amtEl.textContent = emp.amount > 0 ? fmt(emp.amount) : '';
+  });
+  document.getElementById('emp-count').textContent = employees.length;
+}
+
+function updateSummary() {
+  let totalNom = 0, totalBills = 0, totalCoins = 0, empWithData = 0;
+  employees.forEach(emp => {
+    const dt = calcDenomTotal(emp.denoms);
+    totalNom += dt;
+    totalBills += calcBillTotal(emp.denoms);
+    totalCoins += calcCoinTotal(emp.denoms);
+    if (emp.name.trim() || emp.amount > 0) empWithData++;
+  });
+
+  document.getElementById('total-nomina').textContent = fmt(totalNom);
+  document.getElementById('total-billetes').textContent = fmt(totalBills);
+  document.getElementById('total-monedas').textContent = fmt(totalCoins);
+  document.getElementById('total-empleados').textContent = empWithData;
+}
+
+// ══════════════════════════════════════════════
+// RENDER
+// ══════════════════════════════════════════════
+function render() {
+  const grid = document.getElementById('employees-grid');
+  grid.innerHTML = '';
+
+  employees.forEach((emp, idx) => {
+    const card = document.createElement('div');
+    card.className = 'employee-card' + (emp.name.trim() || emp.amount > 0 ? ' has-data' : '');
+    card.id = `card-${emp.id}`;
+
+    // Header
+    const header = document.createElement('div');
+    header.className = 'emp-header';
+    header.onclick = () => toggleEmployee(emp.id);
+    header.innerHTML = `
+      <div class="emp-number">${idx + 1}</div>
+      <div class="emp-header-info">
+        <div class="emp-header-name" id="header-name-${emp.id}">${emp.name || 'Sin nombre'}</div>
+        <div class="emp-header-amount" id="header-amt-${emp.id}">${emp.amount > 0 ? fmt(emp.amount) : ''}</div>
+      </div>
+      <button class="btn-remove-emp" onclick="event.stopPropagation(); removeEmployee(${emp.id})" title="Eliminar">✕</button>
+      <div class="emp-toggle ${emp.open ? 'open' : ''}">▾</div>
+    `;
+
+    // Body
+    const body = document.createElement('div');
+    body.className = 'emp-body' + (emp.open ? ' open' : '');
+
+    // Top row: name + amount
+    let topHtml = `
+      <div class="emp-top-row">
+        <div class="form-group">
+          <label>Nombre del Empleado</label>
+          <input type="text" value="${escHtml(emp.name)}" placeholder="Ej: María García"
+            oninput="onNameChange(${emp.id}, this.value)">
+        </div>
+        <div class="form-group">
+          <label>Monto a Pagar (Neto)</label>
+          <input type="number" class="money-input" value="${emp.amount || ''}" placeholder="0.00" step="0.01" min="0"
+            oninput="onAmountChange(${emp.id}, this.value)">
+        </div>
+      </div>
+    `;
+
+    // Denomination grid
+    let denomHtml = '<div class="denom-section"><h4>Desglose en Denominaciones</h4><div class="denom-grid">';
+    DENOMS.forEach(d => {
+      const count = emp.denoms[d.key] || 0;
+      const sub = count * d.value;
+      denomHtml += `
+        <div class="denom-item">
+          <div class="denom-label">${d.label}</div>
+          <input class="denom-input" type="number" min="0" value="${count || ''}" placeholder="0"
+            oninput="onDenomChange(${emp.id}, '${d.key}', this.value)">
+          <div class="denom-calc" id="calc-${emp.id}-${d.key}">= <span>${fmt(sub)}</span></div>
+        </div>
+      `;
+    });
+    denomHtml += '</div></div>';
+
+    // Total row
+    const denomTotal = calcDenomTotal(emp.denoms);
+    const diff = denomTotal - emp.amount;
+    let diffHtml = '';
+    if (emp.amount > 0) {
+      if (Math.abs(diff) < 0.01) {
+        diffHtml = '<span class="emp-difference ok">✓ Exacto</span>';
+      } else {
+        const sign = diff > 0 ? '+' : '';
+        diffHtml = `<span class="emp-difference off">${sign}${fmt(diff)}</span>`;
+      }
+    }
+
+    const totalHtml = `
+      <div class="emp-total-row">
+        <div>
+          <div class="emp-total-label">Total en Sobre</div>
+        </div>
+        <div style="display:flex;align-items:center;">
+          <div class="emp-total-value" id="total-${emp.id}">${fmt(denomTotal)}</div>
+          <div id="diff-${emp.id}">${diffHtml}</div>
+        </div>
+      </div>
+    `;
+
+    body.innerHTML = topHtml + denomHtml + totalHtml;
+    card.appendChild(header);
+    card.appendChild(body);
+    grid.appendChild(card);
+  });
+
+  updateSummary();
+  updateHeaders();
+}
+
+function escHtml(s) {
+  return s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+// ══════════════════════════════════════════════
+// PRINT REPORT
+// ══════════════════════════════════════════════
+function printReport() {
+  const activeEmps = employees.filter(e => e.name.trim() && e.amount > 0);
+  if (activeEmps.length === 0) {
+    alert('No hay empleados con datos para imprimir');
+    return;
+  }
+
+  const fecha = document.getElementById('fecha-pago').value;
+  const periodo = document.getElementById('periodo-tipo').value;
+  const fechaFmt = new Date(fecha + 'T12:00:00').toLocaleDateString('es-MX', {
+    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
+  });
+
+  let html = '';
+
+  // ── PAGE 1: BANK SUMMARY ──
+  html += `
+    <div class="print-bank-section">
+      <div class="print-header">
+        <h2>Natural Balance Club — Nómina ${periodo}</h2>
+        <p>${fechaFmt}</p>
+      </div>
+      <h3>Resumen para Banco</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Empleado</th>
+            <th style="text-align:right;">Neto a Pagar</th>
+          </tr>
+        </thead>
+        <tbody>
+  `;
+
+  let grandTotal = 0;
+  activeEmps.forEach((emp, i) => {
+    grandTotal += emp.amount;
+    html += `
+      <tr>
+        <td>${i + 1}</td>
+        <td>${escHtml(emp.name)}</td>
+        <td style="text-align:right; font-weight:700; font-variant-numeric:tabular-nums;">${fmt(emp.amount)}</td>
+      </tr>
+    `;
+  });
+
+  html += `
+        </tbody>
+        <tfoot>
+          <tr class="total-row">
+            <td colspan="2" style="text-align:right; font-weight:900;">TOTAL NÓMINA</td>
+            <td style="text-align:right; font-weight:900; font-size:14px;">${fmt(grandTotal)}</td>
+          </tr>
+        </tfoot>
+      </table>
+
+      <div style="margin-top:20px;">
+        <h3>Desglose Total de Denominaciones</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>Denominación</th>
+              <th style="text-align:center;">Cantidad Total</th>
+              <th style="text-align:right;">Subtotal</th>
+            </tr>
+          </thead>
+          <tbody>
+  `;
+
+  // Aggregate denominations across all employees
+  let denomGrandTotal = 0;
+  DENOMS.forEach(d => {
+    let totalCount = 0;
+    activeEmps.forEach(emp => { totalCount += (emp.denoms[d.key] || 0); });
+    const sub = totalCount * d.value;
+    denomGrandTotal += sub;
+    if (totalCount > 0) {
+      html += `
+        <tr>
+          <td>${d.label}</td>
+          <td style="text-align:center;">${totalCount}</td>
+          <td style="text-align:right; font-variant-numeric:tabular-nums;">${fmt(sub)}</td>
+        </tr>
+      `;
+    }
+  });
+
+  html += `
+          </tbody>
+          <tfoot>
+            <tr class="total-row">
+              <td colspan="2" style="text-align:right; font-weight:900;">TOTAL</td>
+              <td style="text-align:right; font-weight:900;">${fmt(denomGrandTotal)}</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </div>
+  `;
+
+  // ── PAGE 2+: INDIVIDUAL SLIPS (2 per row) ──
+  html += `
+    <div class="print-header" style="margin-bottom:16px;">
+      <h2>Comprobantes Individuales — Nómina ${periodo}</h2>
+      <p>${fechaFmt} · Recortar por la línea punteada</p>
+    </div>
+    <div class="print-individuals-grid">
+  `;
+
+  activeEmps.forEach((emp) => {
+    const denomTotal = calcDenomTotal(emp.denoms);
+    let slipHtml = `
+      <div class="print-individual">
+        <h4>
+          <span>${escHtml(emp.name)}</span>
+          <span class="emp-neto">${fmt(emp.amount)}</span>
+        </h4>
+        <div class="print-date">Periodo: ${periodo} · ${fechaFmt}</div>
+        <table>
+          <thead>
+            <tr><th>Denominación</th><th style="text-align:center;">Cant.</th><th style="text-align:right;">Subtotal</th></tr>
+          </thead>
+          <tbody>
+    `;
+
+    DENOMS.forEach(d => {
+      const count = emp.denoms[d.key] || 0;
+      if (count > 0) {
+        slipHtml += `
+          <tr>
+            <td>${d.label}</td>
+            <td style="text-align:center;">${count}</td>
+            <td style="text-align:right;">${fmt(count * d.value)}</td>
+          </tr>
+        `;
+      }
+    });
+
+    slipHtml += `
+          </tbody>
+          <tfoot>
+            <tr class="total-row">
+              <td colspan="2" style="text-align:right;">Total en Sobre</td>
+              <td style="text-align:right;">${fmt(denomTotal)}</td>
+            </tr>
+          </tfoot>
+        </table>
+        <div style="margin-top:8px; font-size:10px; display:flex; justify-content:space-between;">
+          <span>Firma empleado: ___________________</span>
+          <span>Natural Balance Club</span>
+        </div>
+      </div>
+    `;
+
+    html += slipHtml;
+  });
+
+  html += '</div>';
+
+  document.getElementById('print-area').innerHTML = html;
+  window.print();
+}
+
+// ── Listen for config changes and save ──
+document.getElementById('fecha-pago').addEventListener('change', saveState);
+document.getElementById('periodo-tipo').addEventListener('change', saveState);
+</script>
+
+</body>
+</html>
