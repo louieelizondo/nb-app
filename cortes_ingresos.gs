@@ -199,6 +199,38 @@ function formatDateStr(val) {
 }
 
 // ══════════════════════════════════════════════
+// HELPER: Remove duplicate rows for same date (keeps row with highest Sobre2)
+// ══════════════════════════════════════════════
+
+function cleanDuplicateRows(sheet, fecha) {
+  const data = sheet.getDataRange().getValues();
+  if (data.length <= 1) return;
+  const headers = data[0];
+  const fechaCol = headers.indexOf('Fecha');
+  const sobre2Col = headers.indexOf('Sobre2');
+  if (fechaCol < 0) return;
+
+  // Find all rows matching this date
+  const matches = [];
+  for (let i = 1; i < data.length; i++) {
+    if (formatDateStr(data[i][fechaCol]) === fecha) {
+      matches.push({
+        rowNum: i + 1,
+        sobre2: sobre2Col >= 0 ? (parseFloat(data[i][sobre2Col]) || 0) : 0
+      });
+    }
+  }
+
+  if (matches.length <= 1) return; // No duplicates
+
+  // Keep the row with highest Sobre2, delete the rest (from bottom up to preserve indices)
+  matches.sort((a, b) => b.sobre2 - a.sobre2); // highest Sobre2 first
+  const toDelete = matches.slice(1).map(m => m.rowNum).sort((a, b) => b - a); // bottom-up
+  toDelete.forEach(rowNum => sheet.deleteRow(rowNum));
+  log('DEDUP_INGRESOS', fecha + ' | removed ' + toDelete.length + ' duplicate(s)');
+}
+
+// ══════════════════════════════════════════════
 // HELPER: Generic sheet-to-objects reader
 // ══════════════════════════════════════════════
 
@@ -564,6 +596,9 @@ function saveIngreso(body) {
   const ing = body.ingreso || body;
   const fecha = ing.Fecha || formatDateStr(new Date());
 
+  // Clean up duplicate rows for this date BEFORE saving
+  cleanDuplicateRows(sheet, fecha);
+
   // Check if entry already exists for this date
   const existingRow = findRowByDate(sheet, fecha);
 
@@ -657,13 +692,70 @@ function getIngresos(params) {
   if (params.mes) {
     filtered = filtered.filter(r => String(r.Mes) === params.mes);
   }
-  // Normalize dates to YYYY-MM-DD strings before JSON serialization
-  const normalized = filtered.map(r => {
+  // Normalize dates and deduplicate by Fecha (keep row with highest Sobre2)
+  const byDate = {};
+  filtered.forEach(r => {
+    const fecha = formatDateStr(r.Fecha);
     const copy = Object.assign({}, r);
-    if (copy.Fecha) copy.Fecha = formatDateStr(copy.Fecha);
-    return copy;
+    copy.Fecha = fecha;
+    const existing = byDate[fecha];
+    if (!existing || (parseFloat(copy.Sobre2) || 0) > (parseFloat(existing.Sobre2) || 0)) {
+      byDate[fecha] = copy;
+    }
   });
+  const normalized = Object.values(byDate);
   return { ingresos: normalized, count: normalized.length };
+}
+
+// ══════════════════════════════════════════════
+// PENDIENTES: Cross-reference CORTE_TIENDA vs INGRESOS
+// ══════════════════════════════════════════════
+
+function getPendientesSobre2(params) {
+  const month = params.month || new Date().toISOString().slice(0, 7);
+
+  // Get all Corte de Tienda entries for the month
+  const cortes = sheetToObjects(CORTE_TIENDA_TAB, CORTE_TIENDA_HEADERS);
+  const cortesMonth = cortes.filter(c => formatDateStr(c.Fecha).startsWith(month));
+
+  // Get all INGRESOS entries for the month (deduplicated)
+  const ingresos = sheetToObjects(INGRESOS_TAB, INGRESOS_HEADERS);
+  const ingByDate = {};
+  ingresos.forEach(r => {
+    const fecha = formatDateStr(r.Fecha);
+    if (!fecha.startsWith(month)) return;
+    const existing = ingByDate[fecha];
+    if (!existing || (parseFloat(r.Sobre2) || 0) > (parseFloat(existing.Sobre2) || 0)) {
+      ingByDate[fecha] = r;
+    }
+  });
+
+  // Find corte dates where Sobre2 is missing or zero
+  const pending = [];
+  const seen = {};
+  cortesMonth.forEach(c => {
+    const fecha = formatDateStr(c.Fecha);
+    if (seen[fecha]) return; // skip duplicate corte dates
+    seen[fecha] = true;
+
+    const ing = ingByDate[fecha];
+    const sobre2 = ing ? (parseFloat(ing.Sobre2) || 0) : 0;
+
+    if (sobre2 === 0) {
+      pending.push({
+        Fecha: fecha,
+        PagosRecibidos: parseFloat(c.PagosRecibidos) || (ing ? parseFloat(ing.PagosRecibidos) : 0) || 0,
+        Tarjeta: parseFloat(c.Tarjeta) || (ing ? parseFloat(ing.Tarjeta) : 0) || 0,
+        Transferencias: parseFloat(c.Transferencias) || (ing ? parseFloat(ing.Transferencias) : 0) || 0,
+        Cashback: parseFloat(c.Cashback) || (ing ? parseFloat(ing.Cashback) : 0) || 0,
+        FaltanteSobrante: parseFloat(c.FaltanteSobrante) || (ing ? parseFloat(ing.FaltanteSobrante) : 0) || 0,
+        Sobre2: 0,
+        hasIngreso: !!ing
+      });
+    }
+  });
+
+  return { pendientes: pending, count: pending.length };
 }
 
 function updateSobre2(body) {

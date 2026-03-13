@@ -1132,31 +1132,21 @@ async function pullFromShopify() {
   }
 }
 
-// TAB 1: PENDIENTES
+// TAB 1: PENDIENTES — cross-references CORTE_TIENDA vs INGRESOS
 async function loadPendientes() {
   const container = document.getElementById('pendientes-list');
   container.innerHTML = '<div class="loading"><div class="spinner"></div> Cargando...</div>';
 
   try {
     const month = new Date().toISOString().slice(0, 7);
-    const data = await callAPI('get_ingresos', { month });
+    const data = await callAPI('get_pendientes_sobre2', { month });
 
-    if (!data.ingresos || data.ingresos.length === 0) {
+    if (!data.pendientes || data.pendientes.length === 0) {
       container.innerHTML = '<div class="empty-state"><p>Todo al día ✓</p></div>';
       return;
     }
 
-    // Filter for pending (has PagosRecibidos but no Sobre2)
-    const pending = data.ingresos.filter(r =>
-      (r.PagosRecibidos || 0) > 0 && (!r.Sobre2 || r.Sobre2 === 0 || r.Sobre2 === '')
-    );
-
-    if (pending.length === 0) {
-      container.innerHTML = '<div class="empty-state"><p>Todo al día ✓</p></div>';
-      return;
-    }
-
-    container.innerHTML = pending.map(r => `
+    container.innerHTML = data.pendientes.map(r => `
       <div class="pending-card" onclick="goToDate('${r.Fecha}')">
         <h4>${formatDate(r.Fecha)} — ${getDayOfWeek(r.Fecha)}</h4>
         <p><strong>Pagos Recibidos:</strong> ${formatPeso(r.PagosRecibidos)}</p>
