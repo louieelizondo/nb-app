@@ -1,0 +1,1834 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="nb-brand.css">
+<title>NB · Portal de Pagos</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: linear-gradient(135deg, #faf6f1 0%, #f0ebe4 50%, #e8e0d8 100%); color: #2d2319; min-height: 100vh; }
+
+/* TOPBAR */
+.topbar { background: linear-gradient(135deg, #3a7c3a 0%, #2e6b2e 40%, #1a5c2e 100%); color: white; padding: 18px 32px; display: flex; align-items: center; gap: 16px; box-shadow: 0 4px 20px rgba(46,107,46,.3); }
+.logo { width: 44px; height: 44px; background: rgba(255,255,255,.95); border-radius: 12px; display: flex; align-items: center; justify-content: center; font-weight: 900; color: #2e6b2e; font-size: 16px; flex-shrink: 0; box-shadow: 0 2px 8px rgba(0,0,0,.15); }
+.topbar h1 { font-size: 20px; font-weight: 800; letter-spacing: -.3px; }
+.topbar-sub { font-size: 12px; opacity: .75; margin-top: 1px; }
+.topbar-right { margin-left: auto; font-size: 12px; opacity: .7; text-align: right; }
+.container { max-width: 1200px; margin: 0 auto; padding: 24px 24px 100px; }
+
+/* MONTH ROTATOR */
+.month-rotator { display:flex; align-items:center; justify-content:center; gap:16px; margin-bottom:18px; }
+.month-rotator .mr-btn { background:white; border:2px solid #e0d8cf; border-radius:12px; width:40px; height:40px; display:flex; align-items:center; justify-content:center; cursor:pointer; font-size:18px; color:#7a6b5d; transition:all .15s; font-weight:700; }
+.month-rotator .mr-btn:hover { background:#f5f0eb; border-color:#2e6b2e; color:#2e6b2e; }
+.month-rotator .mr-label { font-size:18px; font-weight:800; color:#2d2319; min-width:200px; text-align:center; text-transform:capitalize; }
+.month-rotator .mr-today { font-size:12px; font-weight:600; color:#2e6b2e; cursor:pointer; padding:4px 12px; border-radius:8px; border:1.5px solid #2e6b2e; background:white; transition:all .15s; }
+.month-rotator .mr-today:hover { background:#e8f5e9; }
+.month-rotator .mr-label:hover { background:#f5f0eb; border-radius:8px; }
+.month-picker { display:none; position:absolute; top:100%; left:50%; transform:translateX(-50%); margin-top:8px; background:white; border-radius:14px; box-shadow:0 8px 32px rgba(0,0,0,.18); padding:16px; z-index:200; min-width:260px; }
+.month-picker.open { display:block; }
+.mp-year-row { display:flex; align-items:center; justify-content:center; gap:16px; margin-bottom:12px; }
+.mp-year-row span { font-size:16px; font-weight:800; color:#2d2319; min-width:50px; text-align:center; }
+.mp-arrow { background:none; border:1.5px solid #e0d8cf; border-radius:8px; width:32px; height:32px; display:flex; align-items:center; justify-content:center; cursor:pointer; font-size:14px; color:#7a6b5d; transition:all .15s; }
+.mp-arrow:hover { border-color:#2e7d32; color:#2e7d32; background:#e8f5e9; }
+.mp-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:6px; }
+.mp-grid button { padding:8px 4px; border:none; border-radius:8px; background:#f5f0eb; color:#2d2319; font-size:13px; font-weight:600; cursor:pointer; transition:all .15s; }
+.mp-grid button:hover { background:#e8f5e9; color:#2e7d32; }
+.mp-grid button.active { background:#2e7d32; color:white; }
+
+/* SYNC STATUS INDICATOR */
+.sync-indicator { display:flex; align-items:center; gap:6px; font-size:11px; font-weight:600; padding:4px 10px; border-radius:8px; margin-left:8px; white-space:nowrap; }
+.sync-indicator .dot { width:8px; height:8px; border-radius:50%; flex-shrink:0; }
+.sync-indicator.synced .dot { background:#4caf50; }
+.sync-indicator.synced { color:#2e7d32; background:rgba(76,175,80,.1); }
+.sync-indicator.pending .dot { background:#ff9800; animation:pulse-dot 1.5s infinite; }
+.sync-indicator.pending { color:#e65100; background:rgba(255,152,0,.1); }
+.sync-indicator.offline .dot { background:#f44336; }
+.sync-indicator.offline { color:#c62828; background:rgba(244,67,54,.1); }
+.sync-indicator.error .dot { background:#f44336; }
+.sync-indicator.error { color:#c62828; background:rgba(244,67,54,.1); }
+@keyframes pulse-dot { 0%,100%{opacity:1} 50%{opacity:.3} }
+
+/* SUMMARY CARDS */
+.summary-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 22px; }
+.summary-card { background: white; border-radius: 16px; padding: 20px 22px; box-shadow: 0 2px 12px rgba(0,0,0,.05); border-left: 4px solid #ddd; transition: transform .15s, box-shadow .15s; }
+.summary-card:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(0,0,0,.08); }
+.summary-card .sc-icon { font-size: 22px; margin-bottom: 6px; }
+.summary-card .sc-label { font-size: 11px; color: #999; text-transform: uppercase; letter-spacing: .6px; margin-bottom: 6px; font-weight: 600; }
+.summary-card .sc-value { font-size: 28px; font-weight: 800; color: #2d2319; line-height: 1.1; }
+.summary-card.urgent { border-left-color: #e53935; background: linear-gradient(135deg, #fff 80%, #ffebee 100%); }
+.summary-card.urgent .sc-value { color: #c62828; }
+.summary-card.pending { border-left-color: #ff9800; }
+.summary-card.ok { border-left-color: #43a047; background: linear-gradient(135deg, #fff 80%, #e8f5e9 100%); }
+.summary-card.ok .sc-value { color: #2e7d32; }
+.summary-card.next { border-left-color: #5c6bc0; grid-column: 1 / -1; }
+.summary-card.next .sc-value { font-size: 16px; font-weight: 700; }
+
+/* FILTERS */
+.filters { background: white; border-radius: 16px; padding: 16px 22px; margin-bottom: 18px; display: flex; gap: 12px; flex-wrap: wrap; align-items: center; box-shadow: 0 2px 12px rgba(0,0,0,.05); }
+.chip-group { display: flex; gap: 6px; flex-wrap: wrap; }
+.chip { padding: 7px 16px; border-radius: 24px; font-size: 13px; font-weight: 600; cursor: pointer; border: 2px solid #e0d8cf; background: white; transition: all .2s; color: #7a6b5d; }
+.chip.active { background: linear-gradient(135deg, #3a7c3a, #2e6b2e); color: white; border-color: transparent; box-shadow: 0 2px 8px rgba(46,107,46,.3); }
+.chip:hover:not(.active) { background: #f5f0eb; border-color: #c4b8a8; }
+.chip.chip-vencido.active { background: linear-gradient(135deg, #e53935, #c62828); box-shadow: 0 2px 8px rgba(198,40,40,.3); }
+.filters select, .filters input { padding: 8px 14px; border: 2px solid #e0d8cf; border-radius: 10px; font-size: 13px; background: white; color: #2d2319; transition: border-color .2s; }
+.filters select:focus, .filters input:focus { border-color: #2e6b2e; outline: none; box-shadow: 0 0 0 3px rgba(46,107,46,.1); }
+
+/* TABLE — DESKTOP */
+.tbl-wrap { overflow-x: auto; background: white; border-radius: 16px; box-shadow: 0 2px 16px rgba(0,0,0,.06); }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+thead th { background: linear-gradient(135deg, #3a7c3a, #2e6b2e); color: white; padding: 13px 16px; text-align: left; font-size: 11px; font-weight: 700; letter-spacing: .5px; text-transform: uppercase; white-space: nowrap; position: sticky; top: 0; }
+thead th:first-child { border-radius: 16px 0 0 0; }
+thead th:last-child { border-radius: 0 16px 0 0; }
+tbody td { padding: 12px 16px; border-bottom: 1px solid #f2ede7; vertical-align: middle; }
+tbody tr { transition: background .15s; cursor:pointer; }
+tbody tr:hover { background: #faf7f3; }
+tbody tr:last-child td { border-bottom: none; }
+tbody tr.overdue { background: linear-gradient(90deg, #fff5f5, #fff); }
+tbody tr.overdue:hover { background: #ffebee; }
+tbody tr.today { background: linear-gradient(90deg, #fffde7, #fff); }
+tbody tr.paid { background: linear-gradient(90deg, #f1f8f1, #fff); }
+tbody tr.paid td { color: #888; }
+tbody tr.selected { background: #e3f2fd !important; outline: 2px solid #1565c0; outline-offset: -2px; }
+tbody tr.editing { background:#fffde7 !important; }
+
+/* SELECTION CHECKBOX */
+.row-check { width: 18px; height: 18px; cursor: pointer; accent-color: #2e6b2e; }
+
+/* BADGES */
+.badge { display: inline-flex; align-items: center; gap: 4px; padding: 4px 12px; border-radius: 20px; font-size: 11px; font-weight: 700; white-space: nowrap; letter-spacing: .3px; }
+.badge-pend { background: linear-gradient(135deg, #fff3e0, #ffe0b2); color: #e65100; }
+.badge-paid { background: linear-gradient(135deg, #e8f5e9, #c8e6c9); color: #2e7d32; }
+.badge-over { background: linear-gradient(135deg, #ffebee, #ffcdd2); color: #c62828; animation: glow 2s infinite; }
+@keyframes glow { 0%,100%{box-shadow:0 0 0 rgba(198,40,40,0)} 50%{box-shadow:0 0 12px rgba(198,40,40,.25)} }
+
+/* FORMA DE PAGO */
+.fp-chip { display: inline-flex; align-items: center; gap: 3px; padding: 3px 10px; border-radius: 12px; font-size: 11px; font-weight: 600; }
+.fp-transferencia { background: #e3f2fd; color: #1565c0; }
+.fp-tarjeta { background: #f3e5f5; color: #7b1fa2; }
+.fp-efectivo { background: #e8f5e9; color: #2e7d32; }
+.fp-cheque { background: #fff8e1; color: #f57f17; }
+
+/* ACTION BUTTONS */
+.btn { padding: 7px 16px; border: none; border-radius: 10px; cursor: pointer; font-size: 12px; font-weight: 700; transition: all .2s; display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+.btn-pay { background: linear-gradient(135deg, #43a047, #2e7d32); color: white; box-shadow: 0 2px 6px rgba(46,125,50,.25); }
+.btn-pay:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(46,125,50,.35); }
+.btn-undo { background: #f5f0eb; color: #7a6b5d; } .btn-undo:hover { background: #e8e0d8; }
+.btn-del { background: none; color: #ccc; font-size: 16px; padding: 4px 8px; border: none; cursor: pointer; transition: color .15s; border-radius: 6px; }
+.btn-del:hover { color: #c62828; background: #ffebee; }
+.btn-brown { background: linear-gradient(135deg, #6d4c3f, #5c3d2e); color: white; box-shadow: 0 2px 6px rgba(92,61,46,.25); }
+.btn-brown:hover { transform: translateY(-1px); }
+.btn-foto { background: #e3f2fd; color: #1565c0; border: 1.5px solid #90caf9; padding: 5px 10px; font-size: 11px; border-radius: 8px; cursor: pointer; font-weight: 600; transition: all .15s; }
+.btn-foto:hover { background: #bbdefb; }
+.btn-save { background:linear-gradient(135deg,#43a047,#2e7d32); color:white; }
+.btn-cancel { background:#f5f0eb; color:#7a6b5d; }
+
+/* EDIT ROW */
+.edit-row { background:#fffde7; border-left:4px solid #ff9800; border-radius:0 0 16px 16px; padding:18px 20px; margin-top:-1px; }
+.edit-grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+.edit-field label { font-size:11px; font-weight:700; color:#666; text-transform:uppercase; display:block; margin-bottom:4px; letter-spacing:.3px; }
+.edit-field input, .edit-field select { width:100%; padding:8px 12px; border:1.5px solid #e0d8cf; border-radius:8px; font-size:13px; transition:border-color .2s; }
+.edit-field input:focus, .edit-field select:focus { border-color:#2e6b2e; outline:none; box-shadow:0 0 0 3px rgba(46,107,46,.1); }
+.edit-field input[readonly] { background:#f5f0eb; color:#7a6b5d; }
+.edit-actions { display:flex; gap:8px; justify-content:flex-end; margin-top:14px; align-items:center; }
+
+/* FLOATING ACTION BAR (selection mode) */
+.action-bar { position: fixed; bottom: 0; left: 0; right: 0; background: white; border-top: 2px solid #e0d8cf; padding: 14px 24px; display: flex; align-items: center; gap: 12px; z-index: 8000; box-shadow: 0 -4px 20px rgba(0,0,0,.1); transform: translateY(100%); transition: transform .25s ease; }
+.action-bar.visible { transform: translateY(0); }
+.action-bar .ab-count { font-size: 14px; font-weight: 800; color: #2e6b2e; }
+.action-bar .ab-spacer { flex: 1; }
+.btn-action-pay { background: linear-gradient(135deg, #43a047, #2e7d32); color: white; padding: 12px 28px; border: none; border-radius: 12px; font-size: 14px; font-weight: 800; cursor: pointer; box-shadow: 0 3px 10px rgba(46,125,50,.3); transition: all .15s; }
+.btn-action-pay:hover { transform: translateY(-1px); box-shadow: 0 5px 16px rgba(46,125,50,.4); }
+.btn-action-del { background: none; color: #c62828; border: 2px solid #ef9a9a; padding: 10px 20px; border-radius: 12px; font-size: 13px; font-weight: 700; cursor: pointer; transition: all .15s; }
+.btn-action-del:hover { background: #ffebee; }
+.btn-action-cancel { background: #f5f0eb; color: #7a6b5d; border: none; padding: 10px 20px; border-radius: 12px; font-size: 13px; font-weight: 600; cursor: pointer; }
+
+/* MODAL */
+.modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,.5); backdrop-filter: blur(4px); z-index: 9000; display: none; align-items: center; justify-content: center; }
+.modal-bg.open { display: flex; }
+.modal { background: white; border-radius: 20px; padding: 32px; width: 90%; max-width: 460px; box-shadow: 0 20px 60px rgba(0,0,0,.25); animation: modalIn .25s ease-out; }
+@keyframes modalIn { from{opacity:0;transform:scale(.95) translateY(10px)} to{opacity:1;transform:scale(1) translateY(0)} }
+.modal h3 { font-size: 18px; font-weight: 800; margin-bottom: 18px; color: #2d2319; }
+.modal label { font-size: 12px; font-weight: 700; color: #7a6b5d; display: block; margin-bottom: 5px; margin-top: 14px; }
+.modal input, .modal select { width: 100%; padding: 10px 16px; border: 2px solid #e0d8cf; border-radius: 10px; font-size: 14px; transition: border-color .2s; }
+.modal input:focus, .modal select:focus { border-color: #2e6b2e; outline: none; box-shadow: 0 0 0 3px rgba(46,107,46,.1); }
+.modal-actions { display: flex; gap: 10px; margin-top: 24px; justify-content: flex-end; }
+
+/* FOTO MODAL */
+.foto-modal { max-width: 600px; }
+.foto-modal img { width: 100%; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,.15); }
+
+/* EMPTY STATE */
+.empty-state { text-align: center; padding: 80px 20px; color: #bbb; }
+.empty-state .icon { font-size: 56px; margin-bottom: 16px; opacity: .6; }
+.empty-state p { font-size: 15px; }
+.empty-state .sub { font-size: 12px; color: #ccc; margin-top: 10px; }
+
+/* TOAST */
+.toast { position: fixed; bottom: 28px; left: 50%; transform: translateX(-50%); background: linear-gradient(135deg, #2d2319, #4a3f35); color: white; padding: 14px 28px; border-radius: 14px; font-size: 14px; font-weight: 600; z-index: 20000; opacity: 0; transition: opacity .3s, transform .3s; pointer-events: none; box-shadow: 0 8px 24px rgba(0,0,0,.2); }
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(-4px); }
+
+/* DATE LINK */
+.date-link { color: #2e6b2e; cursor: pointer; text-decoration: none; font-weight: 700; border-bottom: 2px dotted #a5d6a7; transition: all .15s; padding-bottom: 1px; }
+.date-link:hover { color: #1a5c2e; border-bottom-color: #2e6b2e; }
+
+/* COUNTDOWN */
+.countdown { font-size: 10px; font-weight: 700; margin-top: 2px; }
+.countdown.overdue { color: #c62828; }
+.countdown.soon { color: #e65100; }
+.countdown.ok { color: #999; }
+
+/* CONFIG BAR */
+.config-bar { background: white; border-radius: 14px; padding: 14px 20px; margin-bottom: 18px; display: flex; gap: 10px; flex-wrap: wrap; align-items: center; box-shadow: 0 2px 12px rgba(0,0,0,.05); border: 2px solid #e0d8cf; }
+.config-bar.ok { border-color: #43a047; background: linear-gradient(135deg, #fff 90%, #e8f5e9 100%); }
+.config-bar label { font-size: 12px; font-weight: 700; color: #7a6b5d; white-space: nowrap; }
+.config-bar input { flex: 1; min-width: 200px; padding: 8px 12px; border: 2px solid #e0d8cf; border-radius: 10px; font-size: 12px; font-family: monospace; }
+.config-bar input:focus { border-color: #2e6b2e; outline: none; }
+.sync-spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid #ccc; border-top-color: #2e6b2e; border-radius: 50%; animation: spin .8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ════════════════════════════════════
+   MOBILE — Card layout for table
+   ════════════════════════════════════ */
+@media (max-width: 768px) {
+  .topbar { padding: 14px 16px; gap: 12px; }
+  .topbar h1 { font-size: 17px; }
+  .logo { width: 38px; height: 38px; font-size: 14px; }
+  .container { padding: 14px 12px 110px; }
+
+  /* Month rotator mobile */
+  .month-rotator { gap:10px; margin-bottom:12px; }
+  .month-rotator .mr-label { font-size:15px; min-width:160px; }
+  .month-rotator .mr-btn { width:34px; height:34px; font-size:15px; }
+
+  /* Summary: 2 cols */
+  .summary-row { grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px; }
+  .summary-card { padding: 14px 16px; border-radius: 12px; }
+  .summary-card .sc-value { font-size: 22px; }
+  .summary-card.next { grid-column: 1 / -1; }
+  .summary-card.next .sc-value { font-size: 14px; }
+
+  /* Filters */
+  .filters { padding: 12px 14px; gap: 8px; border-radius: 12px; }
+  .chip { padding: 6px 12px; font-size: 12px; }
+  .filters select, .filters input { font-size: 12px; padding: 7px 10px; min-width: 0 !important; flex: 1; }
+
+  /* Config bar */
+  .config-bar { padding: 10px 14px; gap: 8px; flex-direction: column; align-items: stretch; }
+  .config-bar input { min-width: 0; font-size: 11px; }
+  .config-bar .btn { align-self: flex-start; }
+
+  /* Edit grid: single col on mobile */
+  .edit-grid { grid-template-columns: 1fr !important; }
+  .edit-row { padding: 14px 16px; }
+
+  /* TABLE → CARD LAYOUT */
+  .tbl-wrap { overflow-x: unset; background: transparent; box-shadow: none; border-radius: 0; }
+  table { display: block; }
+  thead { display: none; }
+  tbody { display: flex; flex-direction: column; gap: 12px; }
+  tbody tr { display: block; background: white; border-radius: 16px; padding: 0; box-shadow: 0 2px 12px rgba(0,0,0,.06); overflow: hidden; position: relative; border-left: 4px solid #e0d8cf; }
+  tbody tr.overdue { border-left-color: #e53935; background: linear-gradient(135deg, #fff 85%, #ffebee 100%); }
+  tbody tr.today { border-left-color: #ff9800; background: linear-gradient(135deg, #fff 85%, #fff8e1 100%); }
+  tbody tr.paid { border-left-color: #43a047; background: linear-gradient(135deg, #fff 85%, #e8f5e9 100%); }
+  tbody tr.paid td { color: inherit; }
+  tbody tr.selected { border-left-color: #1565c0 !important; outline: 2px solid #1565c0; }
+  tbody td { display: none; padding: 0; border-bottom: none; }
+
+  /* Only show the mobile card cell and edit row */
+  tbody td.mobile-card { display: block; padding: 14px 16px 12px; }
+  .edit-row-tr td { display: block !important; }
+
+  /* Action bar mobile adjustments */
+  .action-bar { padding: 12px 16px; gap: 8px; flex-wrap: wrap; }
+  .btn-action-pay { padding: 10px 20px; font-size: 13px; }
+  .btn-action-del { padding: 8px 14px; font-size: 12px; }
+
+  /* Modal full-width on mobile */
+  .modal { width: 95%; padding: 24px 20px; }
+}
+
+/* Minimum tap target size + tap feedback */
+.chip { min-height: 40px; display: inline-flex; align-items: center; touch-action: manipulation; }
+.btn { touch-action: manipulation; }
+@media (max-width: 768px) {
+  tbody tr { transition: transform .1s, box-shadow .1s; }
+  tbody tr:active { transform: scale(.987); box-shadow: 0 1px 6px rgba(0,0,0,.08); }
+}
+
+/* Small phones */
+@media (max-width: 480px) {
+  .summary-row { grid-template-columns: 1fr; gap: 8px; margin-bottom: 12px; }
+  .summary-card { padding: 12px 14px; border-radius: 10px; }
+  .summary-card .sc-value { font-size: 20px; }
+  .summary-card.next .sc-value { font-size: 13px; }
+  .topbar { padding: 10px 12px; }
+  .topbar h1 { font-size: 15px; }
+  .logo { width: 34px; height: 34px; font-size: 13px; }
+  .container { padding: 10px 8px 100px; }
+  .month-rotator .mr-label { font-size: 14px; min-width: 130px; }
+  .chip { padding: 5px 10px; font-size: 11px; }
+  .filters { padding: 10px 12px; gap: 6px; border-radius: 10px; }
+}
+
+/* Desktop: hide mobile card cell */
+@media (min-width: 769px) {
+  td.mobile-card { display: none; }
+}
+</style>
+</head>
+<body>
+<!-- NB NAVIGATION BAR -->
+<style>
+  .nb-nav { display:flex; align-items:center; gap:0; background:#1a3a1a; padding:0 16px; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; font-size:13px; overflow-x:auto; }
+  .nb-nav a { color:rgba(255,255,255,.7); text-decoration:none; padding:10px 16px; white-space:nowrap; transition:all .15s; border-bottom:2px solid transparent; font-weight:600; }
+  .nb-nav a:hover { color:#fff; background:rgba(255,255,255,.08); }
+  .nb-nav a.active { color:#fff; border-bottom-color:#4caf50; background:rgba(76,175,80,.15); }
+  .nb-nav .nav-brand { color:#4caf50; font-weight:800; font-size:14px; padding:10px 16px 10px 0; margin-right:8px; border-right:1px solid rgba(255,255,255,.15); letter-spacing:.5px; }
+  @media(max-width:600px) { .nb-nav a { padding:10px 12px; font-size:12px; } .nb-nav .nav-brand { font-size:12px; padding:8px 12px 8px 0; } }
+</style>
+<nav class="nb-nav">
+  <span class="nav-brand">NB Finance</span>
+  <a href="dashboard_nb.html" id="nav-dashboard">Dashboard</a>
+  <a href="registro_ingresos.html" id="nav-ingresos">Ingresos</a>
+  <a href="nb_portal_pagos.html" id="nav-pagos" class="active">Gastos</a>
+  <a href="corte_caja.html" target="_blank" id="nav-corte">Cortes de Tienda</a>
+</nav>
+<!-- END NB NAVIGATION BAR -->
+
+<div class="topbar">
+  <div class="logo">NB</div>
+  <div>
+    <h1>Portal de Pagos</h1>
+    <div class="topbar-sub">Natural Balance · Seguimiento de facturas</div>
+  </div>
+  <div class="topbar-right"><span id="topbarDate"></span><div id="nbUserBadge" style="margin-top:4px"></div></div>
+</div>
+
+<div class="container">
+  <!-- CONFIG -->
+  <div class="config-bar" id="configBar">
+    <label>📡 Script URL:</label>
+    <input type="text" id="scriptUrlInput" placeholder="https://script.google.com/macros/s/...">
+    <button class="btn btn-brown" onclick="saveScriptUrl()">Guardar</button>
+    <button class="btn btn-pay" onclick="syncFromSheet()" id="syncBtn">🔄 Sincronizar</button>
+    <span id="syncStatus" style="font-size:12px;color:#999">Sin conexión — usando datos locales</span>
+    <span class="sync-indicator synced" id="syncIndicator"><span class="dot"></span><span id="syncIndicatorText">Synced</span></span>
+  </div>
+
+  <div class="month-rotator" style="position:relative;">
+    <button class="mr-btn" onclick="shiftMonth(-1)">◀</button>
+    <span class="mr-label" id="mrLabel" onclick="toggleMonthPicker()" style="cursor:pointer;"></span>
+    <button class="mr-btn" onclick="shiftMonth(1)">▶</button>
+    <button class="mr-today" onclick="goToday()">Hoy</button>
+    <div class="month-picker" id="monthPicker">
+      <div class="mp-year-row">
+        <button class="mp-arrow" onclick="pickerShiftYear(-1)">◀</button>
+        <span id="mpYear"></span>
+        <button class="mp-arrow" onclick="pickerShiftYear(1)">▶</button>
+      </div>
+      <div class="mp-grid" id="mpGrid"></div>
+    </div>
+  </div>
+  <div class="summary-row" id="summaryRow"></div>
+
+  <div class="filters">
+    <div class="chip-group" id="statusFilter">
+      <button class="chip" onclick="setStatusFilter('Pendiente',this)">Pendientes</button>
+      <button class="chip" onclick="setStatusFilter('sin_fecha',this)" style="border-color:#e65100;color:#e65100">📅 Sin fecha</button>
+      <button class="chip chip-vencido" onclick="setStatusFilter('Vencido',this)">Vencidos</button>
+      <button class="chip" onclick="setStatusFilter('Pagado',this)">Pagados</button>
+      <button class="chip" onclick="setStatusFilter('remision',this)" style="border-color:#6a1b9a;color:#6a1b9a">📋 Remisiones</button>
+      <button class="chip" onclick="setStatusFilter('recientes',this)" style="border-color:#1565c0;color:#1565c0">🆕 Recientes</button>
+      <button class="chip active" onclick="setStatusFilter('all',this)">Todos</button>
+    </div>
+    <select id="formaFilter" onchange="applyFilters()" style="min-width:140px">
+      <option value="">Todas las formas</option>
+      <option value="Transferencia">Transferencia</option>
+      <option value="Tarjeta crédito">Tarjeta crédito</option>
+      <option value="Tarjeta débito">Tarjeta débito</option>
+      <option value="Efectivo">Efectivo</option>
+      <option value="Cheque">Cheque</option>
+    </select>
+    <select id="yearFilter" onchange="syncMonthFromYear(); applyFilters()"></select>
+    <input type="text" id="searchInput" placeholder="Buscar proveedor o folio..." oninput="applyFilters()" style="min-width:200px;flex:1">
+    <button class="btn" style="background:#1565C0;color:white;white-space:nowrap;flex-shrink:0" onclick="openManualModal()">➕ Entrada Manual</button>
+  </div>
+
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr>
+        <th style="width:36px"><input type="checkbox" class="row-check" id="selectAll" onchange="toggleSelectAll(this.checked)" title="Seleccionar todos"></th>
+        <th>Fecha Pago</th>
+        <th>Proveedor</th>
+        <th>Folio</th>
+        <th>Fecha Compra</th>
+        <th>Monto</th>
+        <th>Forma</th>
+        <!-- Categoría hidden to save horizontal space -->
+        <th>Estado</th>
+        <th>Acciones</th>
+      </tr></thead>
+      <tbody id="tableBody"></tbody>
+    </table>
+    <div id="emptyState" class="empty-state" style="display:none">
+      <div class="icon">📭</div>
+      <p>No hay facturas registradas</p>
+      <p class="sub">Las facturas aparecerán aquí cuando se envíen desde la app de captura</p>
+    </div>
+  </div>
+</div>
+
+<!-- FLOATING ACTION BAR -->
+<div class="action-bar" id="actionBar">
+  <span class="ab-count" id="abCount">0 seleccionados</span>
+  <span class="ab-spacer"></span>
+  <button class="btn-action-cancel" onclick="clearSelection()">Cancelar</button>
+  <button class="btn-action-del" onclick="deleteSelected()">🗑 Eliminar</button>
+  <button class="btn-action-pay" id="abPayBtn" onclick="paySelected()">💰 Pagar seleccionados</button>
+</div>
+
+<!-- PAY MODAL -->
+<div class="modal-bg" id="payModal">
+  <div class="modal">
+    <h3>Marcar como Pagado</h3>
+    <div id="payModalInfo"></div>
+    <label>Fecha de pago real</label>
+    <input type="date" id="payDate">
+    <label>Comprobante (referencia o nota)</label>
+    <input type="text" id="payRef" placeholder="Ej: SPEI #48291 Bancomer">
+    <label style="margin-top:8px">📎 Adjuntar PDF de comprobante</label>
+    <input type="file" id="payPdf" accept=".pdf,application/pdf" style="font-size:13px;padding:6px 0">
+    <div id="pdfUploadStatus" style="font-size:11px;color:#999;margin-top:2px"></div>
+    <div class="modal-actions">
+      <button class="btn btn-undo" onclick="closePayModal()">Cancelar</button>
+      <button class="btn btn-pay" onclick="confirmPay()">Confirmar pago</button>
+    </div>
+  </div>
+</div>
+
+<!-- DATE MODAL -->
+<div class="modal-bg" id="dateModal">
+  <div class="modal">
+    <h3>Cambiar fecha de pago</h3>
+    <div id="dateModalInfo"></div>
+    <label>Nueva fecha de pago</label>
+    <input type="date" id="newPayDate">
+    <div class="modal-actions">
+      <button class="btn btn-undo" onclick="closeDateModal()">Cancelar</button>
+      <button class="btn btn-brown" onclick="confirmDateChange()">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<!-- FOTO MODAL -->
+<div class="modal-bg" id="fotoModal">
+  <div class="modal foto-modal">
+    <h3 id="fotoTitle">Foto de Factura</h3>
+    <img id="fotoImg" src="" alt="Factura">
+    <div class="modal-actions" style="margin-top:16px">
+      <button class="btn btn-undo" onclick="closeFotoModal()">Cerrar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MANUAL ENTRY MODAL -->
+<style>
+  .man-sup-wrap { position:relative; }
+  .man-sup-list { position:absolute; top:100%; left:0; right:0; background:white; border:2px solid #e0d8cf; border-top:none; border-radius:0 0 10px 10px; max-height:180px; overflow-y:auto; z-index:100; display:none; }
+  .man-sup-item { padding:8px 14px; font-size:13px; cursor:pointer; }
+  .man-sup-item:hover { background:#f5f0ea; }
+  .man-sup-item.create-new { color:#1565c0; font-weight:700; border-top:1px solid #e0d8cf; }
+  .man-create-form { background:#f5f0ea; border-radius:10px; padding:12px; margin-top:8px; display:none; }
+  .man-create-form input, .man-create-form select { margin-bottom:8px; }
+  .man-tipo-row { display:flex; gap:8px; margin-top:6px; }
+  .man-tipo-btn { flex:1; padding:8px 4px; border:2px solid #e0d8cf; border-radius:8px; background:white; font-size:12px; font-weight:700; cursor:pointer; text-align:center; transition:all .15s; }
+  .man-tipo-btn.active { border-color:#2e6b2e; background:#e8f5e9; color:#2e6b2e; }
+  .man-comprobante-wrap { display:none; }
+  #manualComprobanteLabel { font-size:12px; color:#7a6b5d; padding:10px; border:2px dashed #c5b9ad; border-radius:8px; cursor:pointer; text-align:center; display:block; transition:border-color .2s; }
+  #manualComprobanteLabel:hover { border-color:#2e6b2e; }
+  #manualComprobanteFile { display:none; }
+</style>
+<div class="modal-bg" id="manualModal">
+  <div class="modal" style="max-height:90vh;overflow-y:auto">
+    <h3>➕ Entrada Manual</h3>
+
+    <!-- Tipo: Factura / Remisión / Gasto -->
+    <label>Tipo de documento</label>
+    <div class="man-tipo-row">
+      <div class="man-tipo-btn active" id="tipoFacturaBtn" onclick="setManualTipo('Factura')">🧾 Factura</div>
+      <div class="man-tipo-btn" id="tipoRemisionBtn" onclick="setManualTipo('Remisión')">📋 Remisión</div>
+      <div class="man-tipo-btn" id="tipoGastoBtn" onclick="setManualTipo('Gasto')">💸 Gasto</div>
+    </div>
+
+    <!-- Proveedor with live search -->
+    <label>Proveedor *</label>
+    <div class="man-sup-wrap">
+      <input type="text" id="manualProvInput" placeholder="Buscar o escribir proveedor…"
+        autocomplete="off" oninput="manSupSearch()" onfocus="manSupSearch()" onblur="setTimeout(manSupClose,200)">
+      <div class="man-sup-list" id="manSupList"></div>
+    </div>
+    <input type="hidden" id="manualProvNombre">
+
+    <!-- Inline create supplier form -->
+    <div class="man-create-form" id="manCreateForm">
+      <div style="font-size:12px;font-weight:700;color:#1565c0;margin-bottom:8px">✨ Nuevo proveedor</div>
+      <input type="text" id="manNewRFC" placeholder="RFC (opcional)">
+      <div style="display:flex;gap:8px">
+        <input type="number" id="manNewDias" placeholder="Días crédito" style="flex:1;margin-bottom:0" min="0">
+        <select id="manNewFormaPago" style="flex:1;margin-bottom:8px">
+          <option value="Transferencia">Transferencia</option>
+          <option value="Efectivo">Efectivo</option>
+          <option value="Tarjeta crédito">Tarjeta crédito</option>
+          <option value="Cheque">Cheque</option>
+        </select>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:4px">
+        <button class="btn" style="flex:1;background:#1565c0;color:white;font-size:12px;padding:8px" onclick="manSaveNewSupplier()">Guardar</button>
+        <button class="btn btn-undo" style="flex:1;font-size:12px;padding:8px" onclick="manCancelNewSupplier()">Cancelar</button>
+      </div>
+    </div>
+
+    <!-- Descripción optional -->
+    <label>Descripción <span style="color:#bbb;font-weight:400">(opcional)</span></label>
+    <input type="text" id="manualDescripcion" placeholder="Ej: Nómina quincena 1 marzo, CFE marzo…">
+
+    <label>Monto *</label>
+    <input type="number" id="manualMonto" placeholder="0.00" step="0.01" min="0">
+
+    <div style="display:flex;gap:12px">
+      <div style="flex:1">
+        <label>Fecha</label>
+        <input type="date" id="manualFecha">
+      </div>
+      <div style="flex:1">
+        <label>Fecha de pago <span style="color:#bbb;font-weight:400">(si ya pagado)</span></label>
+        <input type="date" id="manualFechaPago" oninput="manFechaPagoChanged()">
+      </div>
+    </div>
+
+    <label>Forma de pago</label>
+    <select id="manualFormaPago">
+      <option value="Transferencia">Transferencia</option>
+      <option value="Efectivo">Efectivo</option>
+      <option value="Tarjeta crédito">Tarjeta crédito</option>
+      <option value="Tarjeta débito">Tarjeta débito</option>
+      <option value="Cheque">Cheque</option>
+    </select>
+
+    <!-- Comprobante — revealed when fecha de pago is filled -->
+    <div class="man-comprobante-wrap" id="manComprobanteWrap">
+      <label>Comprobante de pago</label>
+      <label id="manualComprobanteLabel" for="manualComprobanteFile">
+        📎 <span id="manComprobanteText">Adjuntar PDF o imagen</span>
+      </label>
+      <input type="file" id="manualComprobanteFile" accept="image/*,.pdf" onchange="manComprobanteSelected()">
+    </div>
+
+    <label>Notas (opcional)</label>
+    <input type="text" id="manualNotas" placeholder="Referencia, número de folio, etc.">
+
+    <div class="modal-actions">
+      <button class="btn btn-undo" onclick="closeManualModal()">Cancelar</button>
+      <button class="btn btn-pay" onclick="confirmManualEntry()">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<!-- CFDI CONVERSION MODAL -->
+<div class="modal-bg" id="cfdiModal">
+  <div class="modal">
+    <h3>📄 Convertir Remisión a CFDI</h3>
+    <div id="cfdiProvNombre" style="font-size:13px;color:#7a6b5d;margin-bottom:12px"></div>
+    <label>UUID / Folio Fiscal <span style="color:#bbb;font-weight:400">(opcional)</span></label>
+    <input type="text" id="cfdiUUID" placeholder="Ej: A1B2C3D4-E5F6-...">
+    <label>Folio de Factura <span style="color:#bbb;font-weight:400">(opcional)</span></label>
+    <input type="text" id="cfdiFollio" placeholder="Ej: F001-2345">
+    <label>Fecha de emisión CFDI</label>
+    <input type="date" id="cfdiDate">
+    <div class="modal-actions">
+      <button class="btn btn-undo" onclick="closeCfdiModal()">Cancelar</button>
+      <button class="btn btn-pay" style="background:#6a1b9a" onclick="confirmCfdi()">✅ Confirmar CFDI</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="nb_auth.js"></script>
+<script>
+let allGastos = [];
+let filteredGastos = [];
+let currentStatusFilter = 'all';
+let editingId = null;
+let selectedIds = new Set();
+const LS_KEY = 'nb_gastos';
+const SYNC_QUEUE_KEY = 'nb_sync_queue';
+const LS_SIZE_WARN = 4 * 1024 * 1024; // 4MB warning threshold
+
+// ══════════════════════════════════════════════
+// SYNC QUEUE — replaces fire-and-forget no-cors
+// ══════════════════════════════════════════════
+let syncQueue = [];
+let syncRetryTimer = null;
+const SYNC_RETRY_MS = 30000; // retry every 30s
+
+function loadSyncQueue(){
+  try { syncQueue = JSON.parse(localStorage.getItem(SYNC_QUEUE_KEY) || '[]'); } catch(e){ syncQueue = []; }
+}
+function saveSyncQueue(){
+  localStorage.setItem(SYNC_QUEUE_KEY, JSON.stringify(syncQueue));
+  updateSyncIndicator();
+}
+
+function enqueueSync(payload){
+  payload.queue_id = 'Q' + Date.now() + '_' + Math.random().toString(36).slice(2,6);
+  payload.queued_at = new Date().toISOString();
+  syncQueue.push(payload);
+  saveSyncQueue();
+  processSyncQueue(); // try immediately
+}
+
+let _syncProcessing = false;
+async function processSyncQueue(){
+  const url = getScriptUrl();
+  if(!url || syncQueue.length === 0 || _syncProcessing) { updateSyncIndicator(); return; }
+  _syncProcessing = true;
+  updateSyncIndicator();
+
+  // Larger batches — backend now reads sheet once for all FACTURAS ops
+  const BATCH_SIZE = 25;
+  const batch = syncQueue.slice(0, BATCH_SIZE);
+  try {
+    // 45-second timeout to avoid hanging forever
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 45000);
+    const resp = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({ action: 'sync_batch', operations: batch }),
+      signal: controller.signal
+    });
+    clearTimeout(timeoutId);
+    const data = await resp.json();
+    if(data.ok && data.results){
+      // Remove successfully processed items
+      const doneIds = new Set(data.results.filter(r => r.ok).map(r => r.queue_id));
+      // Update local versions from successful responses
+      data.results.filter(r => r.ok && r.result && r.result.version).forEach(r => {
+        const op = batch.find(b => b.queue_id === r.queue_id);
+        if(op && op.id) updateLocalVersion(op.id, r.result.version);
+      });
+      // Handle version conflicts — remove from queue (sync after queue fully drains)
+      const conflicts = data.results.filter(r => !r.ok && r.result && r.result.conflict);
+      if(conflicts.length > 0){
+        conflicts.forEach(c => doneIds.add(c.queue_id));
+        showToast('🔄 Conflictos resueltos: ' + conflicts.length, 3000);
+      }
+      // Also remove items with permanent errors (not-found, missing fields) — no point retrying
+      const permErrors = data.results.filter(r => !r.ok && !r.result?.conflict && (r.error||'').match(/Not found|Missing/i));
+      permErrors.forEach(e => doneIds.add(e.queue_id));
+
+      syncQueue = syncQueue.filter(item => !doneIds.has(item.queue_id));
+      const failed = data.results.filter(r => !r.ok && !(r.result && r.result.conflict) && !permErrors.includes(r));
+      if(failed.length > 0) console.warn('Sync failures (will retry):', failed);
+    }
+    saveSyncQueue();
+    _syncProcessing = false;
+    updateSyncIndicator();
+    if(syncQueue.length > 0) {
+      setTimeout(processSyncQueue, 800);
+    } else {
+      // Queue fully drained — auto-sync to get latest data from sheet
+      showToast('✅ Cola procesada. Recargando datos…', 2000);
+      setTimeout(() => syncFromSheet(true), 1000);
+    }
+  } catch(e){
+    _syncProcessing = false;
+    console.log('Sync queue error, will retry:', e.message);
+    updateSyncIndicator();
+    scheduleSyncRetry();
+  }
+}
+
+function scheduleSyncRetry(){
+  if(syncRetryTimer) return;
+  syncRetryTimer = setTimeout(() => {
+    syncRetryTimer = null;
+    processSyncQueue();
+  }, SYNC_RETRY_MS);
+}
+
+function updateSyncIndicator(){
+  const el = document.getElementById('syncIndicator');
+  const txt = document.getElementById('syncIndicatorText');
+  if(!el) return;
+  const url = getScriptUrl();
+  if(!url){
+    el.className = 'sync-indicator offline';
+    txt.textContent = 'Sin conexión';
+  } else if(syncQueue.length > 0){
+    el.className = 'sync-indicator pending';
+    txt.textContent = (_syncProcessing ? '⏳ ' : '') + syncQueue.length + ' pendiente' + (syncQueue.length > 1 ? 's' : '');
+    el.title = 'Toca para opciones de cola';
+    el.onclick = showSyncQueueMenu;
+  } else {
+    el.className = 'sync-indicator synced';
+    txt.textContent = 'Sincronizado';
+    el.title = 'Toca para herramientas de sync';
+    el.onclick = showSyncQueueMenu;
+  }
+}
+
+function showSyncQueueMenu(){
+  const qLen = syncQueue.length;
+  const total = allGastos.length;
+  const choice = prompt(
+    'Herramientas de sincronización\n' +
+    (qLen > 0 ? 'Cola: ' + qLen + ' pendientes\n' : '') +
+    'Datos locales: ' + total + ' facturas\n\n' +
+    '1 = ' + (qLen > 0 ? 'Reintentar cola ahora' : 'Sincronizar ahora') + '\n' +
+    (qLen > 0 ? '2 = Vaciar cola (descarta cambios no sincronizados)\n' : '') +
+    '3 = 🔥 Resync completo (borra datos locales + recarga del Sheet)\n' +
+    '0 = Cancelar'
+  );
+  if(choice === '1'){
+    if(qLen > 0) processSyncQueue();
+    else syncFromSheet(true);
+  } else if(choice === '2' && qLen > 0){
+    if(confirm('¿Seguro? Se perderán ' + qLen + ' cambios no sincronizados.\nLos datos en la hoja de cálculo NO se afectan.')){
+      syncQueue = [];
+      saveSyncQueue();
+      updateSyncIndicator();
+      showToast('Cola vaciada. Sincroniza para recargar datos.', 3000);
+    }
+  } else if(choice === '3'){
+    if(confirm('⚠️ Esto borra TODOS los datos locales y recarga del Sheet.\n¿Continuar?')){
+      syncQueue = [];
+      saveSyncQueue();
+      allGastos = [];
+      saveGastos();
+      syncFromSheet(true);
+    }
+  }
+}
+
+// ── localStorage size check ──
+function checkStorageSize(){
+  let total = 0;
+  for(let k in localStorage){ if(localStorage.hasOwnProperty(k)) total += (localStorage[k]||'').length * 2; }
+  if(total > LS_SIZE_WARN) console.warn('⚠️ localStorage usage: ' + (total/1024/1024).toFixed(1) + 'MB');
+  return total;
+}
+
+// ── Month rotator state ──
+let summaryMonth = new Date().getMonth();   // 0-based
+let summaryYear  = new Date().getFullYear();
+const MONTH_NAMES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+
+function updateMonthLabel(){
+  document.getElementById('mrLabel').textContent = `${MONTH_NAMES[summaryMonth]} ${summaryYear}`;
+}
+function shiftMonth(dir){
+  summaryMonth += dir;
+  if(summaryMonth > 11){ summaryMonth = 0; summaryYear++; }
+  if(summaryMonth < 0){ summaryMonth = 11; summaryYear--; }
+  updateMonthLabel();
+  closeMonthPicker();
+  syncYearFilter();
+  renderSummary();
+}
+function goToday(){
+  const now = new Date();
+  summaryMonth = now.getMonth();
+  summaryYear = now.getFullYear();
+  updateMonthLabel();
+  closeMonthPicker();
+  renderSummary();
+}
+
+// ── Month picker (jump-to-month) ──
+let pickerYear = new Date().getFullYear();
+function toggleMonthPicker(){
+  const picker = document.getElementById('monthPicker');
+  const isOpen = picker.classList.contains('open');
+  if(isOpen){ closeMonthPicker(); return; }
+  pickerYear = summaryYear;
+  renderMonthGrid();
+  picker.classList.add('open');
+}
+function closeMonthPicker(){
+  document.getElementById('monthPicker').classList.remove('open');
+}
+function pickerShiftYear(dir){
+  pickerYear += dir;
+  document.getElementById('mpYear').textContent = pickerYear;
+  renderMonthGrid();
+}
+function renderMonthGrid(){
+  document.getElementById('mpYear').textContent = pickerYear;
+  const grid = document.getElementById('mpGrid');
+  grid.innerHTML = '';
+  MONTH_NAMES.forEach((name, i) => {
+    const btn = document.createElement('button');
+    btn.textContent = name.substring(0,3);
+    if(i === summaryMonth && pickerYear === summaryYear) btn.classList.add('active');
+    btn.onclick = () => {
+      summaryMonth = i;
+      summaryYear = pickerYear;
+      updateMonthLabel();
+      closeMonthPicker();
+      syncYearFilter();
+      renderSummary();
+    };
+    grid.appendChild(btn);
+  });
+}
+document.addEventListener('click', (e) => {
+  const picker = document.getElementById('monthPicker');
+  const rotator = document.querySelector('.month-rotator');
+  if(picker && rotator && !rotator.contains(e.target) && !picker.contains(e.target)){
+    closeMonthPicker();
+  }
+});
+
+// ── Year ↔ Month sync ──
+function syncYearFilter(){
+  const sel = document.getElementById('yearFilter');
+  if(sel) sel.value = String(summaryYear);
+  applyFilters();
+}
+function syncMonthFromYear(){
+  const sel = document.getElementById('yearFilter');
+  if(sel && sel.value){
+    summaryYear = parseInt(sel.value);
+    // If switching to current year, jump to current month; otherwise stay on same month
+    const now = new Date();
+    if(summaryYear === now.getFullYear()) summaryMonth = now.getMonth();
+    updateMonthLabel();
+    renderSummary();
+  }
+}
+
+// ── Date helpers ──
+function todayStr(){ return new Date().toISOString().slice(0,10); }
+function formatDate(d){
+  if(!d) return '—';
+  const [y,m,dd] = d.split('-');
+  const months = ['','Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+  return `${parseInt(dd)} ${months[parseInt(m)]} ${y}`;
+}
+function daysUntil(dateStr){
+  if(!dateStr) return 999;
+  const target = new Date(dateStr + 'T12:00:00');
+  const now = new Date();
+  now.setHours(12,0,0,0);
+  return Math.round((target - now) / 86400000);
+}
+function countdownLabel(dateStr){
+  const d = daysUntil(dateStr);
+  if(d < 0) return `<div class="countdown overdue">${Math.abs(d)} días vencido</div>`;
+  if(d === 0) return `<div class="countdown soon">HOY</div>`;
+  if(d <= 3) return `<div class="countdown soon">En ${d} día${d>1?'s':''}</div>`;
+  if(d <= 7) return `<div class="countdown ok">En ${d} días</div>`;
+  return '';
+}
+
+// ── Data ──
+function loadGastos(){
+  try { allGastos = JSON.parse(localStorage.getItem(LS_KEY) || '[]'); } catch { allGastos = []; }
+  const today = todayStr();
+  allGastos.forEach(g => {
+    // Auto-mark Vencido only from Pendiente, never from Pagado or user-set states
+    if(g.estado === 'Pendiente' && g.fecha_pago && g.fecha_pago < today) {
+      g.estado = 'Vencido';
+      g._auto_vencido = true; // track that this was auto-set
+    }
+    // Restore to Pendiente if date was moved to future and was auto-vencido
+    if(g.estado === 'Vencido' && g._auto_vencido && g.fecha_pago && g.fecha_pago >= today) {
+      g.estado = 'Pendiente';
+      delete g._auto_vencido;
+    }
+  });
+  saveGastos();
+}
+function saveGastos(){ localStorage.setItem(LS_KEY, JSON.stringify(allGastos)); }
+
+// ── Selection ──
+function toggleSelect(id, checked){
+  if(checked) selectedIds.add(id); else selectedIds.delete(id);
+  updateSelectionUI();
+}
+function toggleSelectAll(checked){
+  if(checked) filteredGastos.forEach(g => selectedIds.add(g.id));
+  else selectedIds.clear();
+  updateSelectionUI();
+  // Update all visible checkboxes
+  document.querySelectorAll('.row-check-item').forEach(cb => cb.checked = checked);
+}
+function clearSelection(){
+  selectedIds.clear();
+  updateSelectionUI();
+  document.querySelectorAll('.row-check-item').forEach(cb => cb.checked = false);
+  const sa = document.getElementById('selectAll'); if(sa) sa.checked = false;
+}
+function updateSelectionUI(){
+  const bar = document.getElementById('actionBar');
+  const n = selectedIds.size;
+  if(n > 0){
+    bar.classList.add('visible');
+    document.getElementById('abCount').textContent = n + ' seleccionado' + (n>1?'s':'');
+    // Hide pay button if any selected is already paid
+    const anyPaid = [...selectedIds].some(id => { const g = allGastos.find(x=>x.id===id); return g && g.estado === 'Pagado'; });
+    document.getElementById('abPayBtn').style.display = anyPaid ? 'none' : '';
+  } else {
+    bar.classList.remove('visible');
+  }
+  // Highlight selected rows
+  document.querySelectorAll('tbody tr').forEach(tr => {
+    const id = tr.dataset.id;
+    tr.classList.toggle('selected', id && selectedIds.has(id));
+  });
+}
+
+function paySelected(){
+  const ids = [...selectedIds].filter(id => {
+    const g = allGastos.find(x=>x.id===id);
+    return g && g.estado !== 'Pagado';
+  });
+  if(!ids.length){ showToast('Nada que pagar'); return; }
+  if(ids.length === 1){
+    openPayModal(ids[0]);
+  } else {
+    // Bulk pay — open a confirm
+    const total = ids.reduce((s,id) => { const g = allGastos.find(x=>x.id===id); return s + (g?g.monto_pagar||0:0); }, 0);
+    if(!confirm(`¿Marcar ${ids.length} facturas como pagadas?\nTotal: $${total.toLocaleString('es-MX',{minimumFractionDigits:2})}`)) return;
+    const today = todayStr();
+    ids.forEach(id => {
+      const g = allGastos.find(x=>x.id===id); if(!g) return;
+      g.estado = 'Pagado';
+      g.fecha_pago_real = today;
+      // If sin asignar, also set fecha_pago so it doesn't reappear
+      if(!g.fecha_pago || g.fecha_pago === g.fecha_compra || g.fecha_pago === '') {
+        g.fecha_pago = today;
+        pushDateToSheet(g.id, today, 'Pagado');
+      }
+      pushStatusToSheet(g.id, 'Pagado', today, '');
+    });
+    saveGastos(); clearSelection(); applyFilters();
+    showToast(`${ids.length} facturas marcadas como pagadas`);
+  }
+}
+
+function deleteSelected(){
+  const n = selectedIds.size;
+  if(!n) return;
+  if(!confirm(`¿Eliminar ${n} registro${n>1?'s':''}? Esta acción no se puede deshacer.`)) return;
+  allGastos = allGastos.filter(g => !selectedIds.has(g.id));
+  saveGastos(); clearSelection(); applyFilters();
+  showToast(`${n} registro${n>1?'s':''} eliminado${n>1?'s':''}`);
+}
+
+// ── Filters ──
+function setStatusFilter(status, btn){
+  currentStatusFilter = status;
+  document.querySelectorAll('#statusFilter .chip').forEach(c => c.classList.remove('active'));
+  btn.classList.add('active');
+  applyFilters();
+}
+
+function applyFilters(){
+  const forma  = document.getElementById('formaFilter').value;
+  const year   = document.getElementById('yearFilter').value;
+  const search = (document.getElementById('searchInput').value || '').toLowerCase().trim();
+  filteredGastos = allGastos.filter(g => {
+    if(currentStatusFilter === 'sin_fecha'){
+      // Phase 2.2: Show Transferencia invoices that need a payment date assigned
+      if(g.estado === 'Pagado') return false;
+      const isTransfer = (g.forma_pago||'').toLowerCase().includes('transferencia');
+      if(!isTransfer) return false;
+      // After Phase 1.3, transferencia with 0 credit days has empty fecha_pago
+      if(g.fecha_pago && g.fecha_pago !== g.fecha_compra && g.fecha_pago !== '') return false; // has a real date
+    } else if(currentStatusFilter === 'recientes'){
+      // Phase 2.7: Show invoices from last 48 hours by created_at
+      const created = g.created_at ? new Date(g.created_at).getTime() : 0;
+      if(Date.now() - created > 48 * 60 * 60 * 1000) return false;
+    } else if(currentStatusFilter === 'remision'){
+      // Show remisiones pending CFDI conversion
+      if((g.tipo_documento||'') !== 'Remisión' && (g.tipo_documento||'') !== 'Remision') return false;
+    } else if(currentStatusFilter !== 'all' && g.estado !== currentStatusFilter) return false;
+    if(forma && g.forma_pago !== forma) return false;
+    if(year && !(g.fecha_compra||'').startsWith(year) && !(g.fecha_pago||'').startsWith(year)) return false;
+    if(search){
+      // Phase 2 enhanced search: text + numeric + date matching
+      const hay = [g.proveedor,g.folio,g.proveedor_raw,g.categoria].join(' ').toLowerCase();
+      if(hay.includes(search)) { /* text match — ok */ }
+      else {
+        // Numeric search: match against monto_pagar
+        const searchNum = parseFloat(search.replace(/[$,]/g,''));
+        if(!isNaN(searchNum) && searchNum > 0){
+          const monto = g.monto_pagar || g.monto_factura || 0;
+          if(Math.abs(monto - searchNum) > 0.50) return false;
+        }
+        // Date fragment search: match against fecha_compra or fecha_pago
+        else if(search.match(/^\d{4}/) || search.match(/^\d{1,2}\s*(ene|feb|mar|abr|may|jun|jul|ago|sep|oct|nov|dic)/i)){
+          const dates = [g.fecha_compra||'', g.fecha_pago||''].join(' ').toLowerCase();
+          if(!dates.includes(search)) return false;
+        }
+        else return false;
+      }
+    }
+    return true;
+  });
+  filteredGastos.sort((a,b) => {
+    const aPend = a.estado !== 'Pagado' ? 0 : 1;
+    const bPend = b.estado !== 'Pagado' ? 0 : 1;
+    if(aPend !== bPend) return aPend - bPend;
+    if(aPend === 0) return (a.fecha_pago||'').localeCompare(b.fecha_pago||'');
+    return (b.fecha_pago||'').localeCompare(a.fecha_pago||'');
+  });
+  renderTable();
+  renderSummary();
+  updateSelectionUI();
+}
+
+function buildYearFilter(){
+  const years = new Set();
+  allGastos.forEach(g => {
+    if(g.fecha_compra) years.add(g.fecha_compra.slice(0,4));
+    if(g.fecha_pago) years.add(g.fecha_pago.slice(0,4));
+  });
+  const thisYear = new Date().getFullYear().toString();
+  if(!years.size) years.add(thisYear);
+  const sel = document.getElementById('yearFilter');
+  // Phase 2.1: Default to "Todos los años" so no invoices get hidden
+  sel.innerHTML = '<option value="" selected>Todos los años</option>' +
+    [...years].sort().reverse().map(y => `<option value="${y}">${y}</option>`).join('');
+}
+
+// ── Render ──
+function renderSummary(){
+  // Filter by selected month — use fecha_pago primarily, fall back to fecha_compra
+  const mm = String(summaryMonth+1).padStart(2,'0');
+  const prefix = `${summaryYear}-${mm}`;
+  function inMonth(g){
+    const d = g.fecha_compra || '';
+    return d.startsWith(prefix);
+  }
+  const monthGastos = allGastos.filter(inMonth);
+
+  const pend    = monthGastos.filter(g => g.estado === 'Pendiente');
+  const vencido = monthGastos.filter(g => g.estado === 'Vencido');
+  const pagado  = monthGastos.filter(g => g.estado === 'Pagado');
+  const sinFecha = monthGastos.filter(g => g.estado !== 'Pagado' && (g.forma_pago||'').toLowerCase().includes('transferencia') && (!g.fecha_pago || g.fecha_pago === g.fecha_compra));
+  const totalPend = pend.reduce((s,g) => s + (g.monto_pagar||0), 0) + vencido.reduce((s,g) => s + (g.monto_pagar||0), 0);
+  const totalPaid = pagado.reduce((s,g) => s + (g.monto_pagar||0), 0);
+  // Próximo pago — global (not filtered by month)
+  const allPendVenc = allGastos.filter(g => g.estado === 'Pendiente' || g.estado === 'Vencido');
+  const upcoming = allPendVenc.filter(g => g.fecha_pago && g.fecha_pago !== g.fecha_compra).sort((a,b) => (a.fecha_pago||'').localeCompare(b.fecha_pago||''));
+  const next = upcoming[0];
+  const nextLabel = next
+    ? `<strong>${next.proveedor}</strong> &nbsp;·&nbsp; $${(next.monto_pagar||0).toLocaleString('es-MX',{minimumFractionDigits:2})} &nbsp;·&nbsp; ${formatDate(next.fecha_pago)} ${countdownLabel(next.fecha_pago)}`
+    : '<span style="color:#ccc">Sin pagos pendientes</span>';
+
+  document.getElementById('summaryRow').innerHTML = `
+    <div class="summary-card ${vencido.length?'urgent':'pending'}">
+      <div class="sc-icon">💰</div>
+      <div class="sc-label">Por pagar</div>
+      <div class="sc-value">$${totalPend.toLocaleString('es-MX',{minimumFractionDigits:0})}</div>
+    </div>
+    <div class="summary-card pending">
+      <div class="sc-icon">📋</div>
+      <div class="sc-label">Pendientes</div>
+      <div class="sc-value">${pend.length + vencido.length}</div>
+    </div>
+    <div class="summary-card ${vencido.length?'urgent':''}">
+      <div class="sc-icon">${vencido.length ? '⚠️' : '✓'}</div>
+      <div class="sc-label">Vencidos</div>
+      <div class="sc-value">${vencido.length}</div>
+    </div>
+    ${sinFecha.length ? `<div class="summary-card" style="border-left:4px solid #e65100">
+      <div class="sc-icon">📅</div>
+      <div class="sc-label">Sin fecha</div>
+      <div class="sc-value" style="color:#e65100">${sinFecha.length}</div>
+    </div>` : ''}
+    <div class="summary-card ok">
+      <div class="sc-icon">✅</div>
+      <div class="sc-label">Pagados (mes)</div>
+      <div class="sc-value">$${totalPaid.toLocaleString('es-MX',{minimumFractionDigits:0})}</div>
+    </div>
+    <div class="summary-card next">
+      <div class="sc-icon" style="display:inline">📅</div>
+      <span class="sc-label" style="display:inline;margin-right:8px">Próximo pago:</span>
+      <span class="sc-value">${nextLabel}</span>
+    </div>
+  `;
+}
+
+function renderTable(){
+  const tbody = document.getElementById('tableBody');
+  const empty = document.getElementById('emptyState');
+  if(!filteredGastos.length){
+    tbody.innerHTML = '';
+    empty.style.display = 'block';
+    return;
+  }
+  empty.style.display = 'none';
+  const today = todayStr();
+
+  tbody.innerHTML = filteredGastos.map(g => {
+    const isOverdue = g.estado === 'Vencido';
+    const isToday   = g.estado !== 'Pagado' && g.fecha_pago === today;
+    const isPaid    = g.estado === 'Pagado';
+    const rowCls    = isOverdue ? 'overdue' : isToday ? 'today' : isPaid ? 'paid' : '';
+    const isChecked = selectedIds.has(g.id);
+
+    const estadoBadge = isOverdue
+      ? '<span class="badge badge-over">VENCIDO</span>'
+      : isPaid
+        ? '<span class="badge badge-paid">PAGADO</span>'
+        : '<span class="badge badge-pend">PENDIENTE</span>';
+
+    const fpClass = g.forma_pago.toLowerCase().includes('transferencia') ? 'fp-transferencia'
+      : g.forma_pago.toLowerCase().includes('tarjeta') ? 'fp-tarjeta'
+      : g.forma_pago.toLowerCase().includes('efectivo') ? 'fp-efectivo'
+      : 'fp-cheque';
+
+    const fpIcons = { transferencia:'🏦', tarjeta:'💳', efectivo:'💵', cheque:'📝' };
+    const fpKey = Object.keys(fpIcons).find(k => g.forma_pago.toLowerCase().includes(k)) || 'cheque';
+
+    const isTransfer = (g.forma_pago||'').toLowerCase().includes('transferencia');
+    const hasRealDate = g.fecha_pago && g.fecha_pago !== g.fecha_compra;
+    const dateLabel = (!isPaid && isTransfer && !hasRealDate)
+      ? '<span style="color:#e65100;font-style:italic">Sin asignar</span>'
+      : formatDate(g.fecha_pago);
+
+    const dateCell = !isPaid
+      ? `<span class="date-link" onclick="openDateModal('${g.id}')" title="Click para cambiar fecha">${dateLabel}</span>${hasRealDate ? countdownLabel(g.fecha_pago) : ''}`
+      : `${formatDate(g.fecha_pago)}`;
+
+    // Remisión CFDI badge
+    const isRemision = (g.tipo_documento||'') === 'Remisión' || (g.tipo_documento||'') === 'Remision';
+    const cfdiBtn = isRemision && !g.cfdi_recibido
+      ? `<button class="btn" onclick="event.stopPropagation();openCfdiModal('${g.id}')" style="background:#6a1b9a;color:white;font-size:10px;padding:3px 7px;margin-left:4px">📄 CFDI</button>`
+      : (g.cfdi_recibido ? `<span style="font-size:10px;color:#6a1b9a;margin-left:4px">✅ CFDI</span>` : '');
+
+    // Desktop actions: pay/undo + foto (NO delete button inline — delete is via selection)
+    const actions = !isPaid
+      ? `<button class="btn btn-pay" onclick="openPayModal('${g.id}')">💰 Pagar</button>`
+      : `<button class="btn btn-undo" onclick="undoPay('${g.id}')">↩ Deshacer</button>`;
+
+    const fotoBtn = hasFoto(g)
+      ? ` <button class="btn-foto" onclick="openFoto('${g.id}')">📷</button>`
+      : '';
+
+    const compRef = g.comprobante
+      ? (g.comprobante.startsWith('http')
+        ? `<div style="font-size:10px;margin-top:3px"><a href="${g.comprobante}" target="_blank" style="color:#1565c0;text-decoration:none">📎 Ver comprobante PDF</a></div>`
+        : `<div style="font-size:10px;color:#2e7d32;margin-top:3px">📎 ${g.comprobante}</div>`)
+      : '';
+
+    // Mobile card content
+    const mobileCard = `<td class="mobile-card" onclick="mobileCardTap(event, '${g.id}')" ontouchstart="mobileCardDown(event, '${g.id}')" ontouchend="mobileCardUp()">
+      <div style="display:flex;align-items:flex-start;gap:12px">
+        <input type="checkbox" class="row-check row-check-item" ${isChecked?'checked':''} onchange="event.stopPropagation();toggleSelect('${g.id}',this.checked)" style="margin-top:3px">
+        <div style="flex:1;min-width:0">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:6px">
+            <div>
+              <strong style="font-size:15px">${g.proveedor||g.proveedor_raw||'—'}</strong>
+              ${g.credit_days?`<span style="font-size:10px;color:#999;margin-left:6px">⏳ ${g.credit_days}d</span>`:''}
+              <div style="font-size:11px;color:#aaa;margin-top:1px">${g.tipo_documento||''} ${g.folio?'#'+g.folio:''}${g.cfdi_recibido?` <span style="color:#6a1b9a">✅ CFDI</span>`:''}</div>
+            </div>
+            <div style="text-align:right">
+              <strong style="font-size:17px;color:#2d2319">$${(g.monto_pagar||0).toLocaleString('es-MX',{minimumFractionDigits:2})}</strong>
+              ${g.ajustes?`<div style="font-size:10px;color:#c62828">−$${g.ajustes.toFixed(2)}</div>`:''}
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            ${estadoBadge}
+            <span class="fp-chip ${fpClass}" style="font-size:10px">${fpIcons[fpKey]} ${g.forma_pago}</span>
+            ${isRemision && !g.cfdi_recibido?`<button class="btn" onclick="event.stopPropagation();openCfdiModal('${g.id}')" style="background:#6a1b9a;color:white;font-size:10px;padding:3px 7px">📄 CFDI</button>`:''}
+            ${hasFoto(g)?`<button class="btn-foto" onclick="event.stopPropagation();openFoto('${g.id}')" style="font-size:10px;padding:3px 6px">📷</button>`:''}
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px">
+            <div style="font-size:12px;color:#7a6b5d">
+              ${!isPaid?`<span class="date-link" onclick="event.stopPropagation();openDateModal('${g.id}')">${dateLabel}</span>`:formatDate(g.fecha_pago)}
+              ${hasRealDate ? countdownLabel(g.fecha_pago) : ''}
+            </div>
+            <div style="display:flex;gap:6px">
+              ${!isPaid
+                ?`<button class="btn btn-pay" onclick="event.stopPropagation();openPayModal('${g.id}')" style="padding:6px 12px;font-size:11px">💰 Pagar</button>`
+                :`<button class="btn btn-undo" onclick="event.stopPropagation();undoPay('${g.id}')" style="padding:6px 12px;font-size:11px">↩</button>`}
+            </div>
+          </div>
+          ${compRef}
+        </div>
+      </div>
+    </td>`;
+
+    const isEditing = editingId === g.id;
+    const editRow = isEditing ? `<tr class="edit-row-tr"><td colspan="11" style="padding:0;border:none">
+      <div class="edit-row">
+        <div class="edit-grid">
+          <div class="edit-field"><label>Proveedor</label><input type="text" id="ed_prov" value="${(g.proveedor||'').replace(/"/g,'&quot;')}"></div>
+          <div class="edit-field"><label>Folio</label><input type="text" id="ed_folio" value="${String(g.folio||'').replace(/"/g,'&quot;')}"></div>
+          <div class="edit-field"><label>Tipo documento</label><input type="text" id="ed_tipo" value="${(g.tipo_documento||'').replace(/"/g,'&quot;')}"></div>
+          <div class="edit-field"><label>Fecha compra</label><input type="date" id="ed_fecha" value="${g.fecha_compra||''}"></div>
+          <div class="edit-field"><label>Monto factura</label><input type="number" id="ed_monto" step="0.01" value="${g.monto_factura||g.monto_pagar||0}" oninput="recalcEdit()"></div>
+          <div class="edit-field"><label>Ajustes (descuento)</label><input type="number" id="ed_ajustes" step="0.01" value="${g.ajustes||0}" oninput="recalcEdit()"></div>
+          <div class="edit-field"><label>Monto a pagar</label><input type="text" id="ed_pagar" value="${(g.monto_pagar||0).toFixed(2)}" readonly></div>
+          <div class="edit-field"><label>Forma de pago</label>
+            <select id="ed_forma">
+              <option ${g.forma_pago==='Transferencia'?'selected':''}>Transferencia</option>
+              <option ${g.forma_pago==='Tarjeta crédito'?'selected':''}>Tarjeta crédito</option>
+              <option ${g.forma_pago==='Tarjeta débito'?'selected':''}>Tarjeta débito</option>
+              <option ${g.forma_pago==='Efectivo'?'selected':''}>Efectivo</option>
+              <option ${g.forma_pago==='Cheque'?'selected':''}>Cheque</option>
+            </select>
+          </div>
+          <div class="edit-field"><label>Categoría</label>
+            <select id="ed_cat">
+              <option ${g.categoria==='Adquisición de mercancías'?'selected':''}>Adquisición de mercancías</option>
+              <option ${g.categoria==='Gastos generales'?'selected':''}>Gastos generales</option>
+            </select>
+          </div>
+          <div class="edit-field"><label>Días crédito</label><input type="number" id="ed_credit" value="${g.credit_days||0}"></div>
+          <div class="edit-field"><label>Fecha pago</label><input type="date" id="ed_fecha_pago" value="${g.fecha_pago||''}"></div>
+        </div>
+        <div class="edit-actions">
+          <button class="btn btn-cancel" onclick="event.stopPropagation();toggleEdit(null)">Cancelar</button>
+          <button class="btn btn-save" onclick="event.stopPropagation();saveEdit('${g.id}')">💾 Guardar</button>
+        </div>
+      </div>
+    </td></tr>` : '';
+
+    return `<tr class="${rowCls} ${isChecked?'selected':''} ${isEditing?'editing':''}" data-id="${g.id}" onclick="rowClick(event,'${g.id}')">
+      <td style="text-align:center"><input type="checkbox" class="row-check row-check-item" ${isChecked?'checked':''} onchange="event.stopPropagation();toggleSelect('${g.id}',this.checked)"></td>
+      <td><strong>${dateCell}</strong></td>
+      <td>
+        <strong>${g.proveedor||g.proveedor_raw||'—'}</strong>
+        ${g.credit_days?`<div style="font-size:10px;color:#999">⏳ ${g.credit_days} días crédito</div>`:''}
+      </td>
+      <td style="font-size:12px;color:#7a6b5d">${g.tipo_documento||''} ${g.folio?'#'+g.folio:''}${g.cfdi_recibido?' ✅':''}</td>
+      <td style="font-size:11px;color:#999">${formatDate(g.fecha_compra)}</td>
+      <td>
+        <strong style="font-size:15px">$${(g.monto_pagar||0).toLocaleString('es-MX',{minimumFractionDigits:2})}</strong>
+        ${g.ajustes?`<div style="font-size:10px;color:#c62828">−$${g.ajustes.toFixed(2)} ajuste</div>`:''}
+      </td>
+      <td><span class="fp-chip ${fpClass}">${fpIcons[fpKey]} ${g.forma_pago}</span></td>
+      <!-- Categoría hidden from table; still in edit panel + mobile card -->
+      <td>${estadoBadge}${compRef}</td>
+      <td style="white-space:nowrap">${actions}${cfdiBtn}${fotoBtn}</td>
+      ${mobileCard}
+    </tr>${editRow}`;
+  }).join('');
+}
+
+// ── Row click → inline edit ──
+function rowClick(event, id){
+  // Phase 2.3: Reduced guard targets — only skip for buttons, links, checkboxes, and inputs
+  if(event.target.closest('button, a, .date-link, input')) return;
+  toggleEdit(editingId === id ? null : id);
+}
+
+function toggleEdit(id){
+  editingId = id;
+  renderTable();
+  updateSelectionUI();
+  if(id){
+    // Scroll edit row into view
+    setTimeout(() => {
+      const editEl = document.querySelector('.edit-row');
+      if(editEl) editEl.scrollIntoView({behavior:'smooth', block:'nearest'});
+    }, 50);
+  }
+}
+
+function recalcEdit(){
+  const monto = parseFloat(document.getElementById('ed_monto').value)||0;
+  const ajustes = parseFloat(document.getElementById('ed_ajustes').value)||0;
+  document.getElementById('ed_pagar').value = (monto - ajustes).toFixed(2);
+}
+
+function saveEdit(id){
+  const g = allGastos.find(x=>x.id===id); if(!g) return;
+  g.proveedor = document.getElementById('ed_prov').value.trim();
+  g.folio = document.getElementById('ed_folio').value.trim();
+  g.tipo_documento = document.getElementById('ed_tipo').value.trim();
+  g.fecha_compra = document.getElementById('ed_fecha').value;
+  g.monto_factura = parseFloat(document.getElementById('ed_monto').value)||0;
+  g.ajustes = parseFloat(document.getElementById('ed_ajustes').value)||0;
+  g.monto_pagar = g.monto_factura - g.ajustes;
+  g.forma_pago = document.getElementById('ed_forma').value;
+  g.categoria = document.getElementById('ed_cat').value;
+  g.credit_days = parseInt(document.getElementById('ed_credit').value)||0;
+  // Phase 2.8: Also save fecha_pago from edit
+  g.fecha_pago = document.getElementById('ed_fecha_pago').value || '';
+  saveGastos();
+  editingId = null;
+  applyFilters();
+  showToast('Guardado: ' + g.proveedor);
+  // Push update to Sheet
+  pushFacturaToSheet(id, {
+    Proveedor: g.proveedor, Folio: g.folio, Tipo_Documento: g.tipo_documento,
+    Fecha_Compra: g.fecha_compra, Monto_Factura: g.monto_factura,
+    Ajustes: g.ajustes, Monto_Pagar: g.monto_pagar,
+    Forma_Pago: g.forma_pago, Categoria: g.categoria, Credit_Days: g.credit_days,
+    Fecha_Pago: g.fecha_pago
+  });
+}
+
+// Phase 2.3: Mobile card tap = open edit panel (not just toggle selection)
+// Long press or checkbox tap → selection mode
+let _mobileTimer = null;
+let _mobileLongPress = false;
+function mobileCardTap(event, id){
+  // Don't trigger if user tapped a button/link/checkbox
+  if(event.target.closest('button, a, .date-link, input')) return;
+  if(_mobileLongPress) { _mobileLongPress = false; return; }
+  // Single tap → open edit panel
+  toggleEdit(editingId === id ? null : id);
+}
+function mobileCardDown(event, id){
+  _mobileLongPress = false;
+  _mobileTimer = setTimeout(() => {
+    _mobileLongPress = true;
+    const cb = event.currentTarget.querySelector('.row-check-item');
+    if(cb){ cb.checked = !cb.checked; toggleSelect(id, cb.checked); }
+  }, 500);
+}
+function mobileCardUp(){ clearTimeout(_mobileTimer); }
+
+// ── Modals ──
+function openPayModal(id){
+  editingId = id;
+  const g = allGastos.find(x => x.id === id); if(!g) return;
+  document.getElementById('payModalInfo').innerHTML = `
+    <div style="background:#f5f0eb;border-radius:10px;padding:12px 16px;margin-bottom:8px">
+      <strong style="font-size:15px">${g.proveedor}</strong><br>
+      <span style="font-size:13px;color:#7a6b5d">$${(g.monto_pagar||0).toLocaleString('es-MX',{minimumFractionDigits:2})} · ${g.forma_pago}</span>
+    </div>`;
+  document.getElementById('payDate').value = todayStr();
+  document.getElementById('payRef').value = '';
+  document.getElementById('payPdf').value = '';
+  document.getElementById('pdfUploadStatus').textContent = '';
+  document.getElementById('payModal').classList.add('open');
+}
+function closePayModal(){ document.getElementById('payModal').classList.remove('open'); editingId=null; }
+
+async function confirmPay(){
+  const g = allGastos.find(x => x.id === editingId); if(!g) return;
+  g.estado = 'Pagado';
+  g.fecha_pago_real = document.getElementById('payDate').value || todayStr();
+  g.comprobante = document.getElementById('payRef').value.trim();
+
+  // If fecha_pago is empty or same as fecha_compra (sin asignar), set it to today
+  // so it stops appearing in the "Sin asignar" filter after sync
+  if(!g.fecha_pago || g.fecha_pago === g.fecha_compra || g.fecha_pago === '') {
+    g.fecha_pago = g.fecha_pago_real;
+    // Also push the date to the sheet
+    pushDateToSheet(g.id, g.fecha_pago, 'Pagado');
+  }
+
+  // Check for PDF file
+  const pdfInput = document.getElementById('payPdf');
+  const pdfFile = pdfInput.files[0];
+  let pdfBase64 = '';
+
+  if(pdfFile){
+    document.getElementById('pdfUploadStatus').textContent = '⏳ Subiendo PDF…';
+    try {
+      pdfBase64 = await fileToBase64(pdfFile);
+    } catch(e){
+      document.getElementById('pdfUploadStatus').textContent = '❌ Error leyendo PDF';
+      console.log('PDF read error:', e);
+    }
+  }
+
+  saveGastos(); closePayModal(); clearSelection(); applyFilters();
+  showToast('Pagado: ' + g.proveedor + ' · $' + (g.monto_pagar||0).toFixed(2));
+
+  // Push to Sheet (and upload PDF if present)
+  await pushStatusToSheet(g.id, 'Pagado', g.fecha_pago_real, g.comprobante, pdfBase64, g.proveedor);
+}
+
+function fileToBase64(file){
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result.split(',')[1]); // strip data:... prefix
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+function undoPay(id){
+  const g = allGastos.find(x => x.id === id); if(!g) return;
+  g.estado = 'Pendiente';
+  delete g.fecha_pago_real;
+  g.comprobante = '';
+  if(g.fecha_pago && g.fecha_pago < todayStr()) g.estado = 'Vencido';
+  saveGastos(); applyFilters();
+  showToast('Revertido a pendiente');
+}
+
+function openDateModal(id){
+  editingId = id;
+  const g = allGastos.find(x => x.id === id); if(!g) return;
+  document.getElementById('dateModalInfo').innerHTML = `
+    <div style="background:#f5f0eb;border-radius:10px;padding:12px 16px;margin-bottom:8px">
+      <strong>${g.proveedor}</strong> · Fecha actual: <strong>${formatDate(g.fecha_pago)}</strong>
+    </div>`;
+  document.getElementById('newPayDate').value = g.fecha_pago || '';
+  document.getElementById('dateModal').classList.add('open');
+}
+function closeDateModal(){ document.getElementById('dateModal').classList.remove('open'); editingId=null; }
+
+function confirmDateChange(){
+  const g = allGastos.find(x => x.id === editingId); if(!g) return;
+  const nd = document.getElementById('newPayDate').value;
+  if(!nd){ showToast('Selecciona una fecha'); return; }
+  g.fecha_pago = nd;
+  if(g.estado !== 'Pagado') g.estado = nd < todayStr() ? 'Vencido' : 'Pendiente';
+  saveGastos(); closeDateModal(); applyFilters();
+  pushDateToSheet(g.id, nd, g.estado);
+  showToast('Fecha cambiada: ' + formatDate(nd));
+}
+
+// ── Foto Modal ──
+function hasFoto(g){
+  return g && (g.foto_url || g.Foto_URL || g.foto);
+}
+function openFoto(id){
+  const g = allGastos.find(x => x.id === id);
+  if(!g) return;
+  // Priority: Drive URL (from Sheet) → localStorage base64
+  const driveUrl = g.foto_url || g.Foto_URL || '';
+  const localB64 = g.foto || '';
+  if(!driveUrl && !localB64) return;
+  document.getElementById('fotoTitle').textContent = `${g.proveedor} · ${g.folio||'Sin folio'} · ${formatDate(g.fecha_compra)}`;
+  document.getElementById('fotoImg').src = driveUrl || ('data:image/jpeg;base64,' + localB64);
+  document.getElementById('fotoModal').classList.add('open');
+}
+function closeFotoModal(){ document.getElementById('fotoModal').classList.remove('open'); }
+
+// ── Delete (single — kept for backward compat but now uses selection) ──
+function deleteGasto(id){
+  if(!confirm('¿Eliminar este registro de pago?')) return;
+  allGastos = allGastos.filter(g => g.id !== id);
+  saveGastos(); clearSelection(); applyFilters();
+  showToast('Eliminado');
+}
+
+// ── Toast ──
+let toastTimer;
+function showToast(msg, ms=3000){
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), ms);
+}
+
+// ── Script URL & Sync ──
+function saveScriptUrl(){
+  const u = document.getElementById('scriptUrlInput').value.trim();
+  if(!u.startsWith('https://script.google.com')){showToast('URL inválida');return;}
+  localStorage.setItem('nb_script_url', u);
+  document.getElementById('scriptUrlInput').value = '';
+  document.getElementById('configBar').classList.add('ok');
+  document.getElementById('syncStatus').textContent = '✅ Conectado';
+  showToast('Script URL guardada');
+  syncFromSheet();
+}
+function getScriptUrl(){ return localStorage.getItem('nb_script_url')||''; }
+
+async function syncFromSheet(force){
+  const url = getScriptUrl();
+  if(!url){ showToast('Configura la Script URL primero'); return; }
+  // Block sync while queue is processing (prevents overwriting local paid changes)
+  if(!force && syncQueue.length > 0){
+    showToast('⏳ Esperando a que la cola se vacíe antes de sincronizar…', 3000);
+    return;
+  }
+  const btn = document.getElementById('syncBtn');
+  const status = document.getElementById('syncStatus');
+  btn.innerHTML = '<span class="sync-spinner"></span> Sincronizando…';
+  btn.disabled = true;
+  status.textContent = '🔄 Conectando…';
+
+  try {
+    const resp = await fetch(url + '?action=list');
+    if(!resp.ok) throw new Error('HTTP ' + resp.status);
+    const data = await resp.json();
+    if(data.error) throw new Error(data.error);
+
+    const sheetGastos = data.facturas || [];
+    if(!sheetGastos.length){
+      status.textContent = '✅ Sincronizado (0 facturas en Sheet)';
+      btn.innerHTML = '🔄 Sincronizar'; btn.disabled = false;
+      return;
+    }
+
+    const sheetIds = new Set(sheetGastos.map(g => g.ID || g.id));
+    // Only keep local-only items that are recent (< 48h) — older ones were likely deleted from Sheet
+    const now = Date.now();
+    const localOnly = allGastos.filter(g => {
+      if (sheetIds.has(g.id)) return false; // exists in Sheet, will be in merged
+      const created = g.created_at ? new Date(g.created_at).getTime() : 0;
+      return (now - created) < 48 * 60 * 60 * 1000; // keep only if < 48 hours old
+    });
+
+    // Google Sheets returns date cells as Date objects — convert to YYYY-MM-DD string
+    const fmtDate = v => {
+      if (!v) return '';
+      if (v instanceof Date) return v.toISOString().slice(0,10);
+      return String(v).slice(0,10);
+    };
+
+    const merged = sheetGastos.map(g => ({
+      id           : g.ID || g.id || '',
+      folio        : String(g.Folio || g.folio || ''),
+      tipo_documento: g.Tipo_Documento || g.tipo_documento || '',
+      proveedor    : g.Proveedor || g.proveedor || '',
+      proveedor_raw: g.Proveedor_Raw || g.proveedor_raw || '',
+      fecha_compra : fmtDate(g.Fecha_Compra || g.fecha_compra),
+      monto_factura: parseFloat(g.Monto_Factura || g.monto_factura || 0),
+      ajustes      : parseFloat(g.Ajustes || g.ajustes || 0),
+      monto_pagar  : parseFloat(g.Monto_Pagar || g.monto_pagar || 0),
+      forma_pago   : g.Forma_Pago || g.forma_pago || '',
+      categoria    : g.Categoria || g.categoria || '',
+      // Phase 2.5: Trust sheet's Estado if present; infer from forma_pago only as fallback for empty cells
+      estado       : g.Estado || g.estado
+        || ((g.Forma_Pago||g.forma_pago||'').toLowerCase().includes('transferencia') ? 'Pendiente' : 'Pagado'),
+      fecha_pago   : fmtDate(g.Fecha_Pago || g.fecha_pago),
+      credit_days  : parseInt(g.Credit_Days || g.credit_days || 0),
+      comprobante  : g.Comprobante || g.comprobante || '',
+      created_at   : g.Created_At || g.created_at || '',
+      foto_url     : g.Foto_URL || g.foto_url || '',
+      version      : parseInt(g.Version || g.version || 0) || 0
+    }));
+
+    // Preserve local base64 photos for entries that also exist in Sheet
+    const localMap = {};
+    allGastos.forEach(g => { if(g.foto) localMap[g.id] = g.foto; });
+    merged.forEach(g => { if(!g.foto_url && localMap[g.id]) g.foto = localMap[g.id]; });
+    allGastos = [...merged, ...localOnly];
+    // Deduplicate by ID (safety net against localStorage bloat)
+    const seenIds = new Set();
+    allGastos = allGastos.filter(g => {
+      if(seenIds.has(g.id)) return false;
+      seenIds.add(g.id);
+      return true;
+    });
+    saveGastos();
+    // Phase 2.1: Rebuild year filter after sync (includes years from new data)
+    buildYearFilter();
+    applyFilters();
+
+    status.textContent = `✅ Sincronizado · ${merged.length} del Sheet + ${localOnly.length} locales`;
+    showToast(`Sincronizado: ${merged.length} facturas del Sheet`);
+  } catch(err) {
+    status.textContent = '❌ Error: ' + err.message;
+    showToast('Error al sincronizar: ' + err.message);
+  }
+  btn.innerHTML = '🔄 Sincronizar'; btn.disabled = false;
+}
+
+// ── Push functions (now use sync queue instead of fire-and-forget no-cors) ──
+function getGastoVersion(id){
+  const g = allGastos.find(x => x.id === id);
+  return g ? (g.version || 0) : 0;
+}
+
+function updateLocalVersion(id, newVersion){
+  const g = allGastos.find(x => x.id === id);
+  if(g && newVersion) { g.version = newVersion; saveGastos(); }
+}
+
+async function pushStatusToSheet(id, estado, fechaPagoReal, comprobante, pdfBase64, proveedor){
+  if(!getScriptUrl()) return;
+  const payload = { action: 'update_status', id, estado, fecha_pago_real: fechaPagoReal||'', comprobante: comprobante||'', version: getGastoVersion(id) };
+  if(pdfBase64){
+    payload.pdf_base64 = pdfBase64;
+    payload.proveedor = proveedor || '';
+  }
+  enqueueSync(payload);
+  if(pdfBase64) showToast('📎 PDF en cola de sincronización');
+}
+
+async function pushFacturaToSheet(id, fields){
+  if(!getScriptUrl()) return;
+  enqueueSync({ action: 'update_factura', id, ...fields, version: getGastoVersion(id) });
+}
+
+async function pushDateToSheet(id, fechaPago, estado){
+  if(!getScriptUrl()) return;
+  enqueueSync({ action: 'update_date', id, fecha_pago: fechaPago, estado, version: getGastoVersion(id) });
+}
+
+// ── Manual Entry ──
+let _manualTipo = 'Factura';
+let _manComprobanteData = null; // base64 string or filename
+
+function setManualTipo(tipo) {
+  _manualTipo = tipo;
+  ['Factura','Remisión','Gasto'].forEach(t => {
+    const btn = document.getElementById('tipo' + t.replace('ó','o') + 'Btn');
+    if (btn) btn.classList.toggle('active', t === tipo);
+  });
+}
+
+// Proveedor search in manual modal
+let _manualProveedoresList = [];
+function manLoadProveedores() {
+  try {
+    const cached = localStorage.getItem('nb_proveedores_cache');
+    if (cached) {
+      const obj = JSON.parse(cached);
+      _manualProveedoresList = Object.values(obj).map(v => v.name || v).filter(Boolean).sort();
+    }
+  } catch(e) {}
+  // Also grab any names directly from allGastos
+  const fromGastos = [...new Set(allGastos.map(g => g.proveedor).filter(Boolean))];
+  const all = [...new Set([..._manualProveedoresList, ...fromGastos])].sort();
+  _manualProveedoresList = all;
+}
+
+function manSupSearch() {
+  const q = (document.getElementById('manualProvInput').value || '').toLowerCase().trim();
+  const list = document.getElementById('manSupList');
+  const matches = q
+    ? _manualProveedoresList.filter(s => s.toLowerCase().includes(q))
+    : _manualProveedoresList.slice(0, 12);
+  let html = matches.map(s =>
+    `<div class="man-sup-item" onmousedown="manSupSelect('${s.replace(/'/g,"\\'")}')">
+      ${s}
+    </div>`
+  ).join('');
+  // Always show create new at bottom
+  const label = document.getElementById('manualProvInput').value.trim();
+  html += `<div class="man-sup-item create-new" onmousedown="manSupCreateNew()">
+    ➕ ${label ? `Crear "${label}"` : 'Crear nuevo proveedor'}
+  </div>`;
+  list.innerHTML = html;
+  list.style.display = 'block';
+}
+
+function manSupClose() {
+  const list = document.getElementById('manSupList');
+  if (list) list.style.display = 'none';
+}
+
+function manSupSelect(name) {
+  document.getElementById('manualProvInput').value = name;
+  document.getElementById('manualProvNombre').value = name;
+  manSupClose();
+  document.getElementById('manCreateForm').style.display = 'none';
+}
+
+function manSupCreateNew() {
+  const name = document.getElementById('manualProvInput').value.trim();
+  if (!name) { showToast('Escribe el nombre primero', 'error'); return; }
+  document.getElementById('manualProvNombre').value = name;
+  document.getElementById('manNewRFC').value = '';
+  document.getElementById('manNewDias').value = '';
+  document.getElementById('manNewFormaPago').value = 'Transferencia';
+  document.getElementById('manCreateForm').style.display = 'block';
+  manSupClose();
+}
+
+function manSaveNewSupplier() {
+  const name = document.getElementById('manualProvInput').value.trim();
+  const rfc = document.getElementById('manNewRFC').value.trim();
+  const dias = parseInt(document.getElementById('manNewDias').value) || 0;
+  const forma = document.getElementById('manNewFormaPago').value;
+  if (!name) { showToast('Nombre requerido', 'error'); return; }
+  // Save to proveedores cache
+  try {
+    const cached = localStorage.getItem('nb_proveedores_cache');
+    const obj = cached ? JSON.parse(cached) : {};
+    const key = name.toLowerCase().replace(/\s+/g,'_');
+    obj[key] = { name, rfc, creditDays: dias, formaPago: forma };
+    localStorage.setItem('nb_proveedores_cache', JSON.stringify(obj));
+    if (!_manualProveedoresList.includes(name)) _manualProveedoresList.push(name);
+  } catch(e) {}
+  document.getElementById('manualProvNombre').value = name;
+  document.getElementById('manCreateForm').style.display = 'none';
+  showToast('✅ Proveedor guardado: ' + name);
+  // Push to script if connected
+  const scriptUrl = getScriptUrl();
+  if (scriptUrl) {
+    enqueueSync({ action: 'add_proveedor', nombre: name, rfc, dias_credito: dias, forma_pago: forma });
+  }
+}
+
+function manCancelNewSupplier() {
+  document.getElementById('manCreateForm').style.display = 'none';
+}
+
+function manFechaPagoChanged() {
+  const val = document.getElementById('manualFechaPago').value;
+  const wrap = document.getElementById('manComprobanteWrap');
+  if (wrap) wrap.style.display = val ? 'block' : 'none';
+}
+
+function manComprobanteSelected() {
+  const file = document.getElementById('manualComprobanteFile').files[0];
+  if (!file) return;
+  const label = document.getElementById('manComprobanteText');
+  label.textContent = file.name;
+  // Read as base64 for local storage
+  const reader = new FileReader();
+  reader.onload = e => { _manComprobanteData = e.target.result; };
+  reader.readAsDataURL(file);
+}
+
+function openManualModal() {
+  _manualTipo = 'Factura';
+  _manComprobanteData = null;
+  setManualTipo('Factura');
+  manLoadProveedores();
+  const today = new Date().toISOString().slice(0,10);
+  document.getElementById('manualFecha').value = today;
+  document.getElementById('manualFechaPago').value = '';
+  document.getElementById('manualProvInput').value = '';
+  document.getElementById('manualProvNombre').value = '';
+  document.getElementById('manualDescripcion').value = '';
+  document.getElementById('manualMonto').value = '';
+  document.getElementById('manualNotas').value = '';
+  document.getElementById('manualFormaPago').value = 'Transferencia';
+  document.getElementById('manCreateForm').style.display = 'none';
+  document.getElementById('manComprobanteWrap').style.display = 'none';
+  const ct = document.getElementById('manComprobanteText');
+  if (ct) ct.textContent = 'Adjuntar PDF o imagen';
+  document.getElementById('manualModal').classList.add('open');
+}
+
+function closeManualModal() {
+  document.getElementById('manualModal').classList.remove('open');
+}
+
+function confirmManualEntry() {
+  const proveedor = (document.getElementById('manualProvNombre').value || document.getElementById('manualProvInput').value).trim();
+  const descripcion = document.getElementById('manualDescripcion').value.trim();
+  const monto = parseFloat(document.getElementById('manualMonto').value) || 0;
+  const fecha = document.getElementById('manualFecha').value;
+  const fechaPago = document.getElementById('manualFechaPago').value;
+  const formaPago = document.getElementById('manualFormaPago').value;
+  const notas = document.getElementById('manualNotas').value.trim();
+
+  if (!proveedor) { showToast('El proveedor es obligatorio', 'error'); return; }
+  if (!monto || monto <= 0) { showToast('El monto debe ser mayor a cero', 'error'); return; }
+  if (!fecha) { showToast('La fecha es obligatoria', 'error'); return; }
+
+  const id = 'MAN-' + Date.now();
+  const yaFuePagado = !!fechaPago;
+  const newEntry = {
+    id,
+    folio: id,
+    tipo_documento: _manualTipo,
+    proveedor,
+    proveedor_raw: proveedor,
+    categoria: _manualTipo,
+    descripcion: descripcion || null,
+    fecha_compra: fecha,
+    monto_factura: monto,
+    monto_pagar: monto,
+    forma_pago: formaPago,
+    estado: yaFuePagado ? 'Pagado' : 'Pendiente',
+    fecha_pago: fechaPago || fecha,
+    fecha_pago_real: yaFuePagado ? fechaPago : null,
+    credit_days: 0,
+    comprobante: _manComprobanteData || notas || '',
+    notas,
+    created_at: new Date().toISOString(),
+    _manual: true
+  };
+
+  allGastos.push(newEntry);
+  saveGastos();
+  buildYearFilter();
+  applyFilters();
+  closeManualModal();
+  showToast('✅ Entrada registrada: ' + proveedor + (descripcion ? ' · ' + descripcion : ''));
+
+  // Push to sheet if connected
+  const scriptUrl = getScriptUrl();
+  if (scriptUrl) {
+    enqueueSync({ action: 'create', gasto: newEntry });
+  }
+}
+
+// ── Remisión → CFDI Tracking ──
+let _cfdiTargetId = null;
+
+function openCfdiModal(id) {
+  _cfdiTargetId = id;
+  const g = allGastos.find(x => x.id === id);
+  if (!g) return;
+  document.getElementById('cfdiProvNombre').textContent = g.proveedor + (g.folio ? ' · #' + g.folio : '');
+  document.getElementById('cfdiUUID').value = g.cfdi_uuid || '';
+  document.getElementById('cfdiFollio').value = g.cfdi_folio || '';
+  document.getElementById('cfdiDate').value = new Date().toISOString().slice(0,10);
+  document.getElementById('cfdiModal').classList.add('open');
+}
+
+function closeCfdiModal() {
+  document.getElementById('cfdiModal').classList.remove('open');
+  _cfdiTargetId = null;
+}
+
+function confirmCfdi() {
+  const g = allGastos.find(x => x.id === _cfdiTargetId);
+  if (!g) return;
+  g.cfdi_uuid  = document.getElementById('cfdiUUID').value.trim();
+  g.cfdi_folio = document.getElementById('cfdiFollio').value.trim();
+  g.cfdi_fecha = document.getElementById('cfdiDate').value;
+  g.cfdi_recibido = true;
+  // Keep as Remisión for history but mark converted
+  g._cfdi_convertido = true;
+  if (g.cfdi_folio) g.folio = g.cfdi_folio; // update visible folio
+  saveGastos();
+  applyFilters();
+  closeCfdiModal();
+  showToast('✅ CFDI registrado: ' + g.proveedor);
+  const scriptUrl = getScriptUrl();
+  if (scriptUrl) enqueueSync({ action: 'update_factura', id: g.id, cfdi_uuid: g.cfdi_uuid, cfdi_folio: g.cfdi_folio, cfdi_fecha: g.cfdi_fecha, cfdi_recibido: true });
+}
+
+// ── Init ──
+window.addEventListener('load', () => requireNbAuth(function appInit() {
+  const now = new Date();
+  const opts = { weekday:'long', year:'numeric', month:'long', day:'numeric' };
+  document.getElementById('topbarDate').innerHTML = now.toLocaleDateString('es-MX', opts);
+  renderNbUserBadge('nbUserBadge');
+  const sUrl = getScriptUrl();
+  if(sUrl){
+    document.getElementById('configBar').classList.add('ok');
+    document.getElementById('syncStatus').textContent = '✅ Conectado';
+  }
+  loadGastos();
+  loadSyncQueue();
+  buildYearFilter();
+  updateMonthLabel();
+  applyFilters();
+  updateSyncIndicator();
+  checkStorageSize();
+  if(sUrl){
+    // Process any pending queue items first, then sync from sheet
+    setTimeout(() => { processSyncQueue(); }, 300);
+    setTimeout(() => syncFromSheet(), 800);
+  }
+}));
+
+document.addEventListener('click', e => {
+  if(e.target.id === 'payModal') closePayModal();
+  if(e.target.id === 'dateModal') closeDateModal();
+  if(e.target.id === 'fotoModal') closeFotoModal();
+  if(e.target.id === 'manualModal') closeManualModal();
+  if(e.target.id === 'cfdiModal') closeCfdiModal();
+});
+</script>
+</body>
+</html>
