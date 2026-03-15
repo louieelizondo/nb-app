@@ -593,6 +593,14 @@ tr:last-child td { border-bottom: none; }
           <tbody id="resultsBody"></tbody>
         </table>
       </div>
+      <!-- EXPLICIT PRICE SYNC BUTTON -->
+      <div id="priceSyncBar" style="margin-top:14px;padding:12px;background:#f1f8f1;border:1.5px solid #a5d6a7;border-radius:10px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
+        <div>
+          <strong style="font-size:13px;color:#2e6b2e">💰 Precios → MATERIA PRIMA</strong>
+          <div id="priceSyncDetail" style="font-size:11px;color:#777;margin-top:2px"></div>
+        </div>
+        <button class="btn btn-green" id="priceSyncBtn" onclick="explicitPriceSync()">📊 Actualizar Precios</button>
+      </div>
     </div>
   </div>
 
@@ -1001,6 +1009,8 @@ function parseCSVLine(line) {
 function parseMateriaPrima(csvText) {
   const lines = csvText.split('\n');
   const ingredients = [], seen = new Set();
+  // Current layout: A(0)=Ingrediente, B(1)=Proveedor A, C(2)=Proveedor B,
+  // D(3)=Costo x Paquete ($), E(4)=Fecha de Precio
   for (const line of lines) {
     if (!line.trim()) continue;
     const row = parseCSVLine(line);
@@ -1009,15 +1019,16 @@ function parseMateriaPrima(csvText) {
     const nn = normalize(raw);
     if (!nn) continue;
     if (SKIP_NAMES.has(nn)) continue;
-    if (nn.includes('fecha')) continue;   // column header rows
-    if (nn.match(/^\d+(\.\d+)?$/)) continue; // purely numeric rows
+    if (nn.includes('fecha')) continue;
+    if (nn.match(/^\d+(\.\d+)?$/)) continue;
     if (seen.has(nn)) continue;
     seen.add(nn);
     let cost = 0;
-    try { cost = parseFloat(String(row[1]||'').replace(/[^0-9.]/g,'')) || 0; } catch {}
-    const date = (row[2]||'').trim().slice(0,10);
-    const prov = (row[11]||'').trim();
-    ingredients.push({ n: raw, c: Math.round(cost*100)/100, f: date, p: prov });
+    try { cost = parseFloat(String(row[3]||'').replace(/[^0-9.]/g,'')) || 0; } catch {}
+    const date = (row[4]||'').trim().slice(0,10);
+    const provA = (row[1]||'').trim();
+    const provB = (row[2]||'').trim();
+    ingredients.push({ n: raw, c: Math.round(cost*100)/100, f: date, p: provA || provB });
   }
   return ingredients;
 }
@@ -1028,9 +1039,13 @@ function parseMateriaPrima(csvText) {
 function parseGvizTable(t) {
   if (!t || !t.rows) return [];
   const out = [], seen = new Set();
-  // New flat structure: A=Ingrediente(0), B=Categoría(1), C=CostoPaq(2), D=Fecha(3),
-  // E=UnidsCaja(4), F=VolUnid(5), G=Unidad(6), H=Costo/kg(7), I=%Merma(8),
-  // J=CostoReal(9), K=%MermaCoccion(10), L=CostoCocido(11), M=Proveedores(12)
+  // Current MATERIA PRIMA layout (March 2026):
+  // A(0)=Ingrediente, B(1)=Proveedor A, C(2)=Proveedor B,
+  // D(3)=Costo x Paquete ($), E(4)=Fecha de Precio,
+  // F(5)=Unidades x Caja, G(6)=Volumen x Unidad, H(7)=Unidad (kg/lt/pza),
+  // I(8)=Costo por kg/lt ($), J(9)=%Merma Crudo, K(10)=Costo Real Crudo,
+  // L(11)=%Merma Cocción, M(12)=Costo Real Cocido,
+  // N(13)=Área, O(14)=Ubicación
   for (const row of t.rows) {
     if (!row.c) continue;
     const getV = (i) => {
@@ -1046,18 +1061,19 @@ function parseGvizTable(t) {
     if (nn.includes('fecha') || nn.match(/^\d+(\.\d+)?$/)) continue;
     if (seen.has(nn)) continue;
     seen.add(nn);
-    // Col 2 = Costo x Paquete (purchase price — used for invoice comparison)
-    const rawCost = getV(2);
+    // Col D(3) = Costo x Paquete (purchase price — used for invoice comparison)
+    const rawCost = getV(3);
     const cost = typeof rawCost === 'number'
       ? rawCost
       : parseFloat(String(rawCost || '').replace(/[^0-9.]/g, '')) || 0;
-    const dateVal = getV(3);
+    const dateVal = getV(4);
     const date = dateVal
       ? (dateVal instanceof Date ? dateVal.toISOString().slice(0,10) : String(dateVal).slice(0,10))
       : '';
-    const prov = getV(12) ? String(getV(12)).trim() : '';
-    const cat = getV(1) ? String(getV(1)).trim() : '';
-    out.push({ n: raw, c: Math.round(cost * 100) / 100, f: date, p: prov || cat });
+    const provA = getV(1) ? String(getV(1)).trim() : '';
+    const provB = getV(2) ? String(getV(2)).trim() : '';
+    const prov = provA || provB;
+    out.push({ n: raw, c: Math.round(cost * 100) / 100, f: date, p: prov });
   }
   return out;
 }
@@ -1585,11 +1601,7 @@ function processFile(file){
   }; r.readAsDataURL(file);
 }
 function resetAll(){
-  // Only sync prices to MATERIA PRIMA if categoría is materia prima (not gastos generales)
-  const sUrl = getScriptUrl();
-  const cat = (document.getElementById('ihcCategoria').value || document.getElementById('gastoCategoria').value || '').toLowerCase();
-  const isMateriaPrima = cat.includes('adquisición') || cat.includes('mercancía');
-  if(sUrl && currentItems && currentItems.length && isMateriaPrima) syncPricesToMateriaPrima(sUrl);
+  // Price sync is now EXPLICIT via the "Actualizar Precios" button — no longer auto-fires here
 
   document.getElementById('captureOptions').style.display='grid';
   document.getElementById('previewSection').style.display='none';
@@ -1917,19 +1929,34 @@ document.addEventListener('mousedown', e=>{
 // ══════════════════════════════════════════════
 // MATCHING
 // ══════════════════════════════════════════════
-function findMatch(desc){
+function findMatch(desc, supplierHint){
   const maps=getLearnedMappings(),n=normalize(desc);
+  // 1. Learned mapping (always highest priority, regardless of supplier)
   if(maps[n]){const ing=INGREDIENTS_DB.find(i=>i.n===maps[n]);if(ing)return{...ing,matchType:'learned',score:1};}
-  // Exact match
-  for(const i of INGREDIENTS_DB)if(normalize(i.n)===n)return{...i,matchType:'exact',score:1};
-  // Contains match — require both strings > 5 chars to avoid "crema" matching everything
-  for(const i of INGREDIENTS_DB){const inn=normalize(i.n);if(inn.length>5&&n.length>5&&(inn.includes(n)||n.includes(inn)))return{...i,matchType:'contains',score:.8};}
-  // Fuzzy word overlap — raised threshold from 0.35 to 0.5, require at least 2 overlapping words
-  const words=n.split(/\s+/).filter(w=>w.length>2);
-  if(!words.length)return null;
-  let best=null,bs=0;
-  for(const i of INGREDIENTS_DB){const iw=normalize(i.n).split(/\s+/).filter(w=>w.length>2);const ov=words.filter(w=>iw.includes(w)).length;const sc=ov/Math.max(words.length,iw.length||1);if(sc>bs&&(ov>=2||words.length===1)){bs=sc;best=i;}}
-  return bs>=0.5?{...best,matchType:'fuzzy',score:bs}:null;
+
+  // 2. Build candidate list — if we know the supplier, try supplier-filtered first
+  const supNorm = supplierHint ? normalize(supplierHint) : '';
+  const supplierDB = supNorm
+    ? INGREDIENTS_DB.filter(i => i.p && normalize(i.p).includes(supNorm))
+    : [];
+  // Try supplier-filtered first, then fall back to full DB
+  const candidateSets = supplierDB.length > 0 ? [supplierDB, INGREDIENTS_DB] : [INGREDIENTS_DB];
+
+  for (const candidates of candidateSets) {
+    // Exact match
+    for(const i of candidates)if(normalize(i.n)===n)return{...i,matchType:'exact',score:1};
+    // Contains match — require both strings > 5 chars to avoid "crema" matching everything
+    for(const i of candidates){const inn=normalize(i.n);if(inn.length>5&&n.length>5&&(inn.includes(n)||n.includes(inn)))return{...i,matchType:'contains',score:.8};}
+    // Fuzzy word overlap — require ≥50% overlap and at least 2 overlapping words
+    const words=n.split(/\s+/).filter(w=>w.length>2);
+    if(!words.length) continue;
+    let best=null,bs=0;
+    for(const i of candidates){const iw=normalize(i.n).split(/\s+/).filter(w=>w.length>2);const ov=words.filter(w=>iw.includes(w)).length;const sc=ov/Math.max(words.length,iw.length||1);if(sc>bs&&(ov>=2||words.length===1)){bs=sc;best=i;}}
+    if(bs>=0.5) return{...best,matchType:'fuzzy',score:bs};
+    // If we matched in the supplier-filtered set, don't fall through to full DB for fuzzy
+    if(candidates === supplierDB && best && bs >= 0.35) return{...best,matchType:'fuzzy',score:bs};
+  }
+  return null;
 }
 function badgeHTML(t,s){
   const L={learned:'📚 Aprendido',exact:'✓ Exacto',contains:'≈ Parcial',fuzzy:'≈ Fuzzy',none:'✗ Sin match'};
@@ -2103,7 +2130,8 @@ function renderResults(parsed){
   const fa=document.getElementById('fcAll'); if(fa)fa.classList.add('active');
   document.getElementById('resultsFilter').style.display='block';
 
-  currentItems=(parsed.items||[]).map(it=>({...it,_match:findMatch(it.descripcion)}));
+  const detectedSupplier = parsed.proveedor || '';
+  currentItems=(parsed.items||[]).map(it=>({...it,_match:findMatch(it.descripcion, detectedSupplier)}));
   document.getElementById('resultsCount').textContent=currentItems.length;
   const learned=currentItems.filter(i=>i._match?.matchType==='learned').length;
   const exact=currentItems.filter(i=>i._match?.matchType==='exact').length;
@@ -2140,6 +2168,7 @@ function renderResults(parsed){
   // Page 2 thumb is in preview section — no action needed here
   renderAdjList();
   updateGastosPanel();
+  updatePriceSyncBar();
   // Show the header card and scroll to it
   document.getElementById('invoiceHeaderCard').classList.add('visible');
   document.getElementById('invoiceHeaderCard').scrollIntoView({behavior:'smooth'});
@@ -2747,23 +2776,53 @@ function setTipoDoc(tipo) {
   });
 }
 
+// Explicit price sync — called from the visible button
+async function explicitPriceSync(){
+  const sUrl = getScriptUrl();
+  if(!sUrl){ showToast('❌ Configura la URL del Apps Script primero', 4000); return; }
+  if(!currentItems || !currentItems.length){ showToast('❌ No hay items para sincronizar'); return; }
+  const matched = currentItems.filter(it => it._match && it._match.n && it.precio_unitario);
+  if(!matched.length){ showToast('⚠️ Ningún item tiene match + precio', 3000); return; }
+  const names = matched.map(it => '• ' + it._match.n + ': $' + (it.precio_unitario||0).toFixed(2)).join('\n');
+  if(!confirm('¿Actualizar ' + matched.length + ' precios en MATERIA PRIMA?\n\n' + names)) return;
+  const btn = document.getElementById('priceSyncBtn');
+  btn.disabled = true; btn.textContent = '⏳ Sincronizando…';
+  try {
+    await syncPricesToMateriaPrima(sUrl);
+    btn.textContent = '✅ Actualizado';
+    btn.style.background = '#43a047';
+    showToast('✅ ' + matched.length + ' precios actualizados en MATERIA PRIMA', 4000);
+  } catch(e) {
+    btn.textContent = '❌ Error';
+    btn.style.background = '#c62828';
+    showToast('❌ Error: ' + e.message, 5000);
+  }
+  setTimeout(()=>{ btn.disabled=false; btn.textContent='📊 Actualizar Precios'; btn.style.background=''; }, 4000);
+}
+
+// Update the price sync detail line when results render
+function updatePriceSyncBar(){
+  const el = document.getElementById('priceSyncDetail');
+  if(!el) return;
+  const matched = currentItems ? currentItems.filter(it => it._match && it._match.n && it.precio_unitario).length : 0;
+  const total = currentItems ? currentItems.filter(it => !it._pageSeparator).length : 0;
+  el.textContent = matched + ' de ' + total + ' items con match — se actualizará Col D (Costo x Paquete)';
+}
+
 async function syncPricesToMateriaPrima(scriptUrl){
-  // Build price update items from matched invoice items
-  // Backend update_prices should write:
-  //   col C (CostoPaq) = precio_unitario (as-is from invoice, per package/caja/bulto/kg)
-  //   col D (Fecha) = today's date
-  //   col G (Unidad) = unidad_compra (KG, CAJA, BULTO, PZA, etc.)
-  //   col H (Costo/kg) = if unidad_compra is KG → same as precio_unitario
-  //                       if CAJA/BULTO → precio_unitario / VolUnid (col F, if available)
+  // Backend update_prices writes to:
+  //   col D (Costo x Paquete) = precio_unitario
+  //   col E (Fecha de Precio) = today's date
+  //   col H (Unidad) = unidad_compra (KG, CAJA, BULTO, PZA, etc.)
   const priceItems = currentItems
     .filter(it => it._match && it._match.n && it.precio_unitario)
     .map(it => ({
       bd_name: it._match.n,
-      precio_unitario: it.precio_unitario,    // → CostoPaq (col C)
-      unidad_compra: (it.unidad || '').trim(), // → Unidad (col G)
+      precio_unitario: it.precio_unitario,    // → Costo x Paquete (col D)
+      unidad_compra: (it.unidad || '').trim(), // → Unidad (col H)
       cantidad: it.cantidad || 0,
-      precio_base: it.precio_base || null,     // normalized per-unit price (per kg/L/pza)
-      unidad_base: (it.unidad_base || '').trim() // KG, L, PZA
+      precio_base: it.precio_base || null,
+      unidad_base: (it.unidad_base || '').trim()
     }));
   if(!priceItems.length){ console.log('No matched items to sync prices'); return; }
   try {

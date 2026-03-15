@@ -456,6 +456,18 @@ function claudeAnalyze(body) {
 // PRICE UPDATES → MATERIA PRIMA
 // ══════════════════════════════════════════════
 
+/**
+ * FIXED updatePrices() — corrected column indexes for current MATERIA PRIMA layout
+ *
+ * Current layout (March 2026):
+ * A(0)=Ingrediente, B(1)=Proveedor A, C(2)=Proveedor B,
+ * D(3)=Costo x Paquete ($), E(4)=Fecha de Precio,
+ * F(5)=Unidades x Caja, G(6)=Volumen x Unidad,
+ * H(7)=Unidad (kg/lt/pza), I(8)=Costo por kg/lt ($)
+ *
+ * Replace the old updatePrices() in Código.gs with this version.
+ */
+
 function updatePrices(body) {
   const items = body.items;
   if (!items || !items.length) throw new Error('No items to update');
@@ -465,16 +477,16 @@ function updatePrices(body) {
   if (!mp) throw new Error('Tab "' + MP_TAB + '" not found');
 
   const data = mp.getDataRange().getValues();
-  // MATERIA PRIMA columns:
-  // A(0)=Ingrediente, B(1)=Categoría, C(2)=CostoPaq, D(3)=Fecha,
-  // E(4)=UnidsCaja, F(5)=VolUnid, G(6)=Unidad, H(7)=Costo/kg-L (formula)
-  // Write whole-package price to Column C (CostoPaq)
-  // Column H (Costo/kg or /L) is a formula derived from C — don't touch it
+  // MATERIA PRIMA columns (current layout — March 2026):
+  // A(0)=Ingrediente, B(1)=Proveedor A, C(2)=Proveedor B,
+  // D(3)=Costo x Paquete ($), E(4)=Fecha de Precio,
+  // F(5)=Unidades x Caja, G(6)=Volumen x Unidad, H(7)=Unidad (kg/lt/pza),
+  // I(8)=Costo por kg/lt (formula — don't touch)
   let updated = 0;
-  const nameCol = 0;     // A = ingredient name
-  const costPaqCol = 2;  // C = whole-package cost (CostoPaq)
-  const fechaCol = 3;    // D = last price date
-  const unidadCol = 6;   // G = Unidad (unit of purchase: KG, CAJA, BULTO, etc.)
+  const nameCol = 0;     // A = Ingrediente
+  const costPaqCol = 3;  // D = Costo x Paquete ($)
+  const fechaCol = 4;    // E = Fecha de Precio
+  const unidadCol = 7;   // H = Unidad (kg/lt/pza)
 
   items.forEach(item => {
     const bdName = (item.bd_name || '').trim().toLowerCase();
@@ -486,14 +498,13 @@ function updatePrices(body) {
     for (var i = 1; i < data.length; i++) {
       var cellName = String(data[i][nameCol] || '').trim().toLowerCase();
       if (cellName === bdName) {
-        mp.getRange(i + 1, costPaqCol + 1).setValue(newPrice);  // Col C: Costo x Paquete
-        mp.getRange(i + 1, fechaCol + 1).setValue(new Date());   // Col D: Fecha actualizada
-        // Update unit of purchase (Col G) if provided
+        mp.getRange(i + 1, costPaqCol + 1).setValue(newPrice);  // Col D: Costo x Paquete
+        mp.getRange(i + 1, fechaCol + 1).setValue(new Date());   // Col E: Fecha de Precio
+        // Update unit (Col H) if provided
         if (unidadCompra) {
           mp.getRange(i + 1, unidadCol + 1).setValue(unidadCompra);
         }
-        // NOTE: Col A (name) is NO LONGER renamed — names stay canonical
-        // Col H (Costo/kg) should be a formula: =IF(G="KG",C, IF(AND(C>0,F>0),C/F,""))
+        // NOTE: Col I (Costo/kg) is a formula — don't touch it
         updated++;
         break;
       }
@@ -1260,6 +1271,22 @@ function jsonResp(data, code) {
     .createTextOutput(JSON.stringify(data))
     .setMimeType(ContentService.MimeType.JSON);
 }
+
+
+
+
+// ══════════════════════════════════════════════
+// INVENTORY v2 — MATERIA PRIMA Inventory Functions
+// ══════════════════════════════════════════════
+
+/**
+ * INVENTORY BACKEND FUNCTIONS — Add these to Código.gs
+ *
+ * ROUTES TO ADD:
+ *   doGet  → case 'list_inventory':         return jsonResp(listInventory());
+ *   doPost → case 'save_inventory_counts':  return jsonResp(saveInventoryCounts(body));
+ *   doPost → case 'update_inv_field':       return jsonResp(updateInvField(body));
+ */
 
 // ── Column indexes for MATERIA PRIMA inventory fields (0-based) ──
 // N(13)=Área, O(14)=Ubicación, P(15)=Inv_Max,
