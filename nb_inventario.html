@@ -520,11 +520,61 @@ function renderProductList() {
   });
 
   document.getElementById('productList').innerHTML = html;
+  attachHoldListeners();
 }
 
 // ════════════════════════════════════════
-// COUNTING
+// COUNTING — hold-to-repeat with acceleration
 // ════════════════════════════════════════
+let holdTimer = null;
+let holdInterval = null;
+
+function startHold(row, delta) {
+  adj(row, delta); // fire once immediately
+  let speed = 300; // ms — starts slow
+  let count = 0;
+  function repeat() {
+    adj(row, delta);
+    count++;
+    // Accelerate: after 3 taps go faster, after 8 go turbo
+    if (count > 8) speed = 60;
+    else if (count > 3) speed = 120;
+    holdTimer = setTimeout(repeat, speed);
+  }
+  holdTimer = setTimeout(repeat, 400); // initial delay before repeat
+}
+
+function stopHold() {
+  clearTimeout(holdTimer);
+  holdTimer = null;
+}
+
+// Attach to all stepper buttons after render
+function attachHoldListeners() {
+  document.querySelectorAll('.stepper button').forEach(btn => {
+    // Extract row and delta from the onclick attribute
+    const onclick = btn.getAttribute('onclick');
+    if (!onclick) return;
+    const match = onclick.match(/adj\((\d+),\s*(-?\d+)\)/);
+    if (!match) return;
+    const row = parseInt(match[1]);
+    const delta = parseInt(match[2]);
+
+    // Remove onclick — we handle it via hold
+    btn.removeAttribute('onclick');
+
+    // Touch events (mobile)
+    btn.addEventListener('touchstart', function(e) { e.preventDefault(); startHold(row, delta); }, { passive: false });
+    btn.addEventListener('touchend', stopHold);
+    btn.addEventListener('touchcancel', stopHold);
+
+    // Mouse events (desktop)
+    btn.addEventListener('mousedown', function() { startHold(row, delta); });
+    btn.addEventListener('mouseup', stopHold);
+    btn.addEventListener('mouseleave', stopHold);
+  });
+}
+
 function adj(row, delta) {
   const input = document.getElementById('cnt-' + row);
   let val = parseFloat(input.value) || 0;
