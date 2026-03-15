@@ -9,9 +9,8 @@
 
 // ── Column indexes for MATERIA PRIMA inventory fields (0-based) ──
 // N(13)=Área, O(14)=Ubicación, P(15)=Inv_Max,
-// Q(16)=Unidad_Conteo, R(17)=Unidad_Compra,
-// S(18)=Inv_Actual, T(19)=Fecha_Conteo, U(20)=Forma_Pedido, V(21)=Activo
-// W(22)=Factor_Conversion (1 purchase unit = X counting units)
+// Q(16)=Unidad_Conteo, R(17)=Factor_Conversion, S(18)=Unidad_Compra,
+// T(19)=Inv_Actual, U(20)=Fecha_Conteo, V(21)=Forma_Pedido, W(22)=Activo
 
 // ══════════════════════════════════════════
 // LIST INVENTORY — GET ?action=list_inventory
@@ -29,11 +28,11 @@ function listInventory() {
     // Skip empty rows and group headers (► Bachoco, etc.)
     if (!name || /^[►▶]/.test(name)) continue;
 
-    // Skip inactive products — V(21)
-    var activo = data[i][21];
+    // Skip inactive products — W(22)
+    var activo = data[i][22];
     if (activo === false || String(activo).toLowerCase() === 'false' || activo === 'No') continue;
 
-    var fechaConteo = data[i][19]; // T(19)
+    var fechaConteo = data[i][20]; // U(20)
     if (fechaConteo instanceof Date) {
       fechaConteo = Utilities.formatDate(fechaConteo, 'America/Mexico_City', 'yyyy-MM-dd');
     } else {
@@ -46,14 +45,14 @@ function listInventory() {
       proveedor: String(data[i][1] || '').trim(),
       unidad: String(data[i][7] || '').trim(),         // H(7) = Unidad (kg/lt/pza) — original unit col
       unidad_conteo: String(data[i][16] || '').trim(),  // Q(16) = Unidad_Conteo
-      unidad_compra: String(data[i][17] || '').trim(),  // R(17) = Unidad_Compra
+      factor: parseFloat(data[i][17]) || 1,             // R(17) = Factor_Conversion (default 1)
+      unidad_compra: String(data[i][18] || '').trim(),  // S(18) = Unidad_Compra
       area: String(data[i][13] || '').trim(),            // N(13)
       ubicacion: String(data[i][14] || '').trim(),       // O(14)
       max: parseFloat(data[i][15]) || 0,                 // P(15) = Inv_Max
-      actual: parseFloat(data[i][18]) || 0,              // S(18) = Inv_Actual
-      fecha_conteo: fechaConteo,                         // T(19)
-      forma: String(data[i][20] || '').trim(),           // U(20) = Forma_Pedido
-      factor: parseFloat(data[i][22]) || 1               // W(22) = Factor_Conversion (default 1)
+      actual: parseFloat(data[i][19]) || 0,              // T(19) = Inv_Actual
+      fecha_conteo: fechaConteo,                         // U(20)
+      forma: String(data[i][21] || '').trim()            // V(21) = Forma_Pedido
     });
   }
 
@@ -77,14 +76,14 @@ function saveInventoryCounts(body) {
   var quien = body.quien || 'App';
   var device = body.device || '';
 
-  // Batch update MATERIA PRIMA — S(19)=Inv_Actual, T(20)=Fecha_Conteo, P(16)=Inv_Max
+  // Batch update MATERIA PRIMA — T(20)=Inv_Actual, U(21)=Fecha_Conteo, P(16)=Inv_Max
   for (var i = 0; i < items.length; i++) {
     var item = items[i];
     var row = parseInt(item.row);
     if (!row || row < 2) continue;
 
-    mp.getRange(row, 19).setValue(parseFloat(item.cantidad) || 0); // S(19): Inv_Actual
-    mp.getRange(row, 20).setValue(now);                              // T(20): Fecha_Conteo
+    mp.getRange(row, 20).setValue(parseFloat(item.cantidad) || 0); // T(20): Inv_Actual
+    mp.getRange(row, 21).setValue(now);                              // U(21): Fecha_Conteo
 
     // Also update Inv_Max if provided (inline editing during count)
     if (item.new_max !== undefined && item.new_max !== null) {
@@ -146,9 +145,9 @@ function updateInvField(body) {
     'area': 14,       // N
     'ubicacion': 15,   // O
     'max': 16,         // P
-    'actual': 19,      // S
-    'forma': 21,       // U
-    'activo': 22       // V
+    'actual': 20,      // T
+    'forma': 22,       // V
+    'activo': 23       // W
   };
 
   var col = colMap[field];
