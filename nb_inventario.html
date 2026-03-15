@@ -294,7 +294,7 @@ function getPurchaseUnit(p) {
 function toPurchaseQty(countQty, factor) {
   if (!factor || factor <= 0) factor = 1;
   if (factor === 1) return countQty;
-  return Math.ceil(countQty / factor * 10) / 10; // round up to 1 decimal
+  return Math.round(countQty / factor * 10) / 10; // standard rounding (.5+ up, .4- down)
 }
 
 // ════════════════════════════════════════
