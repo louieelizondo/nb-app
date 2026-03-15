@@ -676,13 +676,14 @@ function getShoppingItems() {
     const needCount = Math.round((max - count) * 10) / 10; // in counting units
     const factor = p.factor || 1;
     const purchaseQty = toPurchaseQty(needCount, factor);
+    if (purchaseQty <= 0) return null; // not enough to warrant a purchase
     return {
       ...p, count, needCount,
       toBuy: purchaseQty,
       buyUnit: getPurchaseUnit(p),
       countUnit: getCountUnit(p)
     };
-  });
+  }).filter(Boolean);
 }
 
 function showShop() {
