@@ -474,6 +474,7 @@ function renderProductList() {
   const filtered = products
     .filter(p => (p.ubicacion || 'Sin ubicación') === currentLocation)
     .filter(p => !currentArea || p.area === currentArea)
+    .filter(p => !currentSupplier || p.proveedor === currentSupplier)
     .sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
 
   if (filtered.length === 0) {
