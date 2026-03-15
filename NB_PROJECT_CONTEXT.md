@@ -110,11 +110,19 @@ A suite of single-page web apps for **Natural Balance Club** (food/retail store 
 
 ### 3.8 `nb_inventario.html` — Inventario
 - **URL:** `louieelizondo.github.io/nb-app/nb_inventario.html`
-- Product catalog from INVENTARIO_PRODUCTOS
-- Section-by-section counting with stepper inputs
+- Product catalog from **MATERIA PRIMA** tab (columns A-W)
+- Section-by-section counting with stepper inputs + unit labels (Unidad_Conteo)
+- Full product names (no truncation), unit shown next to stepper
 - Count history (INVENTARIO_LOG, trimmed to 10K rows)
+- **Shopping list per supplier** — each supplier is a collapsible card with:
+  - Editable quantities (tap to override)
+  - WhatsApp send per supplier (not whole list)
+  - "Comprado" per supplier (sets inventory to max, saves to sheet)
+  - "Discard" per supplier (removes from view without saving)
+- **Unit conversion**: Unidad_Conteo → Unidad_Compra via Factor_Conversion (col W)
+  - Shopping list shows purchase units (e.g., "2 Cajas" instead of "24 Pza")
+  - Factor default = 1 when units match or column is blank
 - Order tracking (PEDIDOS_LOG)
-- Variantes support (optional)
 
 ---
 
@@ -139,7 +147,7 @@ A suite of single-page web apps for **Natural Balance Club** (food/retail store 
 | Tab | Purpose |
 |-----|---------|
 | FACTURAS | Supplier invoices/expenses (~4,920 rows) |
-| MATERIA PRIMA | Ingredient costs & pricing |
+| MATERIA PRIMA | Ingredient costs, pricing & inventory (A-W: Ingrediente, Proveedor A/B, costs, units, margins, Área(N), Ubicación(O), Inv_Max(P), Unidad_Conteo(Q), Unidad_Compra(R), Inv_Actual(S), Fecha_Conteo(T), Forma_Pedido(U), Activo(V), Factor_Conversion(W)) |
 | INGRESOS | Daily income (one row per day, 357+ rows) |
 | CORTES_INDIVIDUALES | Per-register denomination counts |
 | CORTE_TIENDA | Daily consolidated store cut |

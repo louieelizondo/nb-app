@@ -83,7 +83,6 @@ function doGet(e) {
       case 'get_arqueos':          return jsonResp(getArqueos(e.parameter));
       case 'get_transferencias':   return jsonResp(getTransferencias(e.parameter));
       case 'get_ingresos':         return jsonResp(getIngresos(e.parameter));
-      case 'get_pendientes_sobre2': return jsonResp(getPendientesSobre2(e.parameter));
       case 'get_monthly_summary':  return jsonResp(getMonthlySummary(e.parameter));
       case 'get_dashboard_data':   return jsonResp(getDashboardData(e.parameter));
       case 'get_payment_trends':   return jsonResp(getPaymentTrends(e.parameter));
@@ -95,6 +94,8 @@ function doGet(e) {
       case 'get_shopify_products':      return jsonResp(getShopifyProducts(e.parameter));
       case 'get_shopify_inventory':     return jsonResp(getShopifyInventory(e.parameter));
       case 'shopify_health':            return jsonResp(shopifyHealthCheck());
+      // Inventory v2 (MATERIA PRIMA as single source)
+      case 'list_inventory':            return jsonResp(listInventory());
       default:              return jsonResp({ error: 'Unknown action: ' + action }, 400);
     }
   } catch(err) {
@@ -145,6 +146,9 @@ function doPost(e) {
       case 'update_neto_mensual':     return jsonResp(updateNetoMensual(body));
       case 'sync_shopify':            return jsonResp(syncShopifyDaily(body));
       case 'update_config_cajas':     return jsonResp(updateConfigCajas(body));
+      // Inventory v2 (MATERIA PRIMA as single source)
+      case 'save_inventory_counts':    return jsonResp(saveInventoryCounts(body));
+      case 'update_inv_field':         return jsonResp(updateInvField(body));
       default:                 return jsonResp({ error: 'Unknown action: ' + action }, 400);
     }
   } catch(err) {
@@ -302,7 +306,7 @@ function updateStatus(body) {
 
 function updateDate(body) {
   const { id, fecha_pago, estado, version } = body;
-  if (!id || !fecha_pago) throw new Error('Missing id or fecha_pago');
+  if (!id || (!fecha_pago && !estado)) throw new Error('Missing id and both fecha_pago/estado');
   const sheet = getOrCreateTab(FACTURAS_TAB, FACTURAS_HEADERS);
   const data  = sheet.getDataRange().getValues();
 
@@ -312,8 +316,10 @@ function updateDate(body) {
       const vc = checkVersionAndBump(sheet, i + 1, version);
       if (!vc.ok) return vc;
 
-      const fpCol = FACTURAS_HEADERS.indexOf('Fecha_Pago') + 1;
-      sheet.getRange(i + 1, fpCol).setValue(fecha_pago);
+      if (fecha_pago) {
+        const fpCol = FACTURAS_HEADERS.indexOf('Fecha_Pago') + 1;
+        sheet.getRange(i + 1, fpCol).setValue(fecha_pago);
+      }
       if (estado) {
         const esCol = FACTURAS_HEADERS.indexOf('Estado') + 1;
         sheet.getRange(i + 1, esCol).setValue(estado);
@@ -999,20 +1005,118 @@ function processSyncBatch(body) {
   const ops = body.operations || [];
   if (!ops.length) return { ok: true, results: [], message: 'No operations' };
 
+  // ── Optimized path: batch FACTURAS updates with a SINGLE sheet read ──
+  const facturasActions = new Set(['update_status', 'update_date', 'update_factura']);
+  const facturasOps = ops.filter(op => facturasActions.has(op.action));
+  const otherOps    = ops.filter(op => !facturasActions.has(op.action));
+
   const results = [];
-  for (const op of ops) {
+
+  // Process FACTURAS ops efficiently — one sheet read for all of them
+  if (facturasOps.length > 0) {
+    try {
+      const sheet = getOrCreateTab(FACTURAS_TAB, FACTURAS_HEADERS);
+      const data  = sheet.getDataRange().getValues();
+      const vCol  = FACTURAS_HEADERS.indexOf('Version') + 1;
+
+      // Build row-index map: id → sheet row index (1-based)
+      const rowMap = {};
+      for (let i = 1; i < data.length; i++) {
+        rowMap[String(data[i][0])] = i; // 0-based data index; sheet row = i+1
+      }
+
+      for (const op of facturasOps) {
+        try {
+          const rowIdx = rowMap[String(op.id)];
+          if (rowIdx === undefined) {
+            results.push({ queue_id: op.queue_id || null, ok: false, error: 'Not found: ' + op.id });
+            continue;
+          }
+          const sheetRow = rowIdx + 1;
+
+          // Version check & bump (skip for update_status — idempotent, safe to force)
+          let newVersion = null;
+          const skipVersionCheck = (op.action === 'update_status');
+          if (vCol > 0) {
+            const sheetVersion = parseInt(data[rowIdx][vCol - 1]) || 0;
+            const cv = op.version !== undefined && op.version !== null && op.version !== '' ? parseInt(op.version) : NaN;
+            if (!skipVersionCheck && !isNaN(cv) && cv !== sheetVersion) {
+              results.push({ queue_id: op.queue_id || null, ok: false, result: {
+                ok: false, conflict: true, sheetVersion, clientVersion: cv,
+                message: 'Conflict: v' + cv + ' vs v' + sheetVersion
+              }});
+              continue;
+            }
+            newVersion = sheetVersion + 1;
+            sheet.getRange(sheetRow, vCol).setValue(newVersion);
+            data[rowIdx][vCol - 1] = newVersion; // keep map updated
+          }
+
+          // Dispatch by action type (NO extra sheet reads)
+          if (op.action === 'update_status') {
+            if (!op.estado) { results.push({ queue_id: op.queue_id || null, ok: false, error: 'Missing estado' }); continue; }
+            // Save comprobante PDF if provided
+            let compValue = op.comprobante || '';
+            if (op.pdf_base64 && op.pdf_base64.length > 100) {
+              try {
+                const folioCol = FACTURAS_HEADERS.indexOf('Folio');
+                const rowFolio = folioCol >= 0 ? String(data[rowIdx][folioCol] || '') : '';
+                compValue = saveComprobanteToDrive(op.id, op.pdf_base64, op.proveedor || 'pago', rowFolio);
+              } catch(err) { log('COMP_PDF_ERROR', op.id + ': ' + err.message); }
+            }
+            const estadoCol = FACTURAS_HEADERS.indexOf('Estado') + 1;
+            const realCol   = FACTURAS_HEADERS.indexOf('Fecha_Pago_Real') + 1;
+            const compCol   = FACTURAS_HEADERS.indexOf('Comprobante') + 1;
+            sheet.getRange(sheetRow, estadoCol).setValue(op.estado);
+            if (op.fecha_pago_real) sheet.getRange(sheetRow, realCol).setValue(op.fecha_pago_real);
+            if (compValue) sheet.getRange(sheetRow, compCol).setValue(compValue);
+            results.push({ queue_id: op.queue_id || null, ok: true, result: { ok: true, message: 'Status updated', version: newVersion } });
+
+          } else if (op.action === 'update_date') {
+            if (!op.fecha_pago && !op.estado) { results.push({ queue_id: op.queue_id || null, ok: false, error: 'Missing fecha_pago and estado' }); continue; }
+            if (op.fecha_pago) {
+              const fpCol = FACTURAS_HEADERS.indexOf('Fecha_Pago') + 1;
+              sheet.getRange(sheetRow, fpCol).setValue(op.fecha_pago);
+            }
+            if (op.estado) {
+              const esCol = FACTURAS_HEADERS.indexOf('Estado') + 1;
+              sheet.getRange(sheetRow, esCol).setValue(op.estado);
+            }
+            results.push({ queue_id: op.queue_id || null, ok: true, result: { ok: true, message: 'Date updated', version: newVersion } });
+
+          } else if (op.action === 'update_factura') {
+            const editableFields = ['Proveedor','Folio','Tipo_Documento','Fecha_Compra','Monto_Factura','Ajustes','Monto_Pagar','Forma_Pago','Categoria','Credit_Days','Fecha_Pago','Estado'];
+            editableFields.forEach(field => {
+              if (op[field] !== undefined) {
+                const col = FACTURAS_HEADERS.indexOf(field) + 1;
+                if (col > 0) sheet.getRange(sheetRow, col).setValue(op[field]);
+              }
+            });
+            results.push({ queue_id: op.queue_id || null, ok: true, result: { ok: true, message: 'Factura updated', version: newVersion } });
+          }
+        } catch(err) {
+          results.push({ queue_id: op.queue_id || null, ok: false, error: err.message });
+        }
+      }
+    } catch(sheetErr) {
+      // If the sheet itself fails, mark all facturas ops as failed
+      facturasOps.forEach(op => {
+        results.push({ queue_id: op.queue_id || null, ok: false, error: 'Sheet error: ' + sheetErr.message });
+      });
+    }
+  }
+
+  // Process non-FACTURAS ops normally (create, inventory, orders, etc.)
+  for (const op of otherOps) {
     try {
       let result;
       switch (op.action) {
         case 'create':         result = createFactura(op); break;
-        case 'update_status':  result = updateStatus(op); break;
-        case 'update_date':    result = updateDate(op); break;
-        case 'update_factura': result = updateFactura(op); break;
         case 'log_inventory':  result = logInventoryCounts(op); break;
         case 'save_order':     result = saveOrder(op); break;
         case 'update_order':   result = updateOrder(op); break;
         case 'audit':          result = writeAudit(op); break;
-        // Cortes & Ingresos (offline-sync support)
+        case 'add_proveedor':  result = addProveedorFromPortal ? addProveedorFromPortal(op) : { ok: false, error: 'Not implemented' }; break;
         case 'save_corte_individual': result = saveCorteIndividual(op); break;
         case 'save_corte_tienda':     result = saveCorteTienda(op); break;
         case 'save_arqueo':           result = saveArqueo(op); break;
@@ -1020,7 +1124,6 @@ function processSyncBatch(body) {
         case 'save_ingreso':          result = saveIngreso(op); break;
         default: result = { ok: false, error: 'Unknown action: ' + op.action };
       }
-      // If the inner function returned a conflict, bubble it up as not-ok
       if (result && result.conflict) {
         results.push({ queue_id: op.queue_id || null, ok: false, result });
       } else {
@@ -1156,4 +1259,160 @@ function jsonResp(data, code) {
   return ContentService
     .createTextOutput(JSON.stringify(data))
     .setMimeType(ContentService.MimeType.JSON);
+}
+
+
+
+// ══════════════════════════════════════════════
+// INVENTORY v2 — MATERIA PRIMA as single source of truth
+// ══════════════════════════════════════════════
+// Column indexes for MATERIA PRIMA inventory fields (0-based):
+// N(13)=Área, O(14)=Ubicación, P(15)=Inv_Max,
+// Q(16)=Unidad_Conteo, R(17)=Unidad_Compra,
+// S(18)=Inv_Actual, T(19)=Fecha_Conteo, U(20)=Forma_Pedido, V(21)=Activo
+// W(22)=Factor_Conversion (1 purchase unit = X counting units)
+
+// ── LIST INVENTORY — GET ?action=list_inventory ──
+function listInventory() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var mp = ss.getSheetByName('MATERIA PRIMA');
+  if (!mp) throw new Error('MATERIA PRIMA tab not found');
+
+  var data = mp.getDataRange().getValues();
+  var products = [];
+
+  for (var i = 1; i < data.length; i++) {
+    var name = String(data[i][0] || '').trim();
+    // Skip empty rows and group headers (► Bachoco, etc.)
+    if (!name || /^[►▶]/.test(name)) continue;
+
+    // Skip inactive products — V(21)
+    var activo = data[i][21];
+    if (activo === false || String(activo).toLowerCase() === 'false' || activo === 'No') continue;
+
+    var fechaConteo = data[i][19]; // T(19)
+    if (fechaConteo instanceof Date) {
+      fechaConteo = Utilities.formatDate(fechaConteo, 'America/Mexico_City', 'yyyy-MM-dd');
+    } else {
+      fechaConteo = fechaConteo ? String(fechaConteo) : '';
+    }
+
+    products.push({
+      row: i + 1,
+      nombre: name,
+      proveedor: String(data[i][1] || '').trim(),
+      unidad: String(data[i][7] || '').trim(),         // H(7) = Unidad (kg/lt/pza) — original unit col
+      unidad_conteo: String(data[i][16] || '').trim(),  // Q(16) = Unidad_Conteo
+      unidad_compra: String(data[i][17] || '').trim(),  // R(17) = Unidad_Compra
+      area: String(data[i][13] || '').trim(),            // N(13)
+      ubicacion: String(data[i][14] || '').trim(),       // O(14)
+      max: parseFloat(data[i][15]) || 0,                 // P(15) = Inv_Max
+      actual: parseFloat(data[i][18]) || 0,              // S(18) = Inv_Actual
+      fecha_conteo: fechaConteo,                         // T(19)
+      forma: String(data[i][20] || '').trim(),           // U(20) = Forma_Pedido
+      factor: parseFloat(data[i][22]) || 1               // W(22) = Factor_Conversion (default 1)
+    });
+  }
+
+  return { ok: true, products: products, count: products.length };
+}
+
+
+// ── SAVE INVENTORY COUNTS — POST { action: 'save_inventory_counts', items, quien, device } ──
+// Writes Inv_Actual + Fecha_Conteo to MATERIA PRIMA, logs to INVENTARIO_LOG
+function saveInventoryCounts(body) {
+  var items = body.items || [];
+  if (!items.length) return { ok: false, error: 'No items to save' };
+
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var mp = ss.getSheetByName('MATERIA PRIMA');
+  if (!mp) throw new Error('MATERIA PRIMA tab not found');
+
+  var now = new Date();
+  var quien = body.quien || 'App';
+  var device = body.device || '';
+
+  // Batch update MATERIA PRIMA — S(19)=Inv_Actual, T(20)=Fecha_Conteo, P(16)=Inv_Max
+  for (var i = 0; i < items.length; i++) {
+    var item = items[i];
+    var row = parseInt(item.row);
+    if (!row || row < 2) continue;
+
+    mp.getRange(row, 19).setValue(parseFloat(item.cantidad) || 0); // S(19): Inv_Actual
+    mp.getRange(row, 20).setValue(now);                              // T(20): Fecha_Conteo
+
+    // Also update Inv_Max if provided (inline editing during count)
+    if (item.new_max !== undefined && item.new_max !== null) {
+      mp.getRange(row, 16).setValue(parseFloat(item.new_max) || 0); // P(16): Inv_Max
+    }
+  }
+
+  SpreadsheetApp.flush();
+
+  // Log to INVENTARIO_LOG
+  var logHeaders = ['Timestamp', 'Producto', 'Cantidad', 'Seccion', 'Categoria', 'Variante', 'Contó', 'Dispositivo'];
+  var logSheet = getOrCreateTab('INVENTARIO_LOG', logHeaders);
+
+  var logRows = [];
+  for (var j = 0; j < items.length; j++) {
+    logRows.push([
+      now,
+      items[j].nombre || '',
+      parseFloat(items[j].cantidad) || 0,
+      items[j].ubicacion || '',
+      items[j].area || '',
+      '',
+      quien,
+      device
+    ]);
+  }
+
+  if (logRows.length > 0) {
+    logSheet.getRange(logSheet.getLastRow() + 1, 1, logRows.length, logRows[0].length).setValues(logRows);
+  }
+
+  // Trim INVENTARIO_LOG to 10K rows
+  var logTotal = logSheet.getLastRow();
+  if (logTotal > 10000) {
+    logSheet.deleteRows(2, logTotal - 10000);
+  }
+
+  return { ok: true, saved: items.length, timestamp: now.toISOString() };
+}
+
+
+// ── UPDATE INVENTORY FIELD — POST { action: 'update_inv_field', row, field, value } ──
+// For updating max, ubicacion, area, forma, activo from the app
+function updateInvField(body) {
+  var row = parseInt(body.row);
+  if (!row || row < 2) return { ok: false, error: 'Invalid row' };
+
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var mp = ss.getSheetByName('MATERIA PRIMA');
+  if (!mp) throw new Error('MATERIA PRIMA tab not found');
+
+  var field = String(body.field || '').trim();
+  var value = body.value;
+
+  // Map field names to column numbers (1-based for getRange)
+  var colMap = {
+    'area': 14,       // N
+    'ubicacion': 15,   // O
+    'max': 16,         // P
+    'actual': 19,      // S
+    'forma': 21,       // U
+    'activo': 22       // V
+  };
+
+  var col = colMap[field];
+  if (!col) return { ok: false, error: 'Unknown field: ' + field };
+
+  // Type coercion
+  if (field === 'max' || field === 'actual') value = parseFloat(value) || 0;
+  if (field === 'activo') value = (value === true || value === 'true' || value === 'TRUE');
+
+  mp.getRange(row, col).setValue(value);
+  SpreadsheetApp.flush();
+
+  return { ok: true, row: row, field: field, value: value };
 }

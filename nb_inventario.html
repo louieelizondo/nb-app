@@ -50,7 +50,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .product-list{padding:12px;max-width:700px;margin:0 auto;padding-bottom:120px}
 .product-row{background:var(--white);border-radius:var(--radius);padding:12px;margin-bottom:8px;box-shadow:var(--shadow);display:flex;flex-wrap:wrap;align-items:center;gap:8px}
 .product-info{flex:1;min-width:0}
-.product-name{font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.product-name{font-size:14px;font-weight:600;word-wrap:break-word;overflow-wrap:break-word;line-height:1.3}
 .product-meta{font-size:11px;color:var(--gray);margin-top:3px;display:flex;flex-wrap:wrap;gap:4px;align-items:center}
 .badge{padding:2px 6px;border-radius:4px;font-size:10px;font-weight:600;white-space:nowrap}
 .badge-blue{background:var(--blue-bg);color:var(--blue)}
@@ -58,7 +58,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .badge-orange{background:var(--orange-bg);color:var(--orange)}
 .badge-gray{background:var(--gray-bg);color:var(--gray)}
 
-/* Stepper */
+/* Stepper with unit label */
+.count-block{display:flex;align-items:center;gap:6px;flex-shrink:0}
 .stepper{display:flex;align-items:center;flex-shrink:0}
 .stepper button{width:38px;height:38px;border:none;background:var(--gray-bg);color:var(--dark);font-size:20px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;touch-action:manipulation}
 .stepper button:first-child{border-radius:8px 0 0 8px}
@@ -67,6 +68,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .stepper input{width:52px;height:38px;border:1.5px solid var(--gray-border);border-left:none;border-right:none;text-align:center;font-size:16px;font-weight:700;-moz-appearance:textfield}
 .stepper input::-webkit-outer-spin-button,.stepper input::-webkit-inner-spin-button{-webkit-appearance:none}
 .stepper.dirty input{background:#fffde7;border-color:#ffcc02}
+.unit-label{font-size:11px;font-weight:600;color:var(--gray);max-width:50px;line-height:1.2;text-align:left}
 
 /* Purchase badge */
 .purchase-badge{display:flex;align-items:center;gap:4px;font-size:12px;font-weight:700;color:var(--orange);white-space:nowrap;cursor:default}
@@ -98,23 +100,41 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .fab-shop:active{transform:scale(.92)}
 .fab-shop .fab-badge{position:absolute;top:-2px;right:-2px;background:var(--red);color:var(--white);font-size:11px;font-weight:700;min-width:20px;height:20px;border-radius:10px;display:flex;align-items:center;justify-content:center;padding:0 4px}
 
-/* Shopping list */
+/* ═══ Shopping list — per-supplier cards ═══ */
 .shop-header{padding:16px;text-align:center}
 .shop-header h2{font-size:18px;color:var(--dark)}
 .shop-header .shop-date{font-size:12px;color:var(--gray);margin-top:2px}
-.supplier-group{margin:0 12px 12px;max-width:700px}
-.supplier-name{font-size:14px;font-weight:700;color:var(--green);padding:8px 0;border-bottom:2px solid var(--green-bg);margin-bottom:6px;display:flex;justify-content:space-between;align-items:center}
-.supplier-name .count{font-size:12px;color:var(--gray);font-weight:400}
-.shop-item{display:flex;align-items:center;gap:8px;padding:8px 4px;border-bottom:1px solid #f5f5f5;font-size:13px}
+
+.supplier-card{background:var(--white);border-radius:var(--radius);margin:0 12px 12px;max-width:700px;box-shadow:var(--shadow);overflow:hidden}
+.supplier-header{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;background:var(--green-bg);cursor:pointer;gap:8px}
+.supplier-header .sup-name{font-size:14px;font-weight:700;color:var(--green);flex:1;min-width:0}
+.supplier-header .sup-count{font-size:11px;color:var(--gray);white-space:nowrap}
+.supplier-header .sup-toggle{font-size:16px;color:var(--gray);transition:transform .2s}
+.supplier-header .sup-toggle.collapsed{transform:rotate(-90deg)}
+.supplier-body{padding:0 14px}
+.supplier-body.collapsed{display:none}
+.supplier-card.bought{opacity:.5}
+.supplier-card.bought .supplier-header{background:var(--gray-bg)}
+.supplier-card.bought .sup-name{text-decoration:line-through}
+.supplier-card.discarded{display:none}
+
+.shop-item{display:flex;align-items:center;gap:8px;padding:10px 0;border-bottom:1px solid #f5f5f5;font-size:13px}
+.shop-item:last-child{border-bottom:none}
 .shop-item input[type=checkbox]{width:18px;height:18px;accent-color:var(--green);flex-shrink:0;cursor:pointer}
-.shop-item .item-name{flex:1;min-width:0}
-.shop-item .item-qty{font-weight:700;color:var(--orange);white-space:nowrap}
+.shop-item .item-name{flex:1;min-width:0;line-height:1.3;word-wrap:break-word}
+.shop-item .item-qty-wrap{display:flex;align-items:center;gap:4px;flex-shrink:0}
+.shop-item .item-qty-input{width:48px;padding:4px;border:1.5px solid var(--gray-border);border-radius:6px;font-size:13px;font-weight:700;text-align:center;color:var(--orange)}
+.shop-item .item-unit{font-size:11px;color:var(--gray);font-weight:600;max-width:50px}
 .shop-item.checked .item-name{text-decoration:line-through;opacity:.4}
-.shop-actions{padding:12px;max-width:700px;margin:0 auto;display:flex;flex-direction:column;gap:8px;padding-bottom:40px}
-.shop-actions button{width:100%;padding:14px;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;touch-action:manipulation}
-.btn-copy{background:var(--white);color:var(--green);border:2px solid var(--green)}
-.btn-wa{background:#25d366;color:var(--white);border:none}
-.btn-bought{background:var(--green);color:var(--white);border:none}
+
+.supplier-actions{display:flex;gap:6px;padding:10px 14px;border-top:1px solid var(--gray-border);flex-wrap:wrap}
+.supplier-actions button{flex:1;min-width:0;padding:10px 6px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;touch-action:manipulation;white-space:nowrap}
+.btn-sup-wa{background:#25d366;color:var(--white);border:none}
+.btn-sup-bought{background:var(--green);color:var(--white);border:none}
+.btn-sup-discard{background:var(--white);color:var(--gray);border:1.5px solid var(--gray-border)}
+
+.shop-global-actions{padding:12px;max-width:700px;margin:0 auto;padding-bottom:40px}
+.shop-global-actions button{width:100%;padding:14px;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;touch-action:manipulation}
 .btn-close{background:var(--white);color:var(--gray);border:1.5px solid var(--gray-border)}
 
 /* Loading */
@@ -142,8 +162,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
   .loc-grid{max-width:900px;grid-template-columns:repeat(auto-fill,minmax(200px,1fr))}
   .product-list{max-width:900px}
   .save-bar .inner{max-width:900px}
-  .supplier-group{max-width:900px;margin:0 auto 12px}
-  .shop-actions{max-width:900px}
+  .supplier-card{max-width:900px;margin:0 auto 12px}
+  .shop-global-actions{max-width:900px}
   .stepper button{width:44px;height:44px;font-size:22px}
   .stepper input{width:60px;height:44px;font-size:18px}
 }
@@ -161,6 +181,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
   .loc-card .loc-name{font-size:13px}
   .stepper button{width:34px;height:34px}
   .stepper input{width:46px;height:34px;font-size:14px}
+  .supplier-actions button{font-size:11px;padding:8px 4px}
 }
 </style>
 </head>
@@ -205,7 +226,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
     <div class="shop-date" id="shopDate"></div>
   </div>
   <div id="shopContent"></div>
-  <div class="shop-actions" id="shopActions"></div>
+  <div class="shop-global-actions" id="shopActions"></div>
 </div>
 
 <div class="toast" id="toast"></div>
@@ -220,6 +241,9 @@ let dirty = {};           // { row: true } — changed since load
 let countEdits = {};      // { row: newQty } — count changes
 let maxEdits = {};        // { row: newMax } — max changes
 let shopChecked = {};     // { row: true } — checked off in shopping list
+let shopQtyOverrides = {};// { row: qty } — manual qty overrides in shopping list
+let shopDiscarded = {};   // { supplier: true } — discarded supplier sections
+let shopBought = {};      // { supplier: true } — bought supplier sections
 let currentLocation = null;
 let currentArea = '';     // filter
 let searchQuery = '';
@@ -252,6 +276,25 @@ async function api(action, body) {
     const resp = await fetch(url + '?action=' + action);
     return resp.json();
   }
+}
+
+// ════════════════════════════════════════
+// HELPERS — unit display
+// ════════════════════════════════════════
+function getCountUnit(p) {
+  return p.unidad_conteo || p.unidad || '';
+}
+
+function getPurchaseUnit(p) {
+  return p.unidad_compra || p.unidad_conteo || p.unidad || '';
+}
+
+// Convert counting units to purchase units
+// factor = how many counting units per 1 purchase unit
+function toPurchaseQty(countQty, factor) {
+  if (!factor || factor <= 0) factor = 1;
+  if (factor === 1) return countQty;
+  return Math.ceil(countQty / factor * 10) / 10; // round up to 1 decimal
 }
 
 // ════════════════════════════════════════
@@ -414,27 +457,31 @@ function renderProductList() {
     const toBuy = max > 0 && count < max ? Math.round((max - count) * 10) / 10 : 0;
     const isDirty = dirty[p.row];
     const maxBadgeClass = max > 0 ? 'max-set' : 'max-unset';
-    const maxBadgeText = max > 0 ? 'Máx: ' + max : '⚙️ Fijar máx';
+    const unit = getCountUnit(p);
+    const maxBadgeText = max > 0 ? 'Máx: ' + max + (unit ? ' ' + unit : '') : '⚙️ Fijar máx';
 
     html += '<div class="product-row" id="pr-' + p.row + '">' +
       '<div class="product-info">' +
         '<div class="product-name">' + p.nombre + '</div>' +
         '<div class="product-meta">' +
           (p.proveedor ? '<span class="badge badge-blue">' + p.proveedor + '</span>' : '') +
-          (p.unidad ? '<span class="badge badge-gray">' + p.unidad + '</span>' : '') +
           '<span class="max-badge ' + maxBadgeClass + '" onclick="toggleMaxEditor(' + p.row + ')">' + maxBadgeText + '</span>' +
         '</div>' +
       '</div>' +
-      '<div class="stepper ' + (isDirty ? 'dirty' : '') + '">' +
-        '<button onclick="adj(' + p.row + ',-1)">−</button>' +
-        '<input type="number" id="cnt-' + p.row + '" value="' + count + '" ' +
-          'onchange="setCount(' + p.row + ',this.value)" inputmode="decimal" step="0.5" min="0">' +
-        '<button onclick="adj(' + p.row + ',1)">+</button>' +
+      '<div class="count-block">' +
+        '<div class="stepper ' + (isDirty ? 'dirty' : '') + '">' +
+          '<button onclick="adj(' + p.row + ',-1)">−</button>' +
+          '<input type="number" id="cnt-' + p.row + '" value="' + count + '" ' +
+            'onchange="setCount(' + p.row + ',this.value)" inputmode="decimal" step="0.5" min="0">' +
+          '<button onclick="adj(' + p.row + ',1)">+</button>' +
+        '</div>' +
+        (unit ? '<div class="unit-label">' + unit + '</div>' : '') +
       '</div>' +
-      (toBuy > 0 ? '<div class="purchase-badge"><span class="arrow">→</span> Comprar: ' + toBuy + '</div>' : '') +
+      (toBuy > 0 ? '<div class="purchase-badge"><span class="arrow">→</span> ' + toBuy + ' ' + (unit || '') + '</div>' : '') +
       '<div class="max-editor" id="mxe-' + p.row + '">' +
         '<label>Máx:</label>' +
         '<input type="number" id="mxi-' + p.row + '" value="' + max + '" step="0.5" min="0" inputmode="decimal">' +
+        (unit ? '<span style="font-size:12px;color:var(--gray)">' + unit + '</span>' : '') +
         '<button onclick="saveMax(' + p.row + ')">✓</button>' +
       '</div>' +
     '</div>';
@@ -465,15 +512,17 @@ function adj(row, delta) {
   if (p) {
     const max = maxEdits[row] !== undefined ? maxEdits[row] : p.max;
     const toBuy = max > 0 && val < max ? Math.round((max - val) * 10) / 10 : 0;
+    const unit = getCountUnit(p);
     const pr = document.getElementById('pr-' + row);
     const existing = pr.querySelector('.purchase-badge');
     if (toBuy > 0) {
+      const badgeHtml = '<span class="arrow">→</span> ' + toBuy + ' ' + (unit || '');
       if (existing) {
-        existing.innerHTML = '<span class="arrow">→</span> Comprar: ' + toBuy;
+        existing.innerHTML = badgeHtml;
       } else {
         const badge = document.createElement('div');
         badge.className = 'purchase-badge';
-        badge.innerHTML = '<span class="arrow">→</span> Comprar: ' + toBuy;
+        badge.innerHTML = badgeHtml;
         pr.querySelector('.max-editor').before(badge);
       }
     } else if (existing) {
@@ -511,28 +560,30 @@ function saveMax(row) {
   dirty[row] = true;
 
   // Update badge
+  const p = products.find(x => x.row === row);
+  const unit = p ? getCountUnit(p) : '';
   const badge = document.getElementById('pr-' + row).querySelector('.max-badge');
   if (badge) {
     badge.className = 'max-badge ' + (val > 0 ? 'max-set' : 'max-unset');
-    badge.textContent = val > 0 ? 'Máx: ' + val : '⚙️ Fijar máx';
+    badge.textContent = val > 0 ? 'Máx: ' + val + (unit ? ' ' + unit : '') : '⚙️ Fijar máx';
   }
 
   // Close editor
   document.getElementById('mxe-' + row).classList.remove('open');
 
   // Update purchase badge
-  const p = products.find(x => x.row === row);
   if (p) {
     const count = countEdits[row] !== undefined ? countEdits[row] : p.actual;
     const toBuy = val > 0 && count < val ? Math.round((val - count) * 10) / 10 : 0;
     const pr = document.getElementById('pr-' + row);
     const existing = pr.querySelector('.purchase-badge');
     if (toBuy > 0) {
-      if (existing) existing.innerHTML = '<span class="arrow">→</span> Comprar: ' + toBuy;
+      const badgeHtml = '<span class="arrow">→</span> ' + toBuy + ' ' + (unit || '');
+      if (existing) existing.innerHTML = badgeHtml;
       else {
         const b = document.createElement('div');
         b.className = 'purchase-badge';
-        b.innerHTML = '<span class="arrow">→</span> Comprar: ' + toBuy;
+        b.innerHTML = badgeHtml;
         pr.querySelector('.max-editor').before(b);
       }
     } else if (existing) existing.remove();
@@ -613,7 +664,7 @@ async function saveCounts() {
 }
 
 // ════════════════════════════════════════
-// SHOPPING LIST
+// SHOPPING LIST — per-supplier cards
 // ════════════════════════════════════════
 function getShoppingItems() {
   return products.filter(p => {
@@ -623,7 +674,15 @@ function getShoppingItems() {
   }).map(p => {
     const count = countEdits[p.row] !== undefined ? countEdits[p.row] : p.actual;
     const max = maxEdits[p.row] !== undefined ? maxEdits[p.row] : p.max;
-    return { ...p, count, toBuy: Math.round((max - count) * 10) / 10 };
+    const needCount = Math.round((max - count) * 10) / 10; // in counting units
+    const factor = p.factor || 1;
+    const purchaseQty = toPurchaseQty(needCount, factor);
+    return {
+      ...p, count, needCount,
+      toBuy: purchaseQty,
+      buyUnit: getPurchaseUnit(p),
+      countUnit: getCountUnit(p)
+    };
   });
 }
 
@@ -632,6 +691,9 @@ function showShop() {
   document.getElementById('backBtn').style.display = 'block';
   document.getElementById('headerSub').textContent = 'Lista de Compras';
   shopChecked = {};
+  shopQtyOverrides = {};
+  shopDiscarded = {};
+  shopBought = {};
   renderShopList();
 }
 
@@ -660,27 +722,58 @@ function renderShopList() {
   let html = '';
   Object.keys(bySupplier).sort().forEach(supplier => {
     const sitems = bySupplier[supplier];
-    html += '<div class="supplier-group"><div class="supplier-name">🏪 ' + supplier +
-      '<span class="count">' + sitems.length + ' productos</span></div>';
+    const sid = supplier.replace(/[^a-zA-Z0-9]/g, '_');
+    const isBought = shopBought[supplier];
+    const isDiscarded = shopDiscarded[supplier];
+
+    html += '<div class="supplier-card' + (isBought ? ' bought' : '') + (isDiscarded ? ' discarded' : '') + '" id="sc-' + sid + '">' +
+      '<div class="supplier-header" onclick="toggleSupplier(\'' + sid + '\')">' +
+        '<span class="sup-name">🏪 ' + supplier + '</span>' +
+        '<span class="sup-count">' + sitems.length + ' productos</span>' +
+        '<span class="sup-toggle" id="st-' + sid + '">▼</span>' +
+      '</div>' +
+      '<div class="supplier-body" id="sb-' + sid + '">';
 
     sitems.sort((a, b) => a.nombre.localeCompare(b.nombre, 'es')).forEach(item => {
       const checked = shopChecked[item.row];
+      const displayQty = shopQtyOverrides[item.row] !== undefined ? shopQtyOverrides[item.row] : item.toBuy;
+
       html += '<div class="shop-item ' + (checked ? 'checked' : '') + '" id="si-' + item.row + '">' +
         '<input type="checkbox" ' + (checked ? 'checked' : '') + ' onchange="toggleShopItem(' + item.row + ')">' +
         '<span class="item-name">' + item.nombre + '</span>' +
-        '<span class="item-qty">' + item.toBuy + (item.unidad ? ' ' + item.unidad : '') + '</span>' +
+        '<span class="item-qty-wrap">' +
+          '<input type="number" class="item-qty-input" value="' + displayQty + '" ' +
+            'step="0.5" min="0" inputmode="decimal" onchange="overrideShopQty(' + item.row + ',this.value)">' +
+          '<span class="item-unit">' + item.buyUnit + '</span>' +
+        '</span>' +
       '</div>';
     });
-    html += '</div>';
+
+    html += '</div>' +
+      '<div class="supplier-actions">' +
+        '<button class="btn-sup-wa" onclick="sendSupplierWA(\'' + supplier.replace(/'/g, "\\'") + '\')">💬 WhatsApp</button>' +
+        '<button class="btn-sup-bought" onclick="markSupplierBought(\'' + supplier.replace(/'/g, "\\'") + '\')">✅ Comprado</button>' +
+        '<button class="btn-sup-discard" onclick="discardSupplier(\'' + supplier.replace(/'/g, "\\'") + '\')">🗑️</button>' +
+      '</div>' +
+    '</div>';
   });
 
   document.getElementById('shopContent').innerHTML = html;
 
   document.getElementById('shopActions').innerHTML =
-    '<button class="btn-copy" onclick="copyShopList()">📋 Copiar lista</button>' +
-    '<button class="btn-wa" onclick="sendWhatsApp()">💬 Enviar por WhatsApp</button>' +
-    '<button class="btn-bought" onclick="markAllBought()">✅ Todo comprado</button>' +
     '<button class="btn-close" onclick="goBack()">Cerrar</button>';
+}
+
+function toggleSupplier(sid) {
+  const body = document.getElementById('sb-' + sid);
+  const toggle = document.getElementById('st-' + sid);
+  if (body.classList.contains('collapsed')) {
+    body.classList.remove('collapsed');
+    toggle.classList.remove('collapsed');
+  } else {
+    body.classList.add('collapsed');
+    toggle.classList.add('collapsed');
+  }
 }
 
 function toggleShopItem(row) {
@@ -689,64 +782,56 @@ function toggleShopItem(row) {
   if (el) el.classList.toggle('checked', shopChecked[row]);
 }
 
-function copyShopList() {
-  const items = getShoppingItems();
-  let text = '🛒 Lista de Compras NB\n📅 ' + new Date().toLocaleDateString('es-MX') + '\n';
-
-  const bySupplier = {};
-  items.forEach(i => {
-    const s = i.proveedor || 'Sin proveedor';
-    if (!bySupplier[s]) bySupplier[s] = [];
-    bySupplier[s].push(i);
-  });
-
-  Object.keys(bySupplier).sort().forEach(s => {
-    text += '\n🏪 ' + s + '\n';
-    bySupplier[s].forEach(i => {
-      text += '  • ' + i.nombre + ': ' + i.toBuy + (i.unidad ? ' ' + i.unidad : '') + '\n';
-    });
-  });
-
-  navigator.clipboard.writeText(text)
-    .then(() => toast('📋 Lista copiada'))
-    .catch(() => toast('Error al copiar'));
+function overrideShopQty(row, val) {
+  shopQtyOverrides[row] = parseFloat(val) || 0;
 }
 
-function sendWhatsApp() {
-  const items = getShoppingItems();
-  let text = '🛒 *Lista de Compras NB*\n📅 ' + new Date().toLocaleDateString('es-MX') + '\n';
+// ═══ Per-supplier actions ═══
 
-  const bySupplier = {};
-  items.forEach(i => {
-    const s = i.proveedor || 'Sin proveedor';
-    if (!bySupplier[s]) bySupplier[s] = [];
-    bySupplier[s].push(i);
-  });
+function sendSupplierWA(supplier) {
+  const items = getShoppingItems().filter(i => (i.proveedor || 'Sin proveedor') === supplier);
+  if (!items.length) return;
 
-  Object.keys(bySupplier).sort().forEach(s => {
-    text += '\n*🏪 ' + s + '*\n';
-    bySupplier[s].forEach(i => {
-      text += '• ' + i.nombre + ': ' + i.toBuy + (i.unidad ? ' ' + i.unidad : '') + '\n';
-    });
+  const date = new Date().toLocaleDateString('es-MX');
+  let text = '🛒 *Pedido NB — ' + supplier + '*\n📅 ' + date + '\n\n';
+
+  items.sort((a, b) => a.nombre.localeCompare(b.nombre, 'es')).forEach(item => {
+    const qty = shopQtyOverrides[item.row] !== undefined ? shopQtyOverrides[item.row] : item.toBuy;
+    text += '• ' + item.nombre + ': *' + qty + ' ' + item.buyUnit + '*\n';
   });
 
   window.open('https://wa.me/?text=' + encodeURIComponent(text), '_blank');
 }
 
-async function markAllBought() {
-  if (!confirm('¿Marcar todos los productos como comprados? Esto pone el inventario al máximo.')) return;
+async function markSupplierBought(supplier) {
+  const items = getShoppingItems().filter(i => (i.proveedor || 'Sin proveedor') === supplier);
+  if (!items.length) return;
+  if (!confirm('¿Marcar todo de ' + supplier + ' como comprado?')) return;
 
-  const items = getShoppingItems();
+  // Set inventory to max for this supplier's items (or to override qty converted back)
   items.forEach(item => {
     const max = maxEdits[item.row] !== undefined ? maxEdits[item.row] : item.max;
     countEdits[item.row] = max;
     dirty[item.row] = true;
   });
 
-  toast('⏳ Guardando compra...');
+  shopBought[supplier] = true;
+  const sid = supplier.replace(/[^a-zA-Z0-9]/g, '_');
+  const card = document.getElementById('sc-' + sid);
+  if (card) card.classList.add('bought');
+
+  toast('⏳ Guardando ' + supplier + '...');
   await saveCounts();
-  renderShopList();
   updateFab();
+}
+
+function discardSupplier(supplier) {
+  if (!confirm('¿Quitar ' + supplier + ' de la lista? (No guarda cambios)')) return;
+  shopDiscarded[supplier] = true;
+  const sid = supplier.replace(/[^a-zA-Z0-9]/g, '_');
+  const card = document.getElementById('sc-' + sid);
+  if (card) card.classList.add('discarded');
+  toast('🗑️ ' + supplier + ' quitado');
 }
 
 function updateFab() {

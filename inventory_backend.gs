@@ -7,9 +7,11 @@
  *   doPost → case 'update_inv_field':       return jsonResp(updateInvField(body));
  */
 
-// ── Column indexes for MATERIA PRIMA inventory fields ──
-// N(13)=Área, O(14)=Ubicación, P(15)=Inv_Max, Q(16)=Inv_Actual,
-// R(17)=Fecha_Conteo, S(18)=Forma_Pedido, T(19)=Activo
+// ── Column indexes for MATERIA PRIMA inventory fields (0-based) ──
+// N(13)=Área, O(14)=Ubicación, P(15)=Inv_Max,
+// Q(16)=Unidad_Conteo, R(17)=Unidad_Compra,
+// S(18)=Inv_Actual, T(19)=Fecha_Conteo, U(20)=Forma_Pedido, V(21)=Activo
+// W(22)=Factor_Conversion (1 purchase unit = X counting units)
 
 // ══════════════════════════════════════════
 // LIST INVENTORY — GET ?action=list_inventory
@@ -27,11 +29,11 @@ function listInventory() {
     // Skip empty rows and group headers (► Bachoco, etc.)
     if (!name || /^[►▶]/.test(name)) continue;
 
-    // Skip inactive products
-    var activo = data[i][19];
+    // Skip inactive products — V(21)
+    var activo = data[i][21];
     if (activo === false || String(activo).toLowerCase() === 'false' || activo === 'No') continue;
 
-    var fechaConteo = data[i][17];
+    var fechaConteo = data[i][19]; // T(19)
     if (fechaConteo instanceof Date) {
       fechaConteo = Utilities.formatDate(fechaConteo, 'America/Mexico_City', 'yyyy-MM-dd');
     } else {
@@ -42,13 +44,16 @@ function listInventory() {
       row: i + 1,
       nombre: name,
       proveedor: String(data[i][1] || '').trim(),
-      unidad: String(data[i][6] || '').trim(),
-      area: String(data[i][13] || '').trim(),
-      ubicacion: String(data[i][14] || '').trim(),
-      max: parseFloat(data[i][15]) || 0,
-      actual: parseFloat(data[i][16]) || 0,
-      fecha_conteo: fechaConteo,
-      forma: String(data[i][18] || '').trim()
+      unidad: String(data[i][7] || '').trim(),         // H(7) = Unidad (kg/lt/pza) — original unit col
+      unidad_conteo: String(data[i][16] || '').trim(),  // Q(16) = Unidad_Conteo
+      unidad_compra: String(data[i][17] || '').trim(),  // R(17) = Unidad_Compra
+      area: String(data[i][13] || '').trim(),            // N(13)
+      ubicacion: String(data[i][14] || '').trim(),       // O(14)
+      max: parseFloat(data[i][15]) || 0,                 // P(15) = Inv_Max
+      actual: parseFloat(data[i][18]) || 0,              // S(18) = Inv_Actual
+      fecha_conteo: fechaConteo,                         // T(19)
+      forma: String(data[i][20] || '').trim(),           // U(20) = Forma_Pedido
+      factor: parseFloat(data[i][22]) || 1               // W(22) = Factor_Conversion (default 1)
     });
   }
 
@@ -72,18 +77,18 @@ function saveInventoryCounts(body) {
   var quien = body.quien || 'App';
   var device = body.device || '';
 
-  // Batch update MATERIA PRIMA — Q(17)=Inv_Actual, R(18)=Fecha_Conteo
+  // Batch update MATERIA PRIMA — S(19)=Inv_Actual, T(20)=Fecha_Conteo, P(16)=Inv_Max
   for (var i = 0; i < items.length; i++) {
     var item = items[i];
     var row = parseInt(item.row);
     if (!row || row < 2) continue;
 
-    mp.getRange(row, 17).setValue(parseFloat(item.cantidad) || 0); // Q: Inv_Actual
-    mp.getRange(row, 18).setValue(now);                              // R: Fecha_Conteo
+    mp.getRange(row, 19).setValue(parseFloat(item.cantidad) || 0); // S(19): Inv_Actual
+    mp.getRange(row, 20).setValue(now);                              // T(20): Fecha_Conteo
 
     // Also update Inv_Max if provided (inline editing during count)
     if (item.new_max !== undefined && item.new_max !== null) {
-      mp.getRange(row, 16).setValue(parseFloat(item.new_max) || 0); // P: Inv_Max
+      mp.getRange(row, 16).setValue(parseFloat(item.new_max) || 0); // P(16): Inv_Max
     }
   }
 
@@ -136,14 +141,14 @@ function updateInvField(body) {
   var field = String(body.field || '').trim();
   var value = body.value;
 
-  // Map field names to column numbers
+  // Map field names to column numbers (1-based for getRange)
   var colMap = {
     'area': 14,       // N
     'ubicacion': 15,   // O
     'max': 16,         // P
-    'actual': 17,      // Q
-    'forma': 19,       // S
-    'activo': 20       // T
+    'actual': 19,      // S
+    'forma': 21,       // U
+    'activo': 22       // V
   };
 
   var col = colMap[field];
