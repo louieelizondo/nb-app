@@ -1782,14 +1782,7 @@ function findSupplierMatch(invoiceSup){
   for(const s of SUPPLIERS_DB){const sn=normalize(s);if((sn.length>3)&&(sn.includes(n)||n.includes(sn)))return{name:s,matchType:'partial'};}
   const words=n.split(/\s+/).filter(w=>w.length>2);
   if(words.length){let best=null,bs=0;for(const s of SUPPLIERS_DB){const sw=normalize(s).split(/\s+/);const ov=words.filter(w=>sw.includes(w)).length;const sc=ov/Math.max(words.length,sw.length||1);if(sc>bs){bs=sc;best=s;}}if(bs>=0.4)return{name:best,matchType:'fuzzy'};}
-  // Phase 1.4: Also check against unique proveedores from allGastos (localStorage)
-  try {
-    const gastos = JSON.parse(localStorage.getItem('nb_gastos')||'[]');
-    const uniqueProvs = [...new Set(gastos.map(g=>g.proveedor).filter(Boolean))];
-    for(const p of uniqueProvs) if(normalize(p)===n) return{name:p,matchType:'exact'};
-    for(const p of uniqueProvs){const pn=normalize(p);if((pn.length>3)&&(pn.includes(n)||n.includes(pn)))return{name:p,matchType:'partial'};}
-    if(words.length){let best=null,bs=0;for(const p of uniqueProvs){const pw=normalize(p).split(/\s+/);const ov=words.filter(w=>pw.includes(w)).length;const sc=ov/Math.max(words.length,pw.length||1);if(sc>bs){bs=sc;best=p;}}if(bs>=0.4)return{name:best,matchType:'fuzzy'};}
-  } catch(e) { console.log('allGastos supplier lookup error:', e); }
+  // Supplier matching uses PROVEEDORES sheet data (synced at page load) — no local gastos fallback
   return null;
 }
 
@@ -2178,38 +2171,24 @@ function renderResults(parsed){
 // HISTORY + CSV
 // ══════════════════════════════════════════════
 function saveHistory(){
-  let h=JSON.parse(localStorage.getItem('nb_price_history')||'[]');
-  const d=new Date().toISOString().slice(0,10);
-  currentItems.forEach(it=>{if(!it._match||!it.precio_unitario)return;h.push({date:d,invoice_desc:it.descripcion,bd_name:it._match.n,price:it.precio_unitario,unit:it.unidad||'',provider:it._match.p||''});});
-  // Prune entries older than 90 days
-  const cutoff=new Date(); cutoff.setDate(cutoff.getDate()-90);
-  const cutStr=cutoff.toISOString().slice(0,10);
-  h=h.filter(r=>r.date>=cutStr);
-  localStorage.setItem('nb_price_history',JSON.stringify(h)); renderHistory(); showToast('💾 Historial guardado');
+  // Price history now lives in MATERIA PRIMA (Fecha de Precio column) — no local storage needed
+  console.log('📊 Price history tracked in MATERIA PRIMA directly');
 }
 function clearHistory(){
-  if(!confirm('¿Borrar historial de precios y caché de ingredientes? Se recargarán en el siguiente sync.')) return;
-  localStorage.removeItem('nb_price_history');
+  if(!confirm('¿Borrar caché de ingredientes? Se recargarán en el siguiente sync.')) return;
   localStorage.removeItem('nb_ingredients_cache');
   localStorage.removeItem('nb_ingredients_ts');
   localStorage.removeItem('nb_proveedores_cache');
   localStorage.removeItem('nb_proveedores_ts');
-  renderHistory();
   showToast('🗑️ Caché eliminado — sincroniza para recargar ingredientes');
   const bar=document.getElementById('storageWarningBar');
   if(bar) bar.style.display='none';
 }
 function renderHistory(){
-  const h=JSON.parse(localStorage.getItem('nb_price_history')||'[]');
-  document.getElementById('historyCount').textContent='('+h.length+')';
   const el=document.getElementById('historyList');
-  if(!h.length){el.innerHTML='<p class="mapping-empty">Sin historial.</p>';return;}
-  // Phase 1.5: Show all history, with "Ver todo" toggle if >10
-  const sorted = [...h].reverse();
-  const showAll = sorted.length <= 10 || document.getElementById('historyBody')?.dataset.showAll === 'true';
-  const visible = showAll ? sorted : sorted.slice(0, 10);
-  el.innerHTML='<div class="history-row hdr"><span>Fecha</span><span>Ingrediente</span><span>Precio</span><span>Unidad</span><span>Proveedor</span></div>'+visible.map(r=>`<div class="history-row"><span>${r.date}</span><span>${r.bd_name}</span><span>$${parseFloat(r.price).toFixed(2)}</span><span>${r.unit}</span><span>${r.provider}</span></div>`).join('')
-    + (sorted.length > 10 && !showAll ? `<div style="text-align:center;margin-top:8px"><button class="btn btn-outline btn-small" onclick="document.getElementById('historyBody').dataset.showAll='true';renderHistory()">Ver todo (${sorted.length})</button></div>` : '');
+  if(el) el.innerHTML='<p class="mapping-empty">Historial de precios se guarda directo en MATERIA PRIMA.</p>';
+  const cnt=document.getElementById('historyCount');
+  if(cnt) cnt.textContent='';
 }
 function exportCSV(){
   if(!currentItems.length){showToast('Sin datos');return;}
@@ -2238,30 +2217,11 @@ function exportCSV(){
 // TODAY'S INVOICES PANEL
 // ══════════════════════════════════════════════
 function renderTodayInvoices(){
-  const today = new Date().toISOString().slice(0,10);
-  const gastos = JSON.parse(localStorage.getItem('nb_gastos')||'[]');
-  const todays = gastos.filter(g => (g.created_at||'').slice(0,10) === today || g.fecha_compra === today);
-  document.getElementById('todayInvoicesCount').textContent = '('+todays.length+')';
+  // Today's invoices live in FACTURAS tab — no local storage
   const el = document.getElementById('todayInvoicesList');
-  if(!todays.length){
-    el.innerHTML = '<p style="font-size:13px;color:#999;font-style:italic">Sin facturas hoy.</p>';
-    return;
-  }
-  let totalHoy = 0;
-  el.innerHTML = '<div style="display:grid;grid-template-columns:1fr auto auto auto;gap:4px 12px;font-size:12px;align-items:center">'
-    + '<div style="font-weight:700;color:#555;padding-bottom:4px;border-bottom:1px solid #e0e0e0">Proveedor</div>'
-    + '<div style="font-weight:700;color:#555;padding-bottom:4px;border-bottom:1px solid #e0e0e0">Folio</div>'
-    + '<div style="font-weight:700;color:#555;padding-bottom:4px;border-bottom:1px solid #e0e0e0;text-align:right">Total</div>'
-    + '<div style="font-weight:700;color:#555;padding-bottom:4px;border-bottom:1px solid #e0e0e0">Fecha</div>'
-    + todays.map(g => {
-      totalHoy += (g.monto_pagar || g.monto_factura || 0);
-      return `<div style="padding:3px 0">${g.proveedor||'—'}</div>`
-        + `<div style="padding:3px 0;color:#777">${g.folio||'—'}</div>`
-        + `<div style="padding:3px 0;text-align:right;font-weight:600">$${(g.monto_pagar||g.monto_factura||0).toFixed(2)}</div>`
-        + `<div style="padding:3px 0;color:#777">${g.fecha_compra||'—'}</div>`;
-    }).join('')
-    + `<div style="grid-column:1/-1;border-top:2px solid #2e6b2e;padding-top:6px;margin-top:4px;font-weight:700;color:#2e6b2e;text-align:right">Total hoy: $${totalHoy.toFixed(2)}</div>`
-    + '</div>';
+  if(el) el.innerHTML = '<p style="font-size:13px;color:#999;font-style:italic">Facturas del día en la pestaña FACTURAS del sheet.</p>';
+  const cnt = document.getElementById('todayInvoicesCount');
+  if(cnt) cnt.textContent = '';
 }
 
 // ══════════════════════════════════════════════
@@ -2686,28 +2646,9 @@ function updateIhcSummary() {
 }
 
 function checkDuplicateInvoice(proveedor, total, fecha) {
+  // Duplicate detection now relies on FACTURAS tab (server-side) — no local check
   const warnEl = document.getElementById('ihcDuplicateWarn');
-  const textEl = document.getElementById('ihcDupText');
-  if (!proveedor || !total) { warnEl.classList.remove('visible'); return; }
-  const gastos = JSON.parse(localStorage.getItem('nb_gastos') || '[]');
-  const normalProv = normalize(proveedor);
-  const duplicates = gastos.filter(g => {
-    if (normalize(g.proveedor||'') !== normalProv) return false;
-    if (Math.abs((g.monto_pagar || g.monto_factura || 0) - total) > 0.50) return false;
-    // Check if fecha is within 3 days
-    if (fecha && g.fecha_compra) {
-      const diff = Math.abs(new Date(fecha+'T12:00:00') - new Date(g.fecha_compra+'T12:00:00')) / (1000*60*60*24);
-      if (diff > 3) return false;
-    }
-    return true;
-  });
-  if (duplicates.length > 0) {
-    const dup = duplicates[0];
-    textEl.textContent = `Ya existe una factura de "${dup.proveedor}" por $${(dup.monto_pagar||dup.monto_factura||0).toFixed(2)} del ${dup.fecha_compra} (folio: ${dup.folio||'sin folio'})`;
-    warnEl.classList.add('visible');
-  } else {
-    warnEl.classList.remove('visible');
-  }
+  if(warnEl) warnEl.classList.remove('visible');
 }
 
 function updateGastosPanel(){
@@ -2897,27 +2838,30 @@ function enviarGasto(){
     foto         : '',           // ← no base64 stored locally; Drive URL added after upload
     created_at   : new Date().toISOString()
   };
-  // Save locally (no photo data — keeps storage lean)
-  try {
-    const gastos = JSON.parse(localStorage.getItem('nb_gastos')||'[]');
-    gastos.push(gasto);
-    localStorage.setItem('nb_gastos', JSON.stringify(gastos));
-  } catch(qe) {
-    console.warn('localStorage full, pruning old gastos...', qe.message);
-    try {
-      // Emergency prune: strip any remaining foto fields from all entries
-      const gastos = JSON.parse(localStorage.getItem('nb_gastos')||'[]');
-      gastos.forEach(g => { delete g.foto; delete g.foto_full; });
-      gastos.push(gasto);
-      localStorage.setItem('nb_gastos', JSON.stringify(gastos));
-    } catch(e2) { console.error('localStorage still full after prune:', e2.message); }
-  }
+  // No local gastos storage — everything goes direct to FACTURAS via API
 
-  // ── #4 INSTANT RESET: clear UI immediately, push GAS in background ──
+  // ── CAPTURE DATA BEFORE RESET ──
   const savedId = gasto.id;
   const savedTotal = finalTotal;
   const savedForma = forma;
   const savedBase64 = currentBase64;  // capture before resetAll() clears it
+
+  // Capture matched items for auto price sync (before resetAll clears currentItems)
+  const priceItems = (currentItems || [])
+    .filter(it => it._match && it._match.n && it.precio_unitario)
+    .map(it => ({
+      bd_name: it._match.n,
+      precio_unitario: it.precio_unitario,
+      unidad_compra: (it.unidad || '').trim(),
+      cantidad: it.cantidad || 0,
+      precio_base: it.precio_base || null,
+      unidad_base: (it.unidad_base || '').trim()
+    }));
+
+  // Save history before reset
+  saveHistory();
+
+  // ── INSTANT RESET: clear UI immediately, push in background ──
   resetAll();   // ← clears screen NOW; user can start next invoice immediately
   renderTodayInvoices(); // refresh today's invoices panel
 
@@ -2931,21 +2875,23 @@ function enviarGasto(){
     // Non-blocking status banner (won't interrupt next capture)
     showUploadBanner('⏳ Subiendo factura…');
 
+    // ── AUTO PRICE SYNC: update MATERIA PRIMA in parallel with gasto push ──
+    if(priceItems.length){
+      fetch(scriptUrl, {
+        method: 'POST', headers: {'Content-Type':'text/plain'},
+        body: JSON.stringify({ action: 'update_prices', items: priceItems })
+      }).then(r => r.json()).then(data => {
+        if(data.ok) console.log(`✅ Auto price sync: ${data.updated} updated in MATERIA PRIMA`);
+        else console.log('⚠️ Auto price sync error:', data.error);
+      }).catch(e => console.log('⚠️ Auto price sync failed:', e.message));
+    }
+
     pushToSheetWithRetry(scriptUrl, payload, 3).then(result => {
       if(result && result.ok){
-        // ── #1 STORAGE FIX: strip base64 foto, keep Drive URL only ──
-        try {
-          const gastos = JSON.parse(localStorage.getItem('nb_gastos') || '[]');
-          const idx = gastos.findIndex(g => g.id === savedId);
-          if(idx >= 0){
-            delete gastos[idx].foto;          // remove base64 (saves ~50-200KB per invoice)
-            if(result.foto_url) gastos[idx].foto_url = result.foto_url;
-            localStorage.setItem('nb_gastos', JSON.stringify(gastos));
-          }
-        } catch(e){ console.log('Storage cleanup error:', e); }
-        showUploadBanner(`✅ $${savedTotal.toFixed(2)} · ${savedForma}`, 3500);
+        const priceNote = priceItems.length ? ` · ${priceItems.length} precios actualizados` : '';
+        showUploadBanner(`✅ $${savedTotal.toFixed(2)} · ${savedForma}${priceNote}`, 4000);
       } else {
-        showUploadBanner(`⚠️ Local guardado · reintentará al reabrir`, 5000);
+        showUploadBanner(`❌ Error al subir factura — reintenta`, 5000);
       }
     });
   }
@@ -2969,68 +2915,22 @@ async function pushToSheetWithRetry(url, payload, maxRetries) {
     }
     if (attempt < maxRetries) await new Promise(r => setTimeout(r, 2000 * attempt));
   }
-  // Save to retry queue for later
-  const q = JSON.parse(localStorage.getItem('nb_captura_retry_queue') || '[]');
-  q.push({ payload, timestamp: Date.now() });
-  localStorage.setItem('nb_captura_retry_queue', JSON.stringify(q));
-  return null;  // null = failed (was false; callers now check result.ok)
+  // No retry queue — if 3 attempts fail, show error to user
+  return null;
 }
 
 function processRetryQueue() {
-  const url = getScriptUrl();
-  if (!url) return;
-  const q = JSON.parse(localStorage.getItem('nb_captura_retry_queue') || '[]');
-  if (!q.length) return;
-  console.log(`🔄 Processing ${q.length} queued items...`);
-  const remaining = [];
-  (async () => {
-    for (const item of q) {
-      // Skip items older than 7 days
-      if (Date.now() - item.timestamp > 7 * 24 * 60 * 60 * 1000) continue;
-      try {
-        const resp = await fetch(url, {
-          method: 'POST', headers: {'Content-Type':'text/plain'},
-          body: JSON.stringify(item.payload)
-        });
-        const data = await resp.json();
-        if (!data.ok) remaining.push(item);
-        else console.log('✅ Retry succeeded for:', item.payload.id);
-      } catch(e) { remaining.push(item); }
-    }
-    localStorage.setItem('nb_captura_retry_queue', JSON.stringify(remaining));
-    if (remaining.length) console.log(`⚠️ ${remaining.length} items still queued`);
-  })();
+  // Retry queue removed — all operations go direct to API
 }
 
 function pruneLocalStorage() {
-  // Prune price history: keep only last 90 days
-  try {
-    const h = JSON.parse(localStorage.getItem('nb_price_history') || '[]');
-    const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - 90);
-    const cutStr = cutoff.toISOString().slice(0, 10);
-    const pruned = h.filter(r => r.date >= cutStr);
-    if (pruned.length < h.length) {
-      localStorage.setItem('nb_price_history', JSON.stringify(pruned));
-      console.log(`🧹 Price history pruned: ${h.length} → ${pruned.length} (removed ${h.length - pruned.length} entries older than 90 days)`);
-    }
-  } catch(e) { console.log('Prune error:', e); }
-
-  // Check total localStorage size
-  let totalSize = 0;
-  for (let i = 0; i < localStorage.length; i++) {
-    const k = localStorage.key(i);
-    totalSize += (k.length + (localStorage.getItem(k) || '').length) * 2; // UTF-16
-  }
-  const mb = (totalSize / 1024 / 1024).toFixed(2);
+  // Clean up any legacy data that's no longer needed
+  localStorage.removeItem('nb_gastos');
+  localStorage.removeItem('nb_price_history');
+  localStorage.removeItem('nb_captura_retry_queue');
+  // Hide storage warning — shouldn't be needed anymore
   const bar = document.getElementById('storageWarningBar');
-  const txt = document.getElementById('storageWarningText');
-  if (totalSize > 4 * 1024 * 1024) {
-    console.warn(`⚠️ localStorage at ${mb}MB — nearing limit!`);
-    if (bar) { txt.textContent = `⚠️ Almacenamiento al ${mb}MB — considera limpiar historial`; bar.style.display = 'flex'; }
-  } else {
-    console.log(`💾 localStorage: ${mb}MB`);
-    if (bar) bar.style.display = 'none';
-  }
+  if (bar) bar.style.display = 'none';
 }
 
 // ══════════════════════════════════════════════
@@ -3047,18 +2947,7 @@ window.addEventListener('load',()=> requireNbAuth(function appInit(){
   }
   loadCachedIngredients(); // also calls buildSuppliersFromDB inside
   renderMappings(); renderHistory(); renderTodayInvoices();
-  pruneLocalStorage();
-  // One-time migration: strip base64 foto from existing gastos to free storage
-  try {
-    const gastos = JSON.parse(localStorage.getItem('nb_gastos')||'[]');
-    let cleaned = 0;
-    gastos.forEach(g => { if(g.foto && g.foto.length > 100){ delete g.foto; cleaned++; } });
-    if(cleaned > 0){
-      localStorage.setItem('nb_gastos', JSON.stringify(gastos));
-      console.log(`🧹 Cleaned base64 from ${cleaned} existing invoices`);
-    }
-  } catch(e) { console.log('Migration cleanup error:', e); }
-  processRetryQueue();
+  pruneLocalStorage(); // cleans up legacy localStorage keys
 }));
 
 // ═══════════════════════════════════════════════════════════════

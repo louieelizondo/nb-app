@@ -806,15 +806,16 @@ function seedProductsFromMP() {
     if (n) existing.add(n);
   }
 
-  // MP cols: A(0)=Ingrediente, B(1)=Categoría, G(6)=Unidad
+  // MP cols (actual March 2026): A(0)=Ingrediente, B(1)=Proveedor A, C(2)=Proveedor B,
+  //   D(3)=Costo x Paquete, E(4)=Fecha, F(5)=UnidsCaja, G(6)=VolUnid, H(7)=Unidad
   let seeded = 0, skipped = 0;
   for (let i = 1; i < mpData.length; i++) {
     const ingrediente = String(mpData[i][0] || '').trim();
     if (!ingrediente) continue;
     if (existing.has(ingrediente.toLowerCase())) { skipped++; continue; }
 
-    const categoria = String(mpData[i][1] || '').trim();
-    const unidad    = String(mpData[i][6] || 'PZA').trim();
+    const categoria = '';  // No Categoría column in current sheet — leave blank
+    const unidad    = String(mpData[i][7] || 'PZA').trim();  // H(7) = Unidad
     const safeId    = ingrediente.replace(/[^A-Za-z0-9]/g, '').substring(0, 12).toUpperCase();
     const id        = 'MP_' + safeId + '_' + i;
 
@@ -1183,8 +1184,11 @@ function getOrCreateTab(name, headers) {
 
 /**
  * Append a new row to MATERIA PRIMA.
- * body: { ingredient: { Nombre, Unidad, CostoPaq, Categoria } }
- * MATERIA PRIMA cols: A=Ingrediente, B=Categoría, C=CostoPaq, D=Fecha, E=UnidsCaja, F=VolUnid, G=Unidad
+ * body: { ingredient: { Nombre, Unidad, CostoPaq, Proveedor } }
+ * MATERIA PRIMA cols (actual sheet layout March 2026):
+ *   A(0)=Ingrediente, B(1)=Proveedor A, C(2)=Proveedor B,
+ *   D(3)=Costo x Paquete ($), E(4)=Fecha de Precio,
+ *   F(5)=Unidades x Caja, G(6)=Volumen x Unidad, H(7)=Unidad (kg/lt/pza)
  */
 function addIngredient(body) {
   const ing = body.ingredient || body;
@@ -1201,13 +1205,14 @@ function addIngredient(body) {
   if (exists) return { ok: false, message: 'Ingrediente ya existe: ' + nombre };
 
   const row = [
-    nombre,
-    ing.Categoria || '',
-    parseFloat(ing.CostoPaq) || 0,
-    new Date(),
-    '',        // UnidsCaja — blank
-    '',        // VolUnid — blank
-    ing.Unidad || 'PZA'
+    nombre,                             // A: Ingrediente
+    ing.Proveedor || '',                // B: Proveedor A
+    '',                                 // C: Proveedor B (blank)
+    parseFloat(ing.CostoPaq) || 0,      // D: Costo x Paquete ($)
+    new Date(),                         // E: Fecha de Precio
+    '',                                 // F: Unidades x Caja (blank)
+    '',                                 // G: Volumen x Unidad (blank)
+    ing.Unidad || 'PZA'                 // H: Unidad (kg/lt/pza)
   ];
   mp.appendRow(row);
   log('ADD_INGREDIENT', nombre + ' | ' + (ing.Unidad || 'PZA') + ' | $' + (ing.CostoPaq || 0));
