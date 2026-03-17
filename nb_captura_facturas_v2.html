@@ -2877,13 +2877,18 @@ function enviarGasto(){
 
     // ── AUTO PRICE SYNC: update MATERIA PRIMA in parallel with gasto push ──
     if(priceItems.length){
+      console.log(`📊 Price sync: sending ${priceItems.length} items:`, priceItems.map(p => `${p.bd_name}: $${p.precio_unitario}`));
       fetch(scriptUrl, {
         method: 'POST', headers: {'Content-Type':'text/plain'},
         body: JSON.stringify({ action: 'update_prices', items: priceItems })
       }).then(r => r.json()).then(data => {
-        if(data.ok) console.log(`✅ Auto price sync: ${data.updated} updated in MATERIA PRIMA`);
-        else console.log('⚠️ Auto price sync error:', data.error);
+        if(data.ok){
+          console.log(`✅ Auto price sync: ${data.updated}/${priceItems.length} updated in MATERIA PRIMA`);
+          if(data.not_found && data.not_found.length) console.warn(`⚠️ Not found in sheet:`, data.not_found);
+        } else console.log('⚠️ Auto price sync error:', data.error);
       }).catch(e => console.log('⚠️ Auto price sync failed:', e.message));
+    } else {
+      console.log('📊 Price sync: no matched items with prices to sync');
     }
 
     pushToSheetWithRetry(scriptUrl, payload, 3).then(result => {

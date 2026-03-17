@@ -488,13 +488,15 @@ function updatePrices(body) {
   const fechaCol = 4;    // E = Fecha de Precio
   const unidadCol = 7;   // H = Unidad (kg/lt/pza)
 
+  var notFound = [];
   items.forEach(item => {
     const bdName = (item.bd_name || '').trim().toLowerCase();
     // Use precio_unitario (whole-package price from invoice), NOT precio_base (per-kg/L)
     const newPrice = item.precio_unitario || item.price;
     const unidadCompra = (item.unidad_compra || '').trim().toUpperCase();
-    if (!bdName || !newPrice) return;
+    if (!bdName || !newPrice) { notFound.push(bdName + ' (no price)'); return; }
 
+    var found = false;
     for (var i = 1; i < data.length; i++) {
       var cellName = String(data[i][nameCol] || '').trim().toLowerCase();
       if (cellName === bdName) {
@@ -506,13 +508,15 @@ function updatePrices(body) {
         }
         // NOTE: Col I (Costo/kg) is a formula — don't touch it
         updated++;
+        found = true;
         break;
       }
     }
+    if (!found) notFound.push(item.bd_name + ' → $' + newPrice);
   });
 
-  log('UPDATE_PRICES', updated + ' updated in MATERIA PRIMA');
-  return { ok: true, updated: updated, message: updated + ' prices updated' };
+  log('UPDATE_PRICES', updated + ' updated, ' + notFound.length + ' not found: ' + notFound.join('; '));
+  return { ok: true, updated: updated, not_found: notFound, message: updated + ' prices updated' + (notFound.length ? ', ' + notFound.length + ' not found' : '') };
 }
 
 /**
