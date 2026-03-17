@@ -1417,6 +1417,7 @@ function ssOpen(rowIdx, anchorEl, invoiceDesc, currentBdName) {
     const ing = INGREDIENTS_DB.find(i=>i.n===bdName);
     if (ing && currentItems[rowIdx]) currentItems[rowIdx]._match={...ing,matchType:'learned',score:1};
     rerenderRow(rowIdx);
+    refreshStatsAndSyncBar();  // ← update counters after correction
     showToast('📚 "'+normalize(invoiceDesc)+'" → '+bdName);
     // Auto-save invoice description as preferred name (non-destructive)
     const prefs = getPrefNames();
@@ -1924,8 +1925,30 @@ document.addEventListener('mousedown', e=>{
 // ══════════════════════════════════════════════
 function findMatch(desc, supplierHint){
   const maps=getLearnedMappings(),n=normalize(desc);
-  // 1. Learned mapping (always highest priority, regardless of supplier)
+  // 1a. Learned mapping — exact normalized key
   if(maps[n]){const ing=INGREDIENTS_DB.find(i=>i.n===maps[n]);if(ing)return{...ing,matchType:'learned',score:1};}
+
+  // 1b. Learned mapping — fuzzy: check if invoice desc shares ≥60% words with any learned key
+  //     This handles Claude giving slightly different descriptions each time
+  const nWords=n.split(/\s+/).filter(w=>w.length>2);
+  if(nWords.length>=2){
+    let bestKey=null,bestScore=0;
+    for(const [key,bdName] of Object.entries(maps)){
+      const kWords=key.split(/\s+/).filter(w=>w.length>2);
+      if(!kWords.length) continue;
+      const overlap=nWords.filter(w=>kWords.includes(w)).length;
+      const sc=overlap/Math.max(nWords.length,kWords.length);
+      if(sc>bestScore && overlap>=2){bestScore=sc;bestKey=key;}
+    }
+    if(bestScore>=0.6 && bestKey){
+      const ing=INGREDIENTS_DB.find(i=>i.n===maps[bestKey]);
+      if(ing){
+        // Auto-save this new description as a learned mapping too
+        saveMapping(desc,maps[bestKey]);
+        return{...ing,matchType:'learned',score:bestScore};
+      }
+    }
+  }
 
   // 2. Build candidate list — if we know the supplier, try supplier-filtered first
   const supNorm = supplierHint ? normalize(supplierHint) : '';
@@ -2748,6 +2771,31 @@ function updatePriceSyncBar(){
   const matched = currentItems ? currentItems.filter(it => it._match && it._match.n && it.precio_unitario).length : 0;
   const total = currentItems ? currentItems.filter(it => !it._pageSeparator).length : 0;
   el.textContent = matched + ' de ' + total + ' items con match — se actualizará Col D (Costo x Paquete)';
+}
+
+function refreshStatsAndSyncBar(){
+  if(!currentItems||!currentItems.length) return;
+  const learned=currentItems.filter(i=>i._match?.matchType==='learned').length;
+  const exact=currentItems.filter(i=>i._match?.matchType==='exact').length;
+  const fuzzy=currentItems.filter(i=>i._match&&['contains','fuzzy'].includes(i._match.matchType)).length;
+  const none=currentItems.filter(i=>!i._match).length;
+  // Update stat chips (find by content pattern since they don't have IDs)
+  const chips = document.getElementById('statsRow');
+  if(chips){
+    const all = chips.querySelectorAll('.stat-chip');
+    all.forEach(c => {
+      const t=c.textContent;
+      if(t.includes('Aprendidos')) c.innerHTML='📚 Aprendidos: <strong>'+learned+'</strong>';
+      if(t.includes('Exactos'))    c.innerHTML='✓ Exactos: <strong>'+exact+'</strong>';
+      if(t.includes('Parciales'))  c.innerHTML='≈ Parciales: <strong>'+fuzzy+'</strong>';
+      if(t.includes('Sin match')){ if(none>0) c.innerHTML='✗ Sin match: <strong>'+none+'</strong>'; else c.style.display='none'; }
+    });
+  }
+  // Update filter counts
+  const fc = document.getElementById('resultsCount');
+  if(fc) fc.textContent = currentItems.length;
+  // Update price sync bar
+  updatePriceSyncBar();
 }
 
 async function syncPricesToMateriaPrima(scriptUrl){
