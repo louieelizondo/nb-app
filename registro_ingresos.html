@@ -1508,10 +1508,14 @@ function displayBonos(result) {
   document.getElementById('bonos-pagos-recibidos').textContent = formatPeso(pr);
 
   // Build bonus table — mesa bonuses first, then flat-rate roles
+  const auxCount = bonos.AuxTienda_Count || 4;
+  const auxPerPerson = parseFloat(bonos.AuxTienda) || 0;
+  const auxTotal = parseFloat(bonos.AuxTienda_Total) || 0;
+
   const allBonos = [
-    ...BONUS_MESAS.map(m => ({ key: m, label: BONUS_MESA_LABELS[m], amount: parseFloat(bonos[m]) || 0 })),
-    { key: 'AuxTienda', label: 'Aux de Tienda (c/u)', amount: parseFloat(bonos.AuxTienda) || 0 },
-    { key: 'LiderTienda', label: 'Líder de Tienda', amount: parseFloat(bonos.LiderTienda) || 0 }
+    ...BONUS_MESAS.map(m => ({ label: BONUS_MESA_LABELS[m], amount: parseFloat(bonos[m]) || 0 })),
+    { label: `Aux de Tienda (${auxCount} × ${formatPeso(auxPerPerson)})`, amount: auxTotal },
+    { label: 'Líder de Tienda', amount: parseFloat(bonos.LiderTienda) || 0 }
   ];
 
   const tbody = document.getElementById('bonos-table-body');
