@@ -227,6 +227,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
   <div class="shop-header">
     <h2>🛒 Lista de Compras</h2>
     <div class="shop-date" id="shopDate"></div>
+    <div id="shopScope" style="font-size:11px;margin-top:4px;line-height:1.4"></div>
   </div>
   <div id="shopContent"></div>
   <div class="shop-global-actions" id="shopActions"></div>
@@ -243,6 +244,7 @@ let products = [];        // from API
 let dirty = {};           // { row: true } — changed since load
 let countEdits = {};      // { row: newQty } — count changes
 let maxEdits = {};        // { row: newMax } — max changes
+let countedRows = new Set(); // rows that were visible during a counting session
 let shopChecked = {};     // { row: true } — checked off in shopping list
 let shopQtyOverrides = {};// { row: qty } — manual qty overrides in shopping list
 let shopDiscarded = {};   // { supplier: true } — discarded supplier sections
@@ -476,6 +478,9 @@ function renderProductList() {
     .filter(p => !currentArea || p.area === currentArea)
     .filter(p => !currentSupplier || p.proveedor === currentSupplier)
     .sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
+
+  // Track every product the user sees — these are "counted" for shopping list purposes
+  filtered.forEach(p => countedRows.add(p.row));
 
   if (filtered.length === 0) {
     document.getElementById('productList').innerHTML =
@@ -750,6 +755,8 @@ async function saveCounts() {
 // ════════════════════════════════════════
 function getShoppingItems() {
   return products.filter(p => {
+    // Only include products that were actually seen/counted this session
+    if (!countedRows.has(p.row)) return false;
     const count = countEdits[p.row] !== undefined ? countEdits[p.row] : p.actual;
     const max = maxEdits[p.row] !== undefined ? maxEdits[p.row] : p.max;
     return max > 0 && count < max;
@@ -786,9 +793,25 @@ function renderShopList() {
   document.getElementById('shopDate').textContent =
     now.toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
 
+  // Show scope: which locations were counted
+  const countedLocs = new Set();
+  products.forEach(p => { if (countedRows.has(p.row)) countedLocs.add(p.ubicacion || 'Sin ubicación'); });
+  const scopeEl = document.getElementById('shopScope');
+  if (scopeEl) {
+    if (countedRows.size === 0) {
+      scopeEl.textContent = '⚠️ No has contado ninguna ubicación — cuenta primero para generar la lista';
+      scopeEl.style.color = '#e65100';
+    } else {
+      scopeEl.textContent = '📍 ' + countedRows.size + ' productos contados en: ' + [...countedLocs].sort().join(', ');
+      scopeEl.style.color = '#555';
+    }
+  }
+
   if (items.length === 0) {
     document.getElementById('shopContent').innerHTML =
-      '<div class="empty-state"><div class="emoji">✅</div><h3>Todo surtido</h3><p>No hay productos por comprar</p></div>';
+      '<div class="empty-state"><div class="emoji">✅</div><h3>Todo surtido</h3><p>' +
+      (countedRows.size === 0 ? 'Cuenta productos primero para generar la lista de compras' : 'No hay productos por comprar en lo que contaste') +
+      '</p></div>';
     document.getElementById('shopActions').innerHTML =
       '<button class="btn-close" onclick="goBack()">Cerrar</button>';
     return;
