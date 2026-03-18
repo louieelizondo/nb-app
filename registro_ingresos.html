@@ -1377,7 +1377,7 @@ function showCorteRedirect(fecha) {
 
 // TAB 3: VENTAS POR MESA + BONOS
 
-// Only the 9 bonus mesas for input (not Granja, FrutasVerduras, etc.)
+// The 9 bonus mesas (used for bonus calculation only)
 const BONUS_MESAS = ['Cocina1', 'Cocina2', 'Cocina3', 'Produccion1', 'Produccion2', 'Produccion3', 'Casa1', 'Casa2', 'Express'];
 const BONUS_MESA_LABELS = {
   'Cocina1': 'Cocina 1', 'Cocina2': 'Cocina 2', 'Cocina3': 'Cocina 3',
@@ -1387,9 +1387,10 @@ const BONUS_MESA_LABELS = {
 
 async function loadVentasMesas() {
   const container = document.getElementById('ventas-table-body');
-  container.innerHTML = BONUS_MESAS.map(mesa => `
+  // ALL Shopify vendor categories for input (matches "Ventas por Proveedor" report)
+  container.innerHTML = MESAS.map(mesa => `
     <tr>
-      <td>${BONUS_MESA_LABELS[mesa] || mesa}</td>
+      <td>${MESA_LABELS[mesa] || mesa}</td>
       <td><input type="number" data-mesa="${mesa}" placeholder="0.00" step="0.01"></td>
     </tr>
   `).join('');
@@ -1402,7 +1403,7 @@ async function loadVentasMesas() {
       const data = await callAPI('get_ventas_mesa', { fechaInicio: startDate, fechaFin: endDate });
       if (data.periodos && data.periodos.length > 0) {
         const period = data.periodos[0];
-        BONUS_MESAS.forEach(mesa => {
+        MESAS.forEach(mesa => {
           const input = document.querySelector(`input[data-mesa="${mesa}"]`);
           if (input && period[mesa]) input.value = parseFloat(period[mesa]) || '';
         });
@@ -1424,7 +1425,7 @@ async function loadVentasMesas() {
 
 function collectMesaSales() {
   const sales = {};
-  BONUS_MESAS.forEach(mesa => {
+  MESAS.forEach(mesa => {
     const input = document.querySelector(`input[data-mesa="${mesa}"]`);
     sales[mesa] = parseFloat(input?.value) || 0;
   });
