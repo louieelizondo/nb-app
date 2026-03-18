@@ -1003,6 +1003,32 @@
       setTimeout(() => toast.classList.remove('show'), 3000);
     }
 
+    // ── Status banner (fixed top bar — processing/success/error) ──
+    let _statusBannerTimer = null;
+    function showStatusBanner(msg, dur = 0) {
+      let banner = document.getElementById('statusBanner');
+      if (!banner) {
+        banner = document.createElement('div');
+        banner.id = 'statusBanner';
+        banner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:9999;padding:12px 16px;font-size:14px;font-weight:600;text-align:center;transition:opacity 0.4s;display:none;';
+        document.body.appendChild(banner);
+      }
+      banner.textContent = msg;
+      const isSuccess = msg.includes('✅');
+      const isError = msg.includes('❌');
+      banner.style.background = isSuccess ? '#2d6a4f' : isError ? '#c62828' : '#3d3428';
+      banner.style.color = '#fff';
+      banner.style.opacity = '1';
+      banner.style.display = 'block';
+      if (_statusBannerTimer) clearTimeout(_statusBannerTimer);
+      if (dur > 0) {
+        _statusBannerTimer = setTimeout(() => {
+          banner.style.opacity = '0';
+          setTimeout(() => { banner.style.display = 'none'; }, 400);
+        }, dur);
+      }
+    }
+
     function updateSyncStatus(status) {
       const el = document.getElementById('syncStatus');
       if (status === 'synced') {
@@ -1235,6 +1261,7 @@
         ...denoms
       };
 
+      showStatusBanner('⏳ Guardando corte individual…');
       try {
         const resp = await fetch(config.scriptUrl, {
           method: 'POST',
@@ -1243,7 +1270,7 @@
         });
         const result = await resp.json();
         if (result.ok) {
-          showToast('Corte guardado: ' + corte.Caja, 'success');
+          showStatusBanner('✅ Corte guardado: ' + corte.Caja, 4000);
           await loadTodaysIndividualCortes();
           updateSyncStatus('synced');
         } else {
@@ -1251,7 +1278,7 @@
         }
       } catch (e) {
         console.error('Save error:', e);
-        showToast('Error guardando corte: ' + e.message, 'error');
+        showStatusBanner('❌ Error guardando corte: ' + e.message, 5000);
         updateSyncStatus('error');
       }
     }
@@ -1412,6 +1439,7 @@
     }
 
     async function saveCorteTienda() {
+      showStatusBanner('⏳ Guardando corte de tienda…');
       updateSyncStatus('pending');
       const denoms = getDenomValues('tienda_denomGrid');
       const totalEfectivo = getTotalEfectivo(denoms);
@@ -1438,7 +1466,7 @@
         });
         const result = await resp.json();
         if (result.ok) {
-          showToast('Corte de tienda guardado. Notificación enviada a Louie.', 'success');
+          showStatusBanner('✅ Corte de tienda guardado — Notificación enviada a Louie', 4000);
           updateSyncStatus('synced');
 
           // Store corte data globally for counter functions
@@ -1482,7 +1510,7 @@
         }
       } catch (e) {
         console.error('Save error:', e);
-        showToast('Error: ' + e.message, 'error');
+        showStatusBanner('❌ Error: ' + e.message, 5000);
         updateSyncStatus('error');
       }
     }
@@ -2142,6 +2170,7 @@
       if (!fecha)       { showToast('Selecciona una fecha', 'error'); return; }
       if (!colaborador) { showToast('Ingresa el nombre del colaborador', 'error'); return; }
 
+      showStatusBanner('⏳ Guardando arqueo de caja…');
       updateSyncStatus('pending');
       const denoms = getDenomValues('arqueo_denomGrid');
 
@@ -2167,7 +2196,7 @@
         });
         const result = await resp.json();
         if (result.ok) {
-          showToast('✅ Arqueo guardado correctamente', 'success');
+          showStatusBanner('✅ Arqueo guardado correctamente', 4000);
           resetArqueo();
           await loadTodaysArqueos();
           updateSyncStatus('synced');
@@ -2176,7 +2205,7 @@
         }
       } catch (e) {
         console.error('Save arqueo error:', e);
-        showToast('Error guardando arqueo: ' + e.message, 'error');
+        showStatusBanner('❌ Error guardando arqueo: ' + e.message, 5000);
         updateSyncStatus('error');
       }
     }
