@@ -925,6 +925,72 @@ function updateFacturacion(body) {
   return { ok: true, totalFacturado, faltaFactura, message: 'Facturación actualizada' };
 }
 
+/**
+ * Batch update facturación for multiple dates in ONE call.
+ * body.changes = [ { fecha, FactClientes, FactGen1, ..., FacturasCFDI }, ... ]
+ */
+function batchUpdateFacturacion(body) {
+  const changes = body.changes || [];
+  if (!changes.length) throw new Error('No changes provided');
+
+  const sheet = getOrCreateTab(INGRESOS_TAB, INGRESOS_HEADERS);
+  const data = sheet.getDataRange().getValues();
+  const headers = data[0].map(String);
+  const fechaCol = headers.indexOf('Fecha');
+  const invoiceFields = ['FactClientes', 'FactGen1', 'FactGen2', 'FactGen3', 'FactGen4', 'FactGen5', 'FactGen6', 'FacturasCFDI'];
+
+  // Build a date→row map for fast lookup
+  const dateRowMap = {};
+  for (let i = 1; i < data.length; i++) {
+    const f = formatDateStr(data[i][fechaCol]);
+    if (f) dateRowMap[f] = i + 1; // 1-indexed
+  }
+
+  let updated = 0;
+  changes.forEach(c => {
+    const fecha = c.fecha;
+    if (!fecha) return;
+    const rowNum = dateRowMap[fecha];
+    if (!rowNum) return;
+
+    // Update invoice fields
+    invoiceFields.forEach(field => {
+      if (c[field] !== undefined) {
+        const col = headers.indexOf(field);
+        if (col >= 0) sheet.getRange(rowNum, col + 1).setValue(c[field]);
+      }
+    });
+
+    // Recalculate TotalFacturado
+    let totalFacturado = 0;
+    const fcCol = headers.indexOf('FactClientes');
+    if (fcCol >= 0) totalFacturado += parseFloat(c.FactClientes !== undefined ? c.FactClientes : sheet.getRange(rowNum, fcCol + 1).getValue()) || 0;
+    for (let g = 1; g <= 6; g++) {
+      const gCol = headers.indexOf('FactGen' + g);
+      if (gCol >= 0) totalFacturado += parseFloat(c['FactGen' + g] !== undefined ? c['FactGen' + g] : sheet.getRange(rowNum, gCol + 1).getValue()) || 0;
+    }
+
+    const tfCol = headers.indexOf('TotalFacturado');
+    if (tfCol >= 0) sheet.getRange(rowNum, tfCol + 1).setValue(totalFacturado);
+
+    const txfCol = headers.indexOf('TotalXFacturar');
+    const ffCol = headers.indexOf('FaltaFactura');
+    if (txfCol >= 0 && ffCol >= 0) {
+      const totalXFacturar = parseFloat(sheet.getRange(rowNum, txfCol + 1).getValue()) || 0;
+      sheet.getRange(rowNum, ffCol + 1).setValue(totalXFacturar - totalFacturado);
+    }
+
+    const uaCol = headers.indexOf('Updated_At');
+    if (uaCol >= 0) sheet.getRange(rowNum, uaCol + 1).setValue(new Date().toISOString());
+
+    updated++;
+  });
+
+  SpreadsheetApp.flush();
+  log('BATCH_FACTURACION', updated + ' dates updated');
+  return { ok: true, updated, message: updated + ' fechas actualizadas' };
+}
+
 // ══════════════════════════════════════════════
 // NETO MENSUAL (monthly summary)
 // ══════════════════════════════════════════════
