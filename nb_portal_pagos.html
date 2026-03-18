@@ -491,13 +491,13 @@ async function saveEdit(id) {
   editingId = null;
   renderList();
   renderSummary();
-  showToast('Guardando…');
+  showStatusBanner('⏳ Guardando factura…');
 
   try {
     await apiPost({ action: 'update_factura', id, ...updates });
-    showToast('✅ Guardado: ' + updates.Proveedor);
+    showStatusBanner('✅ Guardado: ' + updates.Proveedor, 4000);
   } catch (err) {
-    showToast('❌ Error guardando: ' + err.message, 5000, true);
+    showStatusBanner('❌ Error guardando: ' + err.message, 5000);
   }
 }
 
@@ -555,7 +555,7 @@ async function confirmPay() {
     closeModal('payModal');
     renderList();
     renderSummary();
-    showToast('✅ Pagado: ' + f.proveedor);
+    showStatusBanner('✅ Pagado: ' + f.proveedor, 4000);
   } catch (err) {
     // Fallback: try old update_status if pay_factura not deployed
     try {
@@ -568,9 +568,9 @@ async function confirmPay() {
       closeModal('payModal');
       renderList();
       renderSummary();
-      showToast('✅ Pagado (fallback): ' + f.proveedor);
+      showStatusBanner('✅ Pagado: ' + f.proveedor, 4000);
     } catch (err2) {
-      showToast('❌ Error: ' + err2.message, 5000, true);
+      showStatusBanner('❌ Error: ' + err2.message, 5000);
     }
   }
 
@@ -584,13 +584,14 @@ async function undoPay(id) {
   if (!confirm('¿Revertir a pendiente?')) return;
 
   try {
+    showStatusBanner('⏳ Revirtiendo a pendiente…');
     await apiPost({ action: 'update_status', id, estado: 'Pendiente', fecha_pago_real: '' });
     f.estado = 'Pendiente';
     renderList();
     renderSummary();
-    showToast('Revertido a pendiente');
+    showStatusBanner('✅ Revertido a pendiente', 4000);
   } catch (err) {
-    showToast('❌ Error: ' + err.message, 5000, true);
+    showStatusBanner('❌ Error: ' + err.message, 5000);
   }
 }
 
@@ -677,13 +678,13 @@ async function confirmManual() {
   closeModal('manualModal');
   renderList();
   renderSummary();
-  showToast('Guardando…');
+  showStatusBanner('⏳ Registrando factura…');
 
   try {
     await apiPost({ action: 'create', gasto: entry });
-    showToast('✅ Registrado: ' + proveedor);
+    showStatusBanner('✅ Registrado: ' + proveedor, 4000);
   } catch (err) {
-    showToast('❌ Error: ' + err.message, 5000, true);
+    showStatusBanner('❌ Error: ' + err.message, 5000);
   }
 }
 
@@ -735,6 +736,32 @@ function showToast(msg, ms = 3000, isError = false) {
   el.className = 'toast show' + (isError ? ' error' : '');
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => el.className = 'toast', ms);
+}
+
+// ── Status banner (fixed top bar — processing/success/error) ──
+let _statusBannerTimer = null;
+function showStatusBanner(msg, dur = 0) {
+  let banner = document.getElementById('statusBanner');
+  if (!banner) {
+    banner = document.createElement('div');
+    banner.id = 'statusBanner';
+    banner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:9999;padding:12px 16px;font-size:14px;font-weight:600;text-align:center;transition:opacity 0.4s;display:none;';
+    document.body.appendChild(banner);
+  }
+  banner.textContent = msg;
+  const isSuccess = msg.includes('✅');
+  const isError = msg.includes('❌');
+  banner.style.background = isSuccess ? '#2d6a4f' : isError ? '#c62828' : '#3d3428';
+  banner.style.color = '#fff';
+  banner.style.opacity = '1';
+  banner.style.display = 'block';
+  if (_statusBannerTimer) clearTimeout(_statusBannerTimer);
+  if (dur > 0) {
+    _statusBannerTimer = setTimeout(() => {
+      banner.style.opacity = '0';
+      setTimeout(() => { banner.style.display = 'none'; }, 400);
+    }, dur);
+  }
 }
 
 // Close modals on backdrop click
