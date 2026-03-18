@@ -253,10 +253,17 @@ function findRowByDate(sheet, fecha) {
 // HELPER: Normalize date to YYYY-MM-DD string
 // ══════════════════════════════════════════════
 
+// Cache spreadsheet timezone (avoids repeated lookups)
+let _ssTz = null;
+function getSheetTimezone() {
+  if (!_ssTz) _ssTz = SpreadsheetApp.getActiveSpreadsheet().getSpreadsheetTimeZone();
+  return _ssTz;
+}
+
 function formatDateStr(val) {
   if (!val) return '';
   if (val instanceof Date) {
-    return Utilities.formatDate(val, 'America/Mexico_City', 'yyyy-MM-dd');
+    return Utilities.formatDate(val, getSheetTimezone(), 'yyyy-MM-dd');
   }
   // Already a string — normalize
   const s = String(val).trim();
