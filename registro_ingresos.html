@@ -1147,6 +1147,10 @@ function initializeEventListeners() {
   document.getElementById('facturacion-month').value = currentMonth;
   document.getElementById('historial-month').value = currentMonth;
 
+  // Auto-load current month data for Facturación and Historial
+  loadFacturacionMonth();
+  loadHistorial();
+
   // Biweekly defaults
   const startDate = new Date(today);
   startDate.setDate(startDate.getDate() - 14);
