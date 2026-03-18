@@ -953,13 +953,15 @@ const CONFIG_KEY = 'nb_registro_ingresos_config';
 const DEFAULT_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxQ7BzFITQnxyndvo2q7Xa1-Sc-yX5S8JGRc1mIbd4ye0rSpN2I2qx1zAjzRqbPXNeL/exec';
 const DEFAULT_LEADER_EMAIL = 'facturacion.nbclub@gmail.com';
 
-const MESAS = ['Cocina1', 'Cocina2', 'Cocina3', 'Produccion1', 'Produccion2', 'Produccion3', 'Casa1', 'Casa2', 'Express', 'Granja', 'FrutasVerduras', 'ProveedorVentas', 'MermasCanastas', 'Pedidos', 'Mixto'];
+// Order matches Shopify "Ventas por Proveedor" report exactly
+const MESAS = ['Casa1', 'Casa2', 'Cocina1', 'Cocina2', 'Cocina3', 'Express', 'FrutasVerduras', 'Granja', 'MermasCanastas', 'Produccion1', 'Produccion2', 'Produccion3', 'ProveedorVentas'];
 const MESA_LABELS = {
+  'Casa1': 'Casa 1', 'Casa2': 'Casa 2',
   'Cocina1': 'Cocina 1', 'Cocina2': 'Cocina 2', 'Cocina3': 'Cocina 3',
+  'Express': 'Express', 'FrutasVerduras': 'Frutas y Verduras', 'Granja': 'Granja',
+  'MermasCanastas': 'Mermas y Canastas',
   'Produccion1': 'Producción 1', 'Produccion2': 'Producción 2', 'Produccion3': 'Producción 3',
-  'Casa1': 'Casa 1', 'Casa2': 'Casa 2', 'Express': 'Express', 'Granja': 'Granja',
-  'FrutasVerduras': 'Frutas y Verduras', 'ProveedorVentas': 'Proveedor', 'MermasCanastas': 'Mermas',
-  'Pedidos': 'Pedidos', 'Mixto': 'Mixto'
+  'ProveedorVentas': 'Proveedor'
 };
 
 let currentConfig = {};
