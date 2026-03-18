@@ -1060,6 +1060,36 @@ function showToast(message, type = 'success') {
   }, 3000);
 }
 
+// ── Status banner (fixed top bar — processing/success/error) ──
+let _statusBannerTimer = null;
+function showStatusBanner(msg, dur = 0) {
+  let banner = document.getElementById('statusBanner');
+  if (!banner) {
+    banner = document.createElement('div');
+    banner.id = 'statusBanner';
+    banner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:9999;padding:12px 16px;font-size:14px;font-weight:600;text-align:center;transition:opacity 0.4s;display:none;';
+    document.body.appendChild(banner);
+  }
+  banner.textContent = msg;
+  const isSuccess = msg.includes('✅');
+  const isError = msg.includes('❌');
+  banner.style.background = isSuccess ? '#2d6a4f' : isError ? '#c62828' : '#3d3428';
+  banner.style.color = '#fff';
+  banner.style.opacity = '1';
+  banner.style.display = 'block';
+  if (_statusBannerTimer) clearTimeout(_statusBannerTimer);
+  if (dur > 0) {
+    _statusBannerTimer = setTimeout(() => {
+      banner.style.opacity = '0';
+      setTimeout(() => { banner.style.display = 'none'; }, 400);
+    }, dur);
+  }
+}
+function hideStatusBanner() {
+  const banner = document.getElementById('statusBanner');
+  if (banner) { banner.style.opacity = '0'; setTimeout(() => { banner.style.display = 'none'; }, 400); }
+}
+
 function initializeEventListeners() {
   // TAB NAVIGATION — persists across refresh
   function switchToTab(tabId) {
@@ -1344,14 +1374,15 @@ async function saveSobre2() {
     body.ingreso.FaltanteSobrante = parseFloat(document.getElementById('corte-faltanteSobrante').value) || 0;
   }
 
+  showStatusBanner('⏳ Guardando Sobre 2…');
   try {
     const result = await callAPI('save_ingreso', body);
-    showToast('Guardado ✓ — Notificación enviada a la líder', 'success');
+    showStatusBanner('✅ Sobre 2 guardado — Notificación enviada a la líder', 4000);
     loadPendientes();
     // Show redirect to Corte de Caja
     showCorteRedirect(fecha);
   } catch (err) {
-    showToast('Error: ' + err.message, 'error');
+    showStatusBanner('❌ Error: ' + err.message, 5000);
   }
 }
 
@@ -1445,6 +1476,7 @@ async function saveVentasPorMesa() {
 
   const sales = collectMesaSales();
 
+  showStatusBanner('⏳ Guardando ventas y calculando bonos…');
   try {
     const result = await callAPI('save_ventas_mesa', {
       ventasMesa: {
@@ -1454,10 +1486,10 @@ async function saveVentasPorMesa() {
       }
     });
 
-    showToast('Ventas guardadas y bonos calculados ✓', 'success');
+    showStatusBanner('✅ Ventas guardadas y bonos calculados', 4000);
     displayBonos(result);
   } catch (err) {
-    showToast('Error: ' + err.message, 'error');
+    showStatusBanner('❌ Error: ' + err.message, 5000);
   }
 }
 
@@ -1472,6 +1504,7 @@ async function calcBonosPreview() {
     return;
   }
 
+  showStatusBanner('⏳ Calculando bonos…');
   try {
     // Auto-sum PagosRecibidos from INGRESOS for the date range
     let totalPR = 0;
@@ -1490,9 +1523,9 @@ async function calcBonosPreview() {
       pagosRecibidos: totalPR
     });
     displayBonos(result);
-    showToast('Vista previa calculada (no guardada)', 'success');
+    showStatusBanner('✅ Vista previa calculada (no guardada)', 3000);
   } catch (err) {
-    showToast('Error: ' + err.message, 'error');
+    showStatusBanner('❌ Error: ' + err.message, 5000);
   }
 }
 

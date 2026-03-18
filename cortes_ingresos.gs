@@ -16,6 +16,8 @@
  * - INGRESOS: master daily income + invoicing (the brain)
  * - NETO_MENSUAL: monthly income - expenses summary
  * - CONFIG_CAJAS: dynamic register configuration
+ * - PORCENTAJES_MESA: editable bonus percentage matrix
+ * - VENTAS_MESA: biweekly mesa sales + calculated bonuses
  */
 
 // ══════════════════════════════════════════════
@@ -115,6 +117,53 @@ const CONFIG_CAJAS_HEADERS = [
   'Caja', 'Tipo', 'Activa', 'Orden'
 ];
 
+// Bonus mesas — the 9 production/station mesas that have percentage-based formulas
+const BONUS_MESAS = [
+  'Produccion1', 'Produccion2', 'Produccion3',
+  'Casa1', 'Casa2', 'Cocina1', 'Cocina2', 'Cocina3', 'Express'
+];
+const BONUS_MESA_LABELS = {
+  'Produccion1': 'Producción 1', 'Produccion2': 'Producción 2', 'Produccion3': 'Producción 3',
+  'Casa1': 'Casa 1', 'Casa2': 'Casa 2',
+  'Cocina1': 'Cocina 1', 'Cocina2': 'Cocina 2', 'Cocina3': 'Cocina 3',
+  'Express': 'Express'
+};
+
+// Source mesas (rows in the percentage matrix) — where sales originate
+const PCTJ_SOURCE_MESAS = [
+  'Cocina1', 'Cocina2', 'Cocina3', 'Casa1', 'Casa2', 'Express',
+  'Produccion1', 'Produccion2', 'Produccion3'
+];
+
+const PORCENTAJES_TAB = 'PORCENTAJES_MESA';
+const VENTAS_MESA_TAB = 'VENTAS_MESA';
+// Order matches Shopify "Ventas por Proveedor" report exactly
+const ALL_MESAS = [
+  'Casa1', 'Casa2', 'Cocina1', 'Cocina2', 'Cocina3',
+  'Express', 'FrutasVerduras', 'Granja', 'MermasCanastas',
+  'Produccion1', 'Produccion2', 'Produccion3', 'ProveedorVentas'
+];
+
+const VENTAS_MESA_HEADERS = [
+  'ID', 'FechaInicio', 'FechaFin',
+  // ALL mesa/vendor sales (matches Shopify "Ventas por Proveedor")
+  'Casa1', 'Casa2', 'Cocina1', 'Cocina2', 'Cocina3',
+  'Express', 'FrutasVerduras', 'Granja', 'MermasCanastas',
+  'Produccion1', 'Produccion2', 'Produccion3', 'ProveedorVentas',
+  // Aggregate for flat-rate bonuses
+  'PagosRecibidos',
+  // Calculated bonuses per mesa
+  'Bono_Produccion1', 'Bono_Produccion2', 'Bono_Produccion3',
+  'Bono_Casa1', 'Bono_Casa2',
+  'Bono_Cocina1', 'Bono_Cocina2', 'Bono_Cocina3',
+  'Bono_Express',
+  // Flat-rate bonuses
+  'Bono_AuxTienda', 'Bono_LiderTienda',
+  // Grand totals
+  'TotalBonos',
+  'Created_At', 'Updated_At'
+];
+
 // Denomination multipliers for calculating TotalEfectivo
 const DENOMINATION_VALUES = {
   'D_1000': 1000, 'D_500': 500, 'D_200': 200, 'D_100': 100,
@@ -156,13 +205,30 @@ function getDenomValues(obj) {
 // ══════════════════════════════════════════════
 
 function parseDateInfo(fechaStr) {
-  const d = new Date(fechaStr);
-  if (isNaN(d.getTime())) return { dia: '', mes: '', mesNum: 0, anio: 0 };
+  // Parse date components directly to avoid UTC timezone offset
+  // (new Date("2026-03-14") = midnight UTC = March 13 evening in Mexico → wrong day)
+  const parts = String(fechaStr).split(/[-\/T]/);
+  if (parts.length < 3) {
+    const d = new Date(fechaStr);
+    if (isNaN(d.getTime())) return { dia: '', mes: '', mesNum: 0, anio: 0 };
+    // Add 12 hours to avoid timezone boundary issues
+    d.setHours(d.getHours() + 12);
+    return {
+      dia: DIAS_SEMANA[d.getDay()],
+      mes: MESES[d.getMonth() + 1],
+      mesNum: d.getMonth() + 1,
+      anio: d.getFullYear()
+    };
+  }
+  const year = parseInt(parts[0]);
+  const month = parseInt(parts[1]);
+  const day = parseInt(parts[2]);
+  const d = new Date(year, month - 1, day, 12, 0, 0); // noon local time
   return {
     dia: DIAS_SEMANA[d.getDay()],
-    mes: MESES[d.getMonth() + 1],
-    mesNum: d.getMonth() + 1,
-    anio: d.getFullYear()
+    mes: MESES[month],
+    mesNum: month,
+    anio: year
   };
 }
 
@@ -713,44 +779,60 @@ function getIngresos(params) {
 
 function getPendientesSobre2(params) {
   const month = params.month || new Date().toISOString().slice(0, 7);
+  const ssTz = SpreadsheetApp.getActiveSpreadsheet().getSpreadsheetTimeZone();
+
+  // Helper: normalize any date value to YYYY-MM-DD using the spreadsheet's own timezone
+  function normDate(val) {
+    if (!val) return '';
+    if (val instanceof Date) {
+      return Utilities.formatDate(val, ssTz, 'yyyy-MM-dd');
+    }
+    const s = String(val).trim();
+    if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
+    // Try parsing other formats
+    const d = new Date(s);
+    if (!isNaN(d.getTime())) return Utilities.formatDate(d, ssTz, 'yyyy-MM-dd');
+    return s;
+  }
 
   // Get all Corte de Tienda entries for the month
   const cortes = sheetToObjects(CORTE_TIENDA_TAB, CORTE_TIENDA_HEADERS);
-  const cortesMonth = cortes.filter(c => formatDateStr(c.Fecha).startsWith(month));
+  const cortesMonth = cortes.filter(c => normDate(c.Fecha).startsWith(month));
 
-  // Get all INGRESOS entries for the month (deduplicated)
-  const ingresos = sheetToObjects(INGRESOS_TAB, INGRESOS_HEADERS);
-  const ingByDate = {};
-  ingresos.forEach(r => {
-    const fecha = formatDateStr(r.Fecha);
-    if (!fecha.startsWith(month)) return;
-    const existing = ingByDate[fecha];
-    if (!existing || (parseFloat(r.Sobre2) || 0) > (parseFloat(existing.Sobre2) || 0)) {
-      ingByDate[fecha] = r;
+  // Build a Set of ALL INGRESOS dates for the month (robust matching)
+  const ingSheet = getOrCreateTab(INGRESOS_TAB, INGRESOS_HEADERS);
+  const ingData = ingSheet.getDataRange().getValues();
+  const ingHeaders = ingData[0];
+  const fechaCol = ingHeaders.indexOf('Fecha');
+  const ingresosDates = new Set();
+
+  if (fechaCol >= 0) {
+    for (let i = 1; i < ingData.length; i++) {
+      const raw = ingData[i][fechaCol];
+      if (!raw) continue;
+      const nd = normDate(raw);
+      if (nd.startsWith(month)) ingresosDates.add(nd);
     }
-  });
+  }
 
-  // Find corte dates where Sobre2 is missing or zero
+  // Find corte dates with no matching INGRESOS entry
   const pending = [];
   const seen = {};
   cortesMonth.forEach(c => {
-    const fecha = formatDateStr(c.Fecha);
-    if (seen[fecha]) return; // skip duplicate corte dates
+    const fecha = normDate(c.Fecha);
+    if (seen[fecha]) return;
     seen[fecha] = true;
 
-    const ing = ingByDate[fecha];
-    const sobre2 = ing ? (parseFloat(ing.Sobre2) || 0) : 0;
-
-    if (sobre2 === 0) {
+    if (!ingresosDates.has(fecha)) {
       pending.push({
         Fecha: fecha,
-        PagosRecibidos: parseFloat(c.PagosRecibidos) || (ing ? parseFloat(ing.PagosRecibidos) : 0) || 0,
-        Tarjeta: parseFloat(c.Tarjeta) || (ing ? parseFloat(ing.Tarjeta) : 0) || 0,
-        Transferencias: parseFloat(c.Transferencias) || (ing ? parseFloat(ing.Transferencias) : 0) || 0,
-        Cashback: parseFloat(c.Cashback) || (ing ? parseFloat(ing.Cashback) : 0) || 0,
-        FaltanteSobrante: parseFloat(c.FaltanteSobrante) || (ing ? parseFloat(ing.FaltanteSobrante) : 0) || 0,
+        PagosRecibidos: parseFloat(c.PagosRecibidos) || 0,
+        Tarjeta: parseFloat(c.Tarjeta) || 0,
+        Transferencias: parseFloat(c.Transferencias) || 0,
+        Cashback: parseFloat(c.Cashback) || 0,
+        FaltanteSobrante: parseFloat(c.FaltanteSobrante) || 0,
         Sobre2: 0,
-        hasIngreso: !!ing
+        hasIngreso: false
       });
     }
   });
@@ -1642,4 +1724,335 @@ function getMesaSales(params) {
     mesaSales: totals,
     grandTotal: Object.values(totals).reduce((s, v) => s + v, 0)
   };
+}
+
+
+// ══════════════════════════════════════════════════════════════
+// PORCENTAJES MESA — Editable bonus percentage matrix
+// ══════════════════════════════════════════════════════════════
+
+/**
+ * Seeds the PORCENTAJES_MESA tab with default data if empty.
+ * Layout:
+ *   Row 1: Header row — blank, then each BONUS_MESA key
+ *   Rows 2-11: Source mesas (PCTJ_SOURCE_MESAS) with percentage values
+ *   Row 12: blank separator
+ *   Row 13: "TasaBono" — multiplier per destination mesa (0.005, 0.006, 0.007)
+ *   Row 14: "TasaPagosRecibidos" — flat % of PagosRecibidos per destination mesa
+ *   Row 15: blank separator
+ *   Row 16: "AuxTienda_Tasa" — flat rate label + value in col B
+ *   Row 17: "LiderTienda_Tasa" — flat rate label + value in col B
+ */
+function seedPorcentajesMesa() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet = ss.getSheetByName(PORCENTAJES_TAB);
+  if (!sheet) {
+    sheet = ss.insertSheet(PORCENTAJES_TAB);
+  }
+
+  // Check if already has data
+  if (sheet.getLastRow() > 1) return sheet;
+
+  // Header row: blank + destination mesa labels
+  const header = ['Mesa / Fuente'];
+  BONUS_MESAS.forEach(m => header.push(BONUS_MESA_LABELS[m] || m));
+  sheet.getRange(1, 1, 1, header.length).setValues([header]);
+
+  // Default percentage matrix — rows = source, cols = destination (BONUS_MESAS order)
+  // Destination order: Prod1, Prod2, Prod3, Casa1, Casa2, Cocina1, Cocina2, Cocina3, Express
+  const matrix = {
+    'Cocina1':      [0.05,  0.20,  0.05,  0,     0,     0.60,  0.10,  0,     0    ],
+    'Cocina2':      [0.40,  0,     0,     0,     0,     0,     0.60,  0,     0    ],
+    'Cocina3':      [0,     0.15,  0,     0,     0,     0,     0,     0.85,  0    ],
+    'Casa1':        [0.05,  0,     0,     0.95,  0,     0,     0,     0,     0    ],
+    'Casa2':        [0.05,  0.175, 0.175, 0,     0.60,  0,     0,     0,     0    ],
+    'Express':      [0.08,  0.11,  0.11,  0,     0.25,  0,     0,     0.05,  0.40 ],
+    'Produccion1':  [1.00,  0,     0,     0,     0,     0,     0,     0,     0    ],
+    'Produccion2':  [0,     1.00,  0,     0,     0,     0,     0,     0,     0    ],
+    'Produccion3':  [0.08,  0,     0.92,  0,     0,     0,     0,     0,     0    ]
+  };
+
+  const sourceLabels = {
+    'Cocina1': 'Cocina 1', 'Cocina2': 'Cocina 2', 'Cocina3': 'Cocina 3',
+    'Casa1': 'Casa 1', 'Casa2': 'Casa 2', 'Express': 'Express',
+    'Produccion1': 'Producción 1', 'Produccion2': 'Producción 2', 'Produccion3': 'Producción 3'
+  };
+
+  // Write source rows
+  PCTJ_SOURCE_MESAS.forEach((src, i) => {
+    const row = [sourceLabels[src] || src, ...matrix[src]];
+    sheet.getRange(i + 2, 1, 1, row.length).setValues([row]);
+  });
+
+  // Blank row 12
+  const blankRow = PCTJ_SOURCE_MESAS.length + 2; // row 12
+
+  // TasaBono row (row 13)
+  // Order: Prod1, Prod2, Prod3, Casa1, Casa2, Cocina1, Cocina2, Cocina3, Express
+  const tasaBono = ['Tasa Bono', 0.005, 0.006, 0.006, 0.007, 0.006, 0.007, 0.007, 0.006, 0.007];
+  sheet.getRange(blankRow + 1, 1, 1, tasaBono.length).setValues([tasaBono]);
+
+  // TasaPagosRecibidos row (row 14)
+  // Only Prod3, Casa1 have flat PagosRecibidos rates among mesa bonuses
+  const tasaPR = ['Tasa PagosRecibidos', 0, 0, 0.00015, 0.0003, 0, 0, 0, 0, 0];
+  sheet.getRange(blankRow + 2, 1, 1, tasaPR.length).setValues([tasaPR]);
+
+  // Blank row 15, then flat-rate roles
+  const flatRow = blankRow + 4; // row 16
+  sheet.getRange(flatRow, 1, 1, 2).setValues([['Aux Tienda (tasa PR)', 0.0006]]);
+  sheet.getRange(flatRow + 1, 1, 1, 2).setValues([['Líder Tienda (tasa PR)', 0.0008]]);
+  sheet.getRange(flatRow + 2, 1, 1, 2).setValues([['Cantidad Aux Tienda', 4]]);
+
+  // Format: bold header row, percentage format for matrix
+  sheet.getRange(1, 1, 1, header.length).setFontWeight('bold');
+  sheet.getRange(blankRow + 1, 1, 1, 1).setFontWeight('bold');
+  sheet.getRange(blankRow + 2, 1, 1, 1).setFontWeight('bold');
+  sheet.getRange(flatRow, 1, 2, 1).setFontWeight('bold');
+
+  // Auto-resize columns
+  for (let c = 1; c <= header.length; c++) {
+    sheet.autoResizeColumn(c);
+  }
+
+  log('SEED_PORCENTAJES', 'Created PORCENTAJES_MESA tab with default values');
+  return sheet;
+}
+
+/**
+ * Reads the percentage matrix, rates, and flat-rate roles from PORCENTAJES_MESA.
+ * Returns a structured object the frontend and calcBonos can use.
+ */
+function getPercentageMatrix() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet = ss.getSheetByName(PORCENTAJES_TAB);
+  if (!sheet || sheet.getLastRow() < 2) {
+    sheet = seedPorcentajesMesa();
+  }
+
+  const data = sheet.getDataRange().getValues();
+  const destMesas = BONUS_MESAS; // column order
+
+  // Parse percentage matrix (rows 2 through PCTJ_SOURCE_MESAS.length + 1)
+  const matrix = {};
+  for (let i = 1; i <= PCTJ_SOURCE_MESAS.length && i < data.length; i++) {
+    const sourceKey = PCTJ_SOURCE_MESAS[i - 1];
+    const row = data[i];
+    const pcts = {};
+    destMesas.forEach((dest, j) => {
+      pcts[dest] = parseFloat(row[j + 1]) || 0;
+    });
+    matrix[sourceKey] = pcts;
+  }
+
+  // Parse TasaBono row (after source rows + blank)
+  const tasaBonoRow = PCTJ_SOURCE_MESAS.length + 2; // 0-indexed in data array
+  const tasaBono = {};
+  if (tasaBonoRow < data.length) {
+    destMesas.forEach((dest, j) => {
+      tasaBono[dest] = parseFloat(data[tasaBonoRow][j + 1]) || 0;
+    });
+  }
+
+  // Parse TasaPagosRecibidos row
+  const tasaPRRow = tasaBonoRow + 1;
+  const tasaPR = {};
+  if (tasaPRRow < data.length) {
+    destMesas.forEach((dest, j) => {
+      tasaPR[dest] = parseFloat(data[tasaPRRow][j + 1]) || 0;
+    });
+  }
+
+  // Parse flat-rate roles
+  const flatRow = tasaBonoRow + 3; // skip blank row
+  const auxTasa = (flatRow < data.length) ? (parseFloat(data[flatRow][1]) || 0) : 0.0006;
+  const liderTasa = (flatRow + 1 < data.length) ? (parseFloat(data[flatRow + 1][1]) || 0) : 0.0008;
+  const auxCount = (flatRow + 2 < data.length) ? (parseInt(data[flatRow + 2][1]) || 4) : 4;
+
+  return {
+    ok: true,
+    destMesas,
+    sourceMesas: PCTJ_SOURCE_MESAS,
+    matrix,
+    tasaBono,
+    tasaPagosRecibidos: tasaPR,
+    flatRates: {
+      auxTienda: auxTasa,
+      liderTienda: liderTasa,
+      auxCount: auxCount
+    },
+    destLabels: BONUS_MESA_LABELS
+  };
+}
+
+
+// ══════════════════════════════════════════════════════════════
+// VENTAS MESA — Biweekly mesa sales + bonus calculation
+// ══════════════════════════════════════════════════════════════
+
+/**
+ * Calculates bonuses for all mesas given sales data and PagosRecibidos.
+ * Reads the percentage matrix from PORCENTAJES_MESA (fully dynamic — edit the sheet, bonuses change).
+ */
+function calcBonos(params) {
+  // Handle sales as JSON string (GET request) or object (POST request)
+  let sales = params.sales || {};
+  if (typeof sales === 'string') {
+    try { sales = JSON.parse(sales); } catch(e) { sales = {}; }
+  }
+  const pagosRecibidos = parseFloat(params.pagosRecibidos) || 0;
+
+  // Read the editable matrix
+  const pm = getPercentageMatrix();
+  const bonos = {};
+
+  // For each destination mesa, calculate its weighted sales total then multiply by its rate
+  pm.destMesas.forEach(dest => {
+    let weightedTotal = 0;
+
+    // Sum: for each source mesa, sales[source] × matrix[source][dest]
+    pm.sourceMesas.forEach(src => {
+      const pct = (pm.matrix[src] && pm.matrix[src][dest]) ? pm.matrix[src][dest] : 0;
+      const srcSales = parseFloat(sales[src]) || 0;
+      weightedTotal += srcSales * pct;
+    });
+
+    // Apply the mesa's bonus rate
+    const rate = pm.tasaBono[dest] || 0;
+    let bono = weightedTotal * rate;
+
+    // Add flat PagosRecibidos component if applicable
+    const prRate = pm.tasaPagosRecibidos[dest] || 0;
+    if (prRate > 0) {
+      bono += pagosRecibidos * prRate;
+    }
+
+    bonos[dest] = Math.round(bono * 100) / 100;
+  });
+
+  // Flat-rate roles (not mesa-based, just PagosRecibidos × rate)
+  const auxPerPerson = Math.round(pagosRecibidos * pm.flatRates.auxTienda * 100) / 100;
+  const auxCount = pm.flatRates.auxCount || 4;
+  bonos['AuxTienda'] = auxPerPerson;
+  bonos['AuxTienda_Total'] = Math.round(auxPerPerson * auxCount * 100) / 100;
+  bonos['AuxTienda_Count'] = auxCount;
+  bonos['LiderTienda'] = Math.round(pagosRecibidos * pm.flatRates.liderTienda * 100) / 100;
+
+  // Total: sum of 9 mesa bonuses + (aux per person × count) + líder
+  let total = 0;
+  pm.destMesas.forEach(d => total += bonos[d] || 0);
+  total += bonos['AuxTienda_Total'] + bonos['LiderTienda'];
+
+  return {
+    ok: true,
+    bonos,
+    totalBonos: Math.round(total * 100) / 100,
+    pagosRecibidos,
+    salesUsed: sales
+  };
+}
+
+/**
+ * Saves biweekly mesa sales to VENTAS_MESA tab and calculates bonuses.
+ * Also auto-sums PagosRecibidos from INGRESOS for the date range.
+ */
+function saveVentasMesa(body) {
+  const sheet = getOrCreateTab(VENTAS_MESA_TAB, VENTAS_MESA_HEADERS);
+  const vm = body.ventasMesa || body;
+  const fechaInicio = vm.FechaInicio;
+  const fechaFin = vm.FechaFin;
+
+  if (!fechaInicio || !fechaFin) {
+    throw new Error('FechaInicio y FechaFin son requeridas');
+  }
+
+  // Auto-sum PagosRecibidos from INGRESOS for the date range
+  const ssTz = SpreadsheetApp.getActiveSpreadsheet().getSpreadsheetTimeZone();
+  const ingresos = sheetToObjects(INGRESOS_TAB, INGRESOS_HEADERS);
+  let totalPR = 0;
+  ingresos.forEach(r => {
+    const fecha = formatDateStr(r.Fecha);
+    if (fecha >= fechaInicio && fecha <= fechaFin) {
+      totalPR += parseFloat(r.PagosRecibidos) || 0;
+    }
+  });
+
+  // Use provided PagosRecibidos if given, otherwise auto-sum
+  const pagosRecibidos = vm.PagosRecibidos !== undefined ? parseFloat(vm.PagosRecibidos) : totalPR;
+
+  // Collect ALL mesa sales (matches Shopify vendor categories)
+  const sales = {};
+  ALL_MESAS.forEach(m => {
+    sales[m] = parseFloat(vm[m]) || 0;
+  });
+
+  // Calculate bonuses (only uses the 9 BONUS_MESAS internally)
+  const bonoResult = calcBonos({ sales, pagosRecibidos });
+  const bonos = bonoResult.bonos;
+
+  // Check for existing period (upsert)
+  const data = sheet.getDataRange().getValues();
+  let existingRow = -1;
+  for (let i = 1; i < data.length; i++) {
+    if (String(data[i][1]) === fechaInicio && String(data[i][2]) === fechaFin) {
+      existingRow = i + 1;
+      break;
+    }
+  }
+
+  const id = existingRow > 0 ? data[existingRow - 1][0] : 'VM' + Date.now();
+  const now = new Date().toISOString();
+
+  // Row includes ALL mesa sales + bonuses (order must match VENTAS_MESA_HEADERS)
+  const mesaSalesValues = ALL_MESAS.map(m => sales[m] || 0);
+  const row = [
+    id, fechaInicio, fechaFin,
+    ...mesaSalesValues,
+    pagosRecibidos,
+    bonos.Produccion1, bonos.Produccion2, bonos.Produccion3,
+    bonos.Casa1, bonos.Casa2,
+    bonos.Cocina1, bonos.Cocina2, bonos.Cocina3,
+    bonos.Express,
+    bonos.AuxTienda, bonos.LiderTienda,
+    bonoResult.totalBonos,
+    existingRow > 0 ? data[existingRow - 1][VENTAS_MESA_HEADERS.indexOf('Created_At')] : now,
+    now
+  ];
+
+  if (existingRow > 0) {
+    sheet.getRange(existingRow, 1, 1, row.length).setValues([row]);
+    log('UPDATE_VENTAS_MESA', fechaInicio + ' to ' + fechaFin + ' | Total bonos: $' + bonoResult.totalBonos);
+  } else {
+    sheet.appendRow(row);
+    log('SAVE_VENTAS_MESA', id + ' | ' + fechaInicio + ' to ' + fechaFin + ' | Total bonos: $' + bonoResult.totalBonos);
+  }
+
+  SpreadsheetApp.flush();
+
+  return {
+    ok: true,
+    id,
+    bonos,
+    totalBonos: bonoResult.totalBonos,
+    pagosRecibidos,
+    sales,
+    updated: existingRow > 0,
+    message: existingRow > 0 ? 'Ventas por mesa actualizadas' : 'Ventas por mesa guardadas'
+  };
+}
+
+/**
+ * Gets saved ventas mesa periods (for history / listing).
+ */
+function getVentasMesa(params) {
+  const all = sheetToObjects(VENTAS_MESA_TAB, VENTAS_MESA_HEADERS);
+  let filtered = all;
+
+  if (params.fechaInicio && params.fechaFin) {
+    filtered = filtered.filter(r =>
+      String(r.FechaInicio) === params.fechaInicio &&
+      String(r.FechaFin) === params.fechaFin
+    );
+  }
+
+  return { ok: true, periodos: filtered, count: filtered.length };
 }
