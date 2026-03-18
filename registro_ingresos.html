@@ -851,24 +851,24 @@
     </div>
 
     <h3>Detalle Diario</h3>
-    <div class="tbl-wrap">
-      <table>
+    <div class="tbl-wrap" style="overflow-x:auto;">
+      <table style="font-size:12px;min-width:1100px;">
         <thead>
           <tr>
-            <th>Fecha</th>
-            <th>Pagos Recibidos</th>
-            <th>Sobre 2</th>
-            <th>A Facturar</th>
-            <th>Fact. Clientes</th>
-            <th>Fact. Gen1</th>
-            <th>Fact. Gen2</th>
-            <th>Fact. Gen3</th>
-            <th>Fact. Gen4</th>
-            <th>Fact. Gen5</th>
-            <th>Fact. Gen6</th>
+            <th style="white-space:nowrap;">Fecha</th>
+            <th style="white-space:nowrap;">Pagos Rec.</th>
+            <th style="white-space:nowrap;">Sobre 2</th>
+            <th style="white-space:nowrap;">A Fact.</th>
+            <th style="white-space:nowrap;">F. Client</th>
+            <th style="white-space:nowrap;">Gen1</th>
+            <th style="white-space:nowrap;">Gen2</th>
+            <th style="white-space:nowrap;">Gen3</th>
+            <th style="white-space:nowrap;">Gen4</th>
+            <th style="white-space:nowrap;">Gen5</th>
+            <th style="white-space:nowrap;">Gen6</th>
             <th>CFDI</th>
-            <th>Total Facturado</th>
-            <th>Falta</th>
+            <th style="white-space:nowrap;">Facturado</th>
+            <th style="white-space:nowrap;">Falta</th>
           </tr>
         </thead>
         <tbody id="facturacion-table-body">
@@ -1668,14 +1668,14 @@ async function loadFacturacionMonth() {
         <td>${formatPeso(r.PagosRecibidos)}</td>
         <td>${formatPeso(r.Sobre2)}</td>
         <td>${formatPeso((r.PagosRecibidos || 0) - (r.Sobre2 || 0))}</td>
-        <td><input type="number" data-fecha="${r.Fecha}" data-field="FactClientes" value="${r.FactClientes || 0}" placeholder="0.00"></td>
-        <td><input type="number" data-fecha="${r.Fecha}" data-field="FactGen1" value="${r.FactGen1 || 0}" placeholder="0.00"></td>
-        <td><input type="number" data-fecha="${r.Fecha}" data-field="FactGen2" value="${r.FactGen2 || 0}" placeholder="0.00"></td>
-        <td><input type="number" data-fecha="${r.Fecha}" data-field="FactGen3" value="${r.FactGen3 || 0}" placeholder="0.00"></td>
-        <td><input type="number" data-fecha="${r.Fecha}" data-field="FactGen4" value="${r.FactGen4 || 0}" placeholder="0.00"></td>
-        <td><input type="number" data-fecha="${r.Fecha}" data-field="FactGen5" value="${r.FactGen5 || 0}" placeholder="0.00"></td>
-        <td><input type="number" data-fecha="${r.Fecha}" data-field="FactGen6" value="${r.FactGen6 || 0}" placeholder="0.00"></td>
-        <td><input type="text" data-fecha="${r.Fecha}" data-field="FacturasCFDI" value="${r.FacturasCFDI || ''}" placeholder="CFDI"></td>
+        <td><input type="number" data-fecha="${(r.Fecha||'').slice(0,10)}" data-field="FactClientes" value="${r.FactClientes || 0}" style="width:80px"></td>
+        <td><input type="number" data-fecha="${(r.Fecha||'').slice(0,10)}" data-field="FactGen1" value="${r.FactGen1 || 0}" style="width:80px"></td>
+        <td><input type="number" data-fecha="${(r.Fecha||'').slice(0,10)}" data-field="FactGen2" value="${r.FactGen2 || 0}" style="width:80px"></td>
+        <td><input type="number" data-fecha="${(r.Fecha||'').slice(0,10)}" data-field="FactGen3" value="${r.FactGen3 || 0}" style="width:80px"></td>
+        <td><input type="number" data-fecha="${(r.Fecha||'').slice(0,10)}" data-field="FactGen4" value="${r.FactGen4 || 0}" style="width:80px"></td>
+        <td><input type="number" data-fecha="${(r.Fecha||'').slice(0,10)}" data-field="FactGen5" value="${r.FactGen5 || 0}" style="width:80px"></td>
+        <td><input type="number" data-fecha="${(r.Fecha||'').slice(0,10)}" data-field="FactGen6" value="${r.FactGen6 || 0}" style="width:80px"></td>
+        <td><input type="text" data-fecha="${(r.Fecha||'').slice(0,10)}" data-field="FacturasCFDI" value="${r.FacturasCFDI || ''}" placeholder="CFDI" style="width:60px"></td>
         <td class="total">${formatPeso(r.TotalFacturado)}</td>
         <td class="total">${formatPeso((r.TotalXFacturar || 0) - (r.TotalFacturado || 0))}</td>
       </tr>
@@ -1687,24 +1687,34 @@ async function loadFacturacionMonth() {
 
 async function saveFacturacion() {
   const month = document.getElementById('facturacion-month').value;
-  const inputs = document.querySelectorAll('[data-fecha]');
+  const inputs = document.querySelectorAll('#tab-facturacion [data-fecha]');
 
   const changes = {};
   inputs.forEach(inp => {
     const fecha = inp.dataset.fecha;
     const field = inp.dataset.field;
+    if (!fecha || !field) return;
     if (!changes[fecha]) changes[fecha] = {};
     changes[fecha][field] = field.includes('CFDI') ? inp.value : (parseFloat(inp.value) || 0);
   });
 
+  const dateCount = Object.keys(changes).length;
+  if (dateCount === 0) {
+    showStatusBanner('❌ No hay datos para guardar', 3000);
+    return;
+  }
+
+  showStatusBanner(`⏳ Guardando facturación (${dateCount} fechas)…`);
   try {
+    let saved = 0;
     for (const [fecha, updates] of Object.entries(changes)) {
       await callAPI('update_facturacion', { fecha, ...updates });
+      saved++;
     }
-    showToast('Facturación actualizada ✓', 'success');
+    showStatusBanner(`✅ Facturación actualizada — ${saved} fechas guardadas`, 4000);
     loadFacturacionMonth();
   } catch (err) {
-    showToast('Error: ' + err.message, 'error');
+    showStatusBanner('❌ Error: ' + err.message, 5000);
   }
 }
 
