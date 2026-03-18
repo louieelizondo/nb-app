@@ -36,29 +36,21 @@ function deduplicateMP() {
     return { ok: true, removed: 0, message: 'No duplicates found' };
   }
 
-  // For each group, keep the row with the most recent price date (col D = index 3)
+  // For each group, keep the FIRST occurrence (lowest row index), delete later ones.
+  // The original products live at the top of the sheet with formulas & supplier groupings.
+  // Duplicates from migration land at the bottom.
   const rowsToDelete = [];
   const log = [];
 
   Object.keys(dupes).forEach(key => {
     const rows = dupes[key];
-    let bestRow = rows[0];
-    let bestDate = parseDate(data[rows[0]][3]);
+    // rows are already in ascending order (first occurrence = rows[0])
+    const keepRow = rows[0];
 
     for (let j = 1; j < rows.length; j++) {
-      const d = parseDate(data[rows[j]][3]);
-      if (d > bestDate) {
-        bestDate = d;
-        bestRow = rows[j];
-      }
+      rowsToDelete.push(rows[j] + 1); // 1-indexed for Sheet
+      log.push('DELETE row ' + (rows[j] + 1) + ': "' + data[rows[j]][0] + '" (keeping row ' + (keepRow + 1) + ')');
     }
-
-    rows.forEach(r => {
-      if (r !== bestRow) {
-        rowsToDelete.push(r + 1); // 1-indexed for Sheet
-        log.push('DELETE row ' + (r + 1) + ': "' + data[r][0] + '" (keeping row ' + (bestRow + 1) + ')');
-      }
-    });
   });
 
   // Delete from bottom to top to avoid row shifting

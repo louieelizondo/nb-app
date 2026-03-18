@@ -37,7 +37,7 @@ const FACTURAS_HEADERS = [
 const INV_TAB = 'INVENTARIO_PRODUCTOS';
 const INV_HEADERS = [
   'ID', 'Producto', 'Categoria', 'Ubicacion', 'Tienda', 'Unidad',
-  'Unidad_Compra',                              // pu: what you ORDER in (Caja 5kg, Bulto 10kg)
+  'Unidad_Compra',
   'Forma_Pedido', 'Inventario_Min', 'Inventario_Max', 'Activo',
   'Temporada', 'Tags', 'Variantes'
 ];
@@ -77,6 +77,9 @@ function doGet(e) {
       case 'list_orders':   return jsonResp(listOrders());
       case 'seed_from_mp':  return jsonResp(seedProductsFromMP());
       case 'health':        return jsonResp({ ok: true, ts: new Date().toISOString() });
+      // V3: Portal de Pagos server-side filtering & autocomplete
+      case 'list_recent':      return jsonResp(listRecentFacturas(e.parameter));
+      case 'list_proveedores': return jsonResp(listProveedores());
       // Cortes & Ingresos
       case 'get_cortes_dia':       return jsonResp(getCortesDia(e.parameter));
       case 'get_corte_tienda':     return jsonResp(getCorteTienda(e.parameter));
@@ -88,18 +91,12 @@ function doGet(e) {
       case 'get_payment_trends':   return jsonResp(getPaymentTrends(e.parameter));
       case 'get_faltante_history': return jsonResp(getFaltanteHistory(e.parameter));
       case 'get_mesa_sales':       return jsonResp(getMesaSales(e.parameter));
-      case 'get_pendientes_sobre2': return jsonResp(getPendientesSobre2(e.parameter));
-      case 'get_percentage_matrix': return jsonResp(getPercentageMatrix());
-      case 'get_ventas_mesa':       return jsonResp(getVentasMesa(e.parameter));
-      case 'calc_bonos':            return jsonResp(calcBonos(e.parameter));
       case 'get_config_cajas':     return jsonResp({ cajas: getConfigCajas() });
       // Shopify API
       case 'get_shopify_daily_summary': return jsonResp(getShopifyDailySummary(e.parameter));
       case 'get_shopify_products':      return jsonResp(getShopifyProducts(e.parameter));
       case 'get_shopify_inventory':     return jsonResp(getShopifyInventory(e.parameter));
       case 'shopify_health':            return jsonResp(shopifyHealthCheck());
-      // Inventory v2 (MATERIA PRIMA as single source)
-      case 'list_inventory':            return jsonResp(listInventory());
       default:              return jsonResp({ error: 'Unknown action: ' + action }, 400);
     }
   } catch(err) {
@@ -138,6 +135,8 @@ function doPost(e) {
       case 'add_ingredient':       return jsonResp(addIngredient(body));
       case 'add_proveedor':        return jsonResp(addProveedor(body));
       case 'save_shopping_list':   return jsonResp(saveShoppingList(body));
+      // V3: Single atomic payment
+      case 'pay_factura':          return jsonResp(payFactura(body));
       // Cortes & Ingresos
       case 'save_corte_individual':   return jsonResp(saveCorteIndividual(body));
       case 'delete_corte_individual': return jsonResp(deleteCorteIndividual(body));
@@ -150,11 +149,6 @@ function doPost(e) {
       case 'update_neto_mensual':     return jsonResp(updateNetoMensual(body));
       case 'sync_shopify':            return jsonResp(syncShopifyDaily(body));
       case 'update_config_cajas':     return jsonResp(updateConfigCajas(body));
-      // Ventas por Mesa + Bonos
-      case 'save_ventas_mesa':        return jsonResp(saveVentasMesa(body));
-      // Inventory v2 (MATERIA PRIMA as single source)
-      case 'save_inventory_counts':    return jsonResp(saveInventoryCounts(body));
-      case 'update_inv_field':         return jsonResp(updateInvField(body));
       default:                 return jsonResp({ error: 'Unknown action: ' + action }, 400);
     }
   } catch(err) {
@@ -462,18 +456,6 @@ function claudeAnalyze(body) {
 // PRICE UPDATES → MATERIA PRIMA
 // ══════════════════════════════════════════════
 
-/**
- * FIXED updatePrices() — corrected column indexes for current MATERIA PRIMA layout
- *
- * Current layout (March 2026):
- * A(0)=Ingrediente, B(1)=Proveedor A, C(2)=Proveedor B,
- * D(3)=Costo x Paquete ($), E(4)=Fecha de Precio,
- * F(5)=Unidades x Caja, G(6)=Volumen x Unidad,
- * H(7)=Unidad (kg/lt/pza), I(8)=Costo por kg/lt ($)
- *
- * Replace the old updatePrices() in Código.gs with this version.
- */
-
 function updatePrices(body) {
   const items = body.items;
   if (!items || !items.length) throw new Error('No items to update');
@@ -483,46 +465,43 @@ function updatePrices(body) {
   if (!mp) throw new Error('Tab "' + MP_TAB + '" not found');
 
   const data = mp.getDataRange().getValues();
-  // MATERIA PRIMA columns (current layout — March 2026):
-  // A(0)=Ingrediente, B(1)=Proveedor A, C(2)=Proveedor B,
-  // D(3)=Costo x Paquete ($), E(4)=Fecha de Precio,
-  // F(5)=Unidades x Caja, G(6)=Volumen x Unidad, H(7)=Unidad (kg/lt/pza),
-  // I(8)=Costo por kg/lt (formula — don't touch)
+  // MATERIA PRIMA columns:
+  // A(0)=Ingrediente, B(1)=Categoría, C(2)=CostoPaq, D(3)=Fecha,
+  // E(4)=UnidsCaja, F(5)=VolUnid, G(6)=Unidad, H(7)=Costo/kg-L (formula)
+  // Write whole-package price to Column C (CostoPaq)
+  // Column H (Costo/kg or /L) is a formula derived from C — don't touch it
   let updated = 0;
-  const nameCol = 0;     // A = Ingrediente
-  const costPaqCol = 3;  // D = Costo x Paquete ($)
-  const fechaCol = 4;    // E = Fecha de Precio
-  const unidadCol = 7;   // H = Unidad (kg/lt/pza)
+  const nameCol = 0;     // A = ingredient name
+  const costPaqCol = 2;  // C = whole-package cost (CostoPaq)
+  const fechaCol = 3;    // D = last price date
+  const unidadCol = 6;   // G = Unidad (unit of purchase: KG, CAJA, BULTO, etc.)
 
-  var notFound = [];
   items.forEach(item => {
     const bdName = (item.bd_name || '').trim().toLowerCase();
     // Use precio_unitario (whole-package price from invoice), NOT precio_base (per-kg/L)
     const newPrice = item.precio_unitario || item.price;
     const unidadCompra = (item.unidad_compra || '').trim().toUpperCase();
-    if (!bdName || !newPrice) { notFound.push(bdName + ' (no price)'); return; }
+    if (!bdName || !newPrice) return;
 
-    var found = false;
     for (var i = 1; i < data.length; i++) {
       var cellName = String(data[i][nameCol] || '').trim().toLowerCase();
       if (cellName === bdName) {
-        mp.getRange(i + 1, costPaqCol + 1).setValue(newPrice);  // Col D: Costo x Paquete
-        mp.getRange(i + 1, fechaCol + 1).setValue(new Date());   // Col E: Fecha de Precio
-        // Update unit (Col H) if provided
+        mp.getRange(i + 1, costPaqCol + 1).setValue(newPrice);  // Col C: Costo x Paquete
+        mp.getRange(i + 1, fechaCol + 1).setValue(new Date());   // Col D: Fecha actualizada
+        // Update unit of purchase (Col G) if provided
         if (unidadCompra) {
           mp.getRange(i + 1, unidadCol + 1).setValue(unidadCompra);
         }
-        // NOTE: Col I (Costo/kg) is a formula — don't touch it
+        // NOTE: Col A (name) is NO LONGER renamed — names stay canonical
+        // Col H (Costo/kg) should be a formula: =IF(G="KG",C, IF(AND(C>0,F>0),C/F,""))
         updated++;
-        found = true;
         break;
       }
     }
-    if (!found) notFound.push(item.bd_name + ' → $' + newPrice);
   });
 
-  log('UPDATE_PRICES', updated + ' updated, ' + notFound.length + ' not found: ' + notFound.join('; '));
-  return { ok: true, updated: updated, not_found: notFound, message: updated + ' prices updated' + (notFound.length ? ', ' + notFound.length + ' not found' : '') };
+  log('UPDATE_PRICES', updated + ' updated in MATERIA PRIMA');
+  return { ok: true, updated: updated, message: updated + ' prices updated' };
 }
 
 /**
@@ -616,11 +595,6 @@ function saveFotoToDrive(gastoId, base64Data, proveedor, folio) {
 }
 
 /**
- * Clean up photos older than 3 months.
- * Run this manually or set up a daily time-driven trigger:
- *   Triggers → Add Trigger → cleanupOldFotos → Time-driven → Day timer
- */
-/**
  * One-time fix: Set all non-Transferencia invoices with Pendiente status to Pagado.
  * Run once manually to fix historical data.
  */
@@ -642,6 +616,11 @@ function fixNonTransferEstados() {
   return { ok: true, fixed };
 }
 
+/**
+ * Clean up photos older than 3 months.
+ * Run this manually or set up a daily time-driven trigger:
+ *   Triggers → Add Trigger → cleanupOldFotos → Time-driven → Day timer
+ */
 function cleanupOldFotos() {
   const folder = getFotoFolder();
   const files = folder.getFiles();
@@ -713,7 +692,7 @@ function addProduct(body) {
     p.Ubicacion || '',
     p.Tienda || '',
     p.Unidad || '',
-    p.Unidad_Compra || '',                // pu: purchase/order unit label
+    p.Unidad_Compra || '',
     p.Forma_Pedido || 'Ir a tienda',
     p.Inventario_Min || 0,
     p.Inventario_Max || 0,
@@ -726,7 +705,6 @@ function addProduct(body) {
   log('ADD_PRODUCT', id + ' | ' + p.Producto);
 
   // Cross-write to MATERIA PRIMA so recipes can reference it
-  // addIngredient checks for duplicates, safe to call every time
   try {
     addIngredient({
       Nombre:    p.Producto   || '',
@@ -777,7 +755,6 @@ function updateProduct(body) {
 
 /**
  * One-time: Seed INVENTARIO_PRODUCTOS from the hardcoded product list.
- * Run this once to populate the Sheet, then the app reads from Sheet.
  */
 function seedProductsFromArray() {
   const sheet = getOrCreateTab(INV_TAB, INV_HEADERS);
@@ -785,7 +762,6 @@ function seedProductsFromArray() {
     log('SEED_SKIP', 'Products tab already has data (' + (sheet.getLastRow()-1) + ' rows)');
     return { ok: false, message: 'Tab already has data. Clear it first if you want to re-seed.' };
   }
-  // This will be called from the inventory app with the full product array
   return { ok: true, message: 'Ready for seeding. Send products via add_product.' };
 }
 
@@ -793,12 +769,6 @@ function seedProductsFromArray() {
 // SEED INVENTARIO_PRODUCTOS FROM MATERIA PRIMA
 // ══════════════════════════════════════════════
 
-/**
- * One-time (or safe-to-repeat) sync: read every row from MATERIA PRIMA
- * and add any missing entries into INVENTARIO_PRODUCTOS.
- * Matches by product name (case-insensitive). Will never create duplicates.
- * Call via GET ?action=seed_from_mp
- */
 function seedProductsFromMP() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const mp = ss.getSheetByName(MP_TAB);
@@ -807,7 +777,6 @@ function seedProductsFromMP() {
   const mpData = mp.getDataRange().getValues();
   if (mpData.length < 2) return { ok: true, seeded: 0, skipped: 0, message: 'MATERIA PRIMA está vacío' };
 
-  // Build set of existing names in INVENTARIO_PRODUCTOS (col 1 = Producto)
   const invSheet = getOrCreateTab(INV_TAB, INV_HEADERS);
   const invData  = invSheet.getDataRange().getValues();
   const existing = new Set();
@@ -816,32 +785,21 @@ function seedProductsFromMP() {
     if (n) existing.add(n);
   }
 
-  // MP cols (actual March 2026): A(0)=Ingrediente, B(1)=Proveedor A, C(2)=Proveedor B,
-  //   D(3)=Costo x Paquete, E(4)=Fecha, F(5)=UnidsCaja, G(6)=VolUnid, H(7)=Unidad
   let seeded = 0, skipped = 0;
   for (let i = 1; i < mpData.length; i++) {
     const ingrediente = String(mpData[i][0] || '').trim();
     if (!ingrediente) continue;
     if (existing.has(ingrediente.toLowerCase())) { skipped++; continue; }
 
-    const categoria = '';  // No Categoría column in current sheet — leave blank
-    const unidad    = String(mpData[i][7] || 'PZA').trim();  // H(7) = Unidad
+    const categoria = String(mpData[i][1] || '').trim();
+    const unidad    = String(mpData[i][6] || 'PZA').trim();
     const safeId    = ingrediente.replace(/[^A-Za-z0-9]/g, '').substring(0, 12).toUpperCase();
     const id        = 'MP_' + safeId + '_' + i;
 
     invSheet.appendRow([
       id, ingrediente, categoria,
-      '',            // Ubicacion
-      '',            // Tienda
-      unidad,        // Unidad (counting unit)
-      '',            // Unidad_Compra (purchase unit — fill in manually)
-      'Ir a tienda', // Forma_Pedido
-      0,             // Inventario_Min
-      0,             // Inventario_Max
-      true,          // Activo
-      'Siempre',     // Temporada
-      '',            // Tags
-      ''             // Variantes
+      '', '', unidad, '',
+      'Ir a tienda', 0, 0, true, 'Siempre', '', ''
     ]);
     existing.add(ingrediente.toLowerCase());
     seeded++;
@@ -858,17 +816,12 @@ function seedProductsFromMP() {
 const LISTA_TAB     = 'LISTA_COMPRAS';
 const LISTA_HEADERS = ['Timestamp', 'Producto', 'Categoria', 'Qty_Pedido', 'Unidad', 'Forma_Pedido', 'Tienda', 'Guardado_Por'];
 
-/**
- * Save the current shopping list to LISTA_COMPRAS tab (replaces previous list).
- * body: { items: [{producto, categoria, qty, unidad, forma_pedido, tienda}], quien: string }
- */
 function saveShoppingList(body) {
   const items = body.items;
   if (!items || !items.length) throw new Error('No items en la lista');
 
   const sheet = getOrCreateTab(LISTA_TAB, LISTA_HEADERS);
 
-  // Clear previous list (keep header row)
   if (sheet.getLastRow() > 1) {
     sheet.deleteRows(2, sheet.getLastRow() - 1);
   }
@@ -1027,24 +980,23 @@ function processSyncBatch(body) {
   const ops = body.operations || [];
   if (!ops.length) return { ok: true, results: [], message: 'No operations' };
 
-  // ── Optimized path: batch FACTURAS updates with a SINGLE sheet read ──
+  // Optimized path: batch FACTURAS updates with a SINGLE sheet read
   const facturasActions = new Set(['update_status', 'update_date', 'update_factura']);
   const facturasOps = ops.filter(op => facturasActions.has(op.action));
   const otherOps    = ops.filter(op => !facturasActions.has(op.action));
 
   const results = [];
 
-  // Process FACTURAS ops efficiently — one sheet read for all of them
+  // Process FACTURAS ops efficiently
   if (facturasOps.length > 0) {
     try {
       const sheet = getOrCreateTab(FACTURAS_TAB, FACTURAS_HEADERS);
       const data  = sheet.getDataRange().getValues();
       const vCol  = FACTURAS_HEADERS.indexOf('Version') + 1;
 
-      // Build row-index map: id → sheet row index (1-based)
       const rowMap = {};
       for (let i = 1; i < data.length; i++) {
-        rowMap[String(data[i][0])] = i; // 0-based data index; sheet row = i+1
+        rowMap[String(data[i][0])] = i;
       }
 
       for (const op of facturasOps) {
@@ -1056,7 +1008,6 @@ function processSyncBatch(body) {
           }
           const sheetRow = rowIdx + 1;
 
-          // Version check & bump (skip for update_status — idempotent, safe to force)
           let newVersion = null;
           const skipVersionCheck = (op.action === 'update_status');
           if (vCol > 0) {
@@ -1071,13 +1022,11 @@ function processSyncBatch(body) {
             }
             newVersion = sheetVersion + 1;
             sheet.getRange(sheetRow, vCol).setValue(newVersion);
-            data[rowIdx][vCol - 1] = newVersion; // keep map updated
+            data[rowIdx][vCol - 1] = newVersion;
           }
 
-          // Dispatch by action type (NO extra sheet reads)
           if (op.action === 'update_status') {
             if (!op.estado) { results.push({ queue_id: op.queue_id || null, ok: false, error: 'Missing estado' }); continue; }
-            // Save comprobante PDF if provided
             let compValue = op.comprobante || '';
             if (op.pdf_base64 && op.pdf_base64.length > 100) {
               try {
@@ -1121,14 +1070,13 @@ function processSyncBatch(body) {
         }
       }
     } catch(sheetErr) {
-      // If the sheet itself fails, mark all facturas ops as failed
       facturasOps.forEach(op => {
         results.push({ queue_id: op.queue_id || null, ok: false, error: 'Sheet error: ' + sheetErr.message });
       });
     }
   }
 
-  // Process non-FACTURAS ops normally (create, inventory, orders, etc.)
+  // Process non-FACTURAS ops normally
   for (const op of otherOps) {
     try {
       let result;
@@ -1175,7 +1123,6 @@ function getOrCreateTab(name, headers) {
       sheet.setFrozenRows(1);
     }
   } else if (headers) {
-    // Auto-migrate: add any new header columns that are missing
     const existing = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0].map(String);
     headers.forEach(h => {
       if (!existing.includes(h)) {
@@ -1192,14 +1139,6 @@ function getOrCreateTab(name, headers) {
 // ADD INGREDIENT → MATERIA PRIMA
 // ══════════════════════════════════════════════
 
-/**
- * Append a new row to MATERIA PRIMA.
- * body: { ingredient: { Nombre, Unidad, CostoPaq, Proveedor } }
- * MATERIA PRIMA cols (actual sheet layout March 2026):
- *   A(0)=Ingrediente, B(1)=Proveedor A, C(2)=Proveedor B,
- *   D(3)=Costo x Paquete ($), E(4)=Fecha de Precio,
- *   F(5)=Unidades x Caja, G(6)=Volumen x Unidad, H(7)=Unidad (kg/lt/pza)
- */
 function addIngredient(body) {
   const ing = body.ingredient || body;
   const nombre = (ing.Nombre || '').trim();
@@ -1209,20 +1148,17 @@ function addIngredient(body) {
   const mp = ss.getSheetByName(MP_TAB);
   if (!mp) throw new Error('Tab "' + MP_TAB + '" not found');
 
-  // Check for duplicate (case-insensitive)
   const data = mp.getDataRange().getValues();
   const exists = data.slice(1).some(r => String(r[0] || '').trim().toLowerCase() === nombre.toLowerCase());
   if (exists) return { ok: false, message: 'Ingrediente ya existe: ' + nombre };
 
   const row = [
-    nombre,                             // A: Ingrediente
-    ing.Proveedor || '',                // B: Proveedor A
-    '',                                 // C: Proveedor B (blank)
-    parseFloat(ing.CostoPaq) || 0,      // D: Costo x Paquete ($)
-    new Date(),                         // E: Fecha de Precio
-    '',                                 // F: Unidades x Caja (blank)
-    '',                                 // G: Volumen x Unidad (blank)
-    ing.Unidad || 'PZA'                 // H: Unidad (kg/lt/pza)
+    nombre,
+    ing.Categoria || '',
+    parseFloat(ing.CostoPaq) || 0,
+    new Date(),
+    '', '',
+    ing.Unidad || 'PZA'
   ];
   mp.appendRow(row);
   log('ADD_INGREDIENT', nombre + ' | ' + (ing.Unidad || 'PZA') + ' | $' + (ing.CostoPaq || 0));
@@ -1233,13 +1169,6 @@ function addIngredient(body) {
 // ADD PROVEEDOR → PROVEEDORES sheet
 // ══════════════════════════════════════════════
 
-/**
- * Append a new row to the PROVEEDORES sheet.
- * body: { proveedor: { Nombre, RFC, DiasCredito, FormaPago } }
- * PROVEEDORES cols: 0=Proveedor, 1=ContactoVentas, 2=ContactoPagos, 3=TelCompras, 4=TelPagos,
- *   5=Email, 6=FormaPago, 7=DíasCrédito, 8=Banco, 9=CLABE, 10=Cuenta,
- *   11=RazónSocial(RFC), 12=VíaPedido, 13=LigaFacturación, 14=Facturas2026, 15=CatGasto, 16=Fuente
- */
 function addProveedor(body) {
   const prov = body.proveedor || body;
   const nombre = (prov.Nombre || '').trim();
@@ -1255,7 +1184,6 @@ function addProveedor(body) {
     sheet.getRange(1, 1, 1, 17).setFontWeight('bold');
   }
 
-  // Check for duplicate
   const data = sheet.getDataRange().getValues();
   const exists = data.slice(1).some(r => String(r[0] || '').trim().toLowerCase() === nombre.toLowerCase());
   if (exists) return { ok: false, message: 'Proveedor ya existe: ' + nombre };
@@ -1265,7 +1193,7 @@ function addProveedor(body) {
   row[6]  = prov.FormaPago || '';
   row[7]  = parseInt(prov.DiasCredito) || 0;
   row[11] = prov.RFC || '';
-  row[16] = 'App';  // Fuente — marca que se creó desde la app
+  row[16] = 'App';
   sheet.appendRow(row);
   log('ADD_PROVEEDOR', nombre + ' | RFC:' + (prov.RFC || '—') + ' | ' + (prov.DiasCredito || 0) + 'd');
   return { ok: true, message: 'Proveedor agregado: ' + nombre };
@@ -1275,7 +1203,6 @@ function log(action, detail) {
   try {
     const sheet = getOrCreateTab(LOG_TAB, ['Timestamp', 'Action', 'Detail']);
     sheet.appendRow([new Date().toISOString(), action, detail || '']);
-    // Keep log trimmed to 500 rows
     const rows = sheet.getLastRow();
     if (rows > 501) sheet.deleteRows(2, rows - 501);
   } catch(e) { /* silent */ }
@@ -1287,174 +1214,182 @@ function jsonResp(data, code) {
     .setMimeType(ContentService.MimeType.JSON);
 }
 
-
-
-
 // ══════════════════════════════════════════════
-// INVENTORY v2 — MATERIA PRIMA Inventory Functions
+// V3: PORTAL DE PAGOS — Server-side filtering & atomic payments
 // ══════════════════════════════════════════════
 
 /**
- * INVENTORY BACKEND FUNCTIONS — Add these to Código.gs
+ * Returns facturas from the last N days (default 60).
+ * Dramatically faster than loading all 4,920+ rows.
+ * Also accepts month parameter for specific month view.
  *
- * ROUTES TO ADD:
- *   doGet  → case 'list_inventory':         return jsonResp(listInventory());
- *   doPost → case 'save_inventory_counts':  return jsonResp(saveInventoryCounts(body));
- *   doPost → case 'update_inv_field':       return jsonResp(updateInvField(body));
+ * Params:
+ *   days=60 (default) — how many days back to look
+ *   month=2026-03 — specific month (overrides days)
+ *   estado=Pendiente|Pagado — optional filter
  */
+function listRecentFacturas(params) {
+  const sheet = getOrCreateTab(FACTURAS_TAB, FACTURAS_HEADERS);
+  const data  = sheet.getDataRange().getValues();
+  if (data.length <= 1) return { facturas: [], total: 0 };
 
-// ── Column indexes for MATERIA PRIMA inventory fields (0-based) ──
-// N(13)=Área, O(14)=Ubicación, P(15)=Inv_Max,
-// Q(16)=Unidad_Conteo, R(17)=Factor_Conversion, S(18)=Unidad_Compra,
-// T(19)=Inv_Actual, U(20)=Fecha_Conteo, V(21)=Forma_Pedido, W(22)=Activo
+  const headers = data[0];
+  const fechaCompraCol = headers.indexOf('Fecha_Compra');
+  const fechaPagoCol   = headers.indexOf('Fecha_Pago');
+  const estadoCol      = headers.indexOf('Estado');
+  const createdAtCol   = headers.indexOf('Created_At');
 
-// ══════════════════════════════════════════
-// LIST INVENTORY — GET ?action=list_inventory
-// ══════════════════════════════════════════
-function listInventory() {
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var mp = ss.getSheetByName('MATERIA PRIMA');
-  if (!mp) throw new Error('MATERIA PRIMA tab not found');
+  // Calculate cutoff date
+  const days = parseInt(params.days) || 60;
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - days);
+  cutoff.setHours(0, 0, 0, 0);
 
-  var data = mp.getDataRange().getValues();
-  var products = [];
+  const targetMonth = params.month || '';
 
-  for (var i = 1; i < data.length; i++) {
-    var name = String(data[i][0] || '').trim();
-    // Skip empty rows and group headers (► Bachoco, etc.)
-    if (!name || /^[►▶]/.test(name)) continue;
-
-    // Skip inactive products — W(22)
-    var activo = data[i][22];
-    if (activo === false || String(activo).toLowerCase() === 'false' || activo === 'No') continue;
-
-    var fechaConteo = data[i][20]; // U(20)
-    if (fechaConteo instanceof Date) {
-      fechaConteo = Utilities.formatDate(fechaConteo, 'America/Mexico_City', 'yyyy-MM-dd');
-    } else {
-      fechaConteo = fechaConteo ? String(fechaConteo) : '';
-    }
-
-    products.push({
-      row: i + 1,
-      nombre: name,
-      proveedor: String(data[i][1] || '').trim(),
-      unidad: String(data[i][7] || '').trim(),         // H(7) = Unidad (kg/lt/pza) — original unit col
-      unidad_conteo: String(data[i][16] || '').trim(),  // Q(16) = Unidad_Conteo
-      factor: parseFloat(data[i][17]) || 1,             // R(17) = Factor_Conversion (default 1)
-      unidad_compra: String(data[i][18] || '').trim(),  // S(18) = Unidad_Compra
-      area: String(data[i][13] || '').trim(),            // N(13)
-      ubicacion: String(data[i][14] || '').trim(),       // O(14)
-      max: parseFloat(data[i][15]) || 0,                 // P(15) = Inv_Max
-      actual: parseFloat(data[i][19]) || 0,              // T(19) = Inv_Actual
-      fecha_conteo: fechaConteo,                         // U(20)
-      forma: String(data[i][21] || '').trim()            // V(21) = Forma_Pedido
-    });
-  }
-
-  return { ok: true, products: products, count: products.length };
-}
-
-
-// ══════════════════════════════════════════
-// SAVE INVENTORY COUNTS — POST { action: 'save_inventory_counts', items, quien, device }
-// Writes Inv_Actual + Fecha_Conteo to MATERIA PRIMA, logs to INVENTARIO_LOG
-// ══════════════════════════════════════════
-function saveInventoryCounts(body) {
-  var items = body.items || [];
-  if (!items.length) return { ok: false, error: 'No items to save' };
-
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var mp = ss.getSheetByName('MATERIA PRIMA');
-  if (!mp) throw new Error('MATERIA PRIMA tab not found');
-
-  var now = new Date();
-  var quien = body.quien || 'App';
-  var device = body.device || '';
-
-  // Batch update MATERIA PRIMA — T(20)=Inv_Actual, U(21)=Fecha_Conteo, P(16)=Inv_Max
-  for (var i = 0; i < items.length; i++) {
-    var item = items[i];
-    var row = parseInt(item.row);
-    if (!row || row < 2) continue;
-
-    mp.getRange(row, 20).setValue(parseFloat(item.cantidad) || 0); // T(20): Inv_Actual
-    mp.getRange(row, 21).setValue(now);                              // U(21): Fecha_Conteo
-
-    // Also update Inv_Max if provided (inline editing during count)
-    if (item.new_max !== undefined && item.new_max !== null) {
-      mp.getRange(row, 16).setValue(parseFloat(item.new_max) || 0); // P(16): Inv_Max
-    }
-  }
-
-  SpreadsheetApp.flush();
-
-  // Log to INVENTARIO_LOG
-  var logHeaders = ['Timestamp', 'Producto', 'Cantidad', 'Seccion', 'Categoria', 'Variante', 'Contó', 'Dispositivo'];
-  var logSheet = getOrCreateTab('INVENTARIO_LOG', logHeaders);
-
-  var logRows = [];
-  for (var j = 0; j < items.length; j++) {
-    logRows.push([
-      now,
-      items[j].nombre || '',
-      parseFloat(items[j].cantidad) || 0,
-      items[j].ubicacion || '',
-      items[j].area || '',
-      '',
-      quien,
-      device
-    ]);
-  }
-
-  if (logRows.length > 0) {
-    logSheet.getRange(logSheet.getLastRow() + 1, 1, logRows.length, logRows[0].length).setValues(logRows);
-  }
-
-  // Trim INVENTARIO_LOG to 10K rows
-  var logTotal = logSheet.getLastRow();
-  if (logTotal > 10000) {
-    logSheet.deleteRows(2, logTotal - 10000);
-  }
-
-  return { ok: true, saved: items.length, timestamp: now.toISOString() };
-}
-
-
-// ══════════════════════════════════════════
-// UPDATE INVENTORY FIELD — POST { action: 'update_inv_field', row, field, value }
-// For updating max, ubicacion, area, forma, activo from the app
-// ══════════════════════════════════════════
-function updateInvField(body) {
-  var row = parseInt(body.row);
-  if (!row || row < 2) return { ok: false, error: 'Invalid row' };
-
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var mp = ss.getSheetByName('MATERIA PRIMA');
-  if (!mp) throw new Error('MATERIA PRIMA tab not found');
-
-  var field = String(body.field || '').trim();
-  var value = body.value;
-
-  // Map field names to column numbers (1-based for getRange)
-  var colMap = {
-    'area': 14,       // N
-    'ubicacion': 15,   // O
-    'max': 16,         // P
-    'actual': 20,      // T
-    'forma': 22,       // V
-    'activo': 23       // W
+  const fmtDate = (val) => {
+    if (!val) return '';
+    if (val instanceof Date) return Utilities.formatDate(val, 'America/Mexico_City', 'yyyy-MM-dd');
+    return String(val).slice(0, 10);
   };
 
-  var col = colMap[field];
-  if (!col) return { ok: false, error: 'Unknown field: ' + field };
+  let rows = [];
+  for (let i = 1; i < data.length; i++) {
+    const r = data[i];
+    const obj = {};
+    headers.forEach((h, j) => {
+      if (h === 'Fecha_Compra' || h === 'Fecha_Pago' || h === 'Fecha_Pago_Real') {
+        obj[h] = fmtDate(r[j]);
+      } else {
+        obj[h] = r[j];
+      }
+    });
 
-  // Type coercion
-  if (field === 'max' || field === 'actual') value = parseFloat(value) || 0;
-  if (field === 'activo') value = (value === true || value === 'true' || value === 'TRUE');
+    const fechaCompra = obj.Fecha_Compra || '';
+    const fechaPago   = obj.Fecha_Pago || '';
+    const createdAt   = obj.Created_At || '';
 
-  mp.getRange(row, col).setValue(value);
-  SpreadsheetApp.flush();
+    if (targetMonth) {
+      const inMonth = fechaCompra.startsWith(targetMonth) ||
+                      (obj.Estado !== 'Pagado' && fechaPago.startsWith(targetMonth));
+      if (!inMonth) continue;
+    } else {
+      let dateToCheck = fechaCompra || createdAt || '';
+      if (!dateToCheck) continue;
+      const d = new Date(dateToCheck + 'T12:00:00');
+      if (isNaN(d.getTime()) || d < cutoff) {
+        if (fechaPago) {
+          const dp = new Date(fechaPago + 'T12:00:00');
+          if (isNaN(dp.getTime()) || dp < cutoff) continue;
+        } else {
+          continue;
+        }
+      }
+    }
 
-  return { ok: true, row: row, field: field, value: value };
+    if (params.estado && obj.Estado !== params.estado) continue;
+
+    rows.push(obj);
+  }
+
+  // Sort: Pendientes first, then by fecha_compra desc
+  rows.sort((a, b) => {
+    const aPend = a.Estado !== 'Pagado' ? 0 : 1;
+    const bPend = b.Estado !== 'Pagado' ? 0 : 1;
+    if (aPend !== bPend) return aPend - bPend;
+    return (b.Fecha_Compra || '').localeCompare(a.Fecha_Compra || '');
+  });
+
+  return { facturas: rows, total: rows.length };
+}
+
+/**
+ * Marks a factura as paid in ONE atomic operation.
+ * Writes: Estado, Fecha_Pago, Fecha_Pago_Real, Comprobante, Version
+ * No split operations. No race conditions. No sync queue.
+ *
+ * body: { id, fecha_pago_real, comprobante, pdf_base64, proveedor }
+ */
+function payFactura(body) {
+  const { id, fecha_pago_real, comprobante, pdf_base64, proveedor } = body;
+  if (!id) throw new Error('Missing id');
+
+  const sheet = getOrCreateTab(FACTURAS_TAB, FACTURAS_HEADERS);
+  const data  = sheet.getDataRange().getValues();
+
+  for (let i = 1; i < data.length; i++) {
+    if (String(data[i][0]) === String(id)) {
+      const sheetRow = i + 1;
+      const payDate = fecha_pago_real || Utilities.formatDate(new Date(), 'America/Mexico_City', 'yyyy-MM-dd');
+
+      // Handle comprobante PDF upload
+      let compValue = comprobante || '';
+      if (pdf_base64 && pdf_base64.length > 100) {
+        try {
+          const folioCol = FACTURAS_HEADERS.indexOf('Folio');
+          const rowFolio = folioCol >= 0 ? String(data[i][folioCol] || '') : '';
+          compValue = saveComprobanteToDrive(id, pdf_base64, proveedor || 'pago', rowFolio);
+        } catch(err) {
+          log('COMP_PDF_ERROR', id + ': ' + err.message);
+        }
+      }
+
+      // Write ALL payment fields in one batch
+      const updates = [
+        [FACTURAS_HEADERS.indexOf('Estado') + 1, 'Pagado'],
+        [FACTURAS_HEADERS.indexOf('Fecha_Pago') + 1, payDate],
+        [FACTURAS_HEADERS.indexOf('Fecha_Pago_Real') + 1, payDate],
+      ];
+      if (compValue) {
+        updates.push([FACTURAS_HEADERS.indexOf('Comprobante') + 1, compValue]);
+      }
+
+      // Bump version
+      const vCol = FACTURAS_HEADERS.indexOf('Version') + 1;
+      if (vCol > 0) {
+        const sheetVersion = parseInt(data[i][vCol - 1]) || 0;
+        updates.push([vCol, sheetVersion + 1]);
+      }
+
+      // Apply all updates
+      updates.forEach(([col, val]) => {
+        if (col > 0) sheet.getRange(sheetRow, col).setValue(val);
+      });
+
+      log('PAY_V3', id + ' | ' + (proveedor || '?') + ' | ' + payDate + (pdf_base64 ? ' | 📎 PDF' : ''));
+      return { ok: true, message: 'Pagado', comprobante_url: compValue };
+    }
+  }
+  throw new Error('Not found: ' + id);
+}
+
+/**
+ * Returns unique proveedor names for autocomplete in manual entry.
+ * Pulls from both FACTURAS and PROVEEDORES tabs.
+ */
+function listProveedores() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const provSheet = ss.getSheetByName('PROVEEDORES');
+
+  const factSheet = getOrCreateTab(FACTURAS_TAB, FACTURAS_HEADERS);
+  const factData = factSheet.getDataRange().getValues();
+  const provCol = FACTURAS_HEADERS.indexOf('Proveedor');
+  const fromFacturas = new Set();
+  for (let i = 1; i < factData.length; i++) {
+    const name = String(factData[i][provCol] || '').trim();
+    if (name) fromFacturas.add(name);
+  }
+
+  let proveedores = [...fromFacturas].sort();
+
+  if (provSheet) {
+    const provData = provSheet.getDataRange().getValues();
+    for (let i = 1; i < provData.length; i++) {
+      const name = String(provData[i][0] || '').trim();
+      if (name && !fromFacturas.has(name)) proveedores.push(name);
+    }
+    proveedores.sort();
+  }
+
+  return { proveedores, total: proveedores.length };
 }

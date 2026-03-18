@@ -381,6 +381,43 @@
     </div>
   </div>
 
+  <!-- SHOPIFY METRICS ROW -->
+  <div class="section" id="shopifySection" style="display:none;">
+    <h2 class="section-title" style="display:flex; align-items:center; gap:10px;">
+      Shopify en Tiempo Real
+      <span id="shopifyLastSync" style="font-size:0.75rem; font-weight:400; color:#999;"></span>
+    </h2>
+    <div class="kpi-row" id="shopifyKpiRow">
+      <div class="kpi-card">
+        <div class="kpi-label">Pedidos Shopify</div>
+        <div class="kpi-value" id="shopify-orderCount">--</div>
+        <div class="kpi-subtext">Este mes</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Ventas Shopify</div>
+        <div class="kpi-value" id="shopify-totalSales">--</div>
+        <div class="kpi-subtext">Total pedidos</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Ticket Promedio</div>
+        <div class="kpi-value" id="shopify-avgOrder">--</div>
+        <div class="kpi-subtext">Venta ÷ pedidos</div>
+      </div>
+      <div class="kpi-card" style="border-left-color:#1565c0;">
+        <div class="kpi-label">Online</div>
+        <div class="kpi-value" id="shopify-online">--</div>
+        <div class="kpi-subtext" id="shopify-onlinePct">Envío + pickup</div>
+      </div>
+      <div class="kpi-card" style="border-left-color:#7b1fa2;">
+        <div class="kpi-label">POS (Tienda)</div>
+        <div class="kpi-value" id="shopify-pos">--</div>
+        <div class="kpi-subtext" id="shopify-posPct">Ventas en mostrador</div>
+      </div>
+    </div>
+    <!-- Top Products -->
+    <div id="shopifyTopProducts" style="margin-top:12px;"></div>
+  </div>
+
   <!-- SECTION 1: MONTHLY DAILY SALES CHART -->
   <div class="section">
     <h2 class="section-title">Ventas Diarias del Mes</h2>
@@ -594,6 +631,9 @@
       updateMesaSalesChart(mesaData);
 
       showSkeletons(false);
+
+      // Non-blocking Shopify data fetch
+      fetchShopifyData(year, month).catch(e => console.warn('Shopify fetch optional:', e.message));
 
     } catch (err) {
       console.error('Fetch error:', err);
@@ -894,6 +934,58 @@
     updateMonthLabel();
     requireNbAuth(() => setTimeout(fetchData, 500));
   });
+
+  // SHOPIFY DATA FETCH (non-blocking, optional)
+  async function fetchShopifyData(year, month) {
+    try {
+      const resp = await fetch(`${API_URL}?action=get_shopify_daily_summary&year=${year}&month=${month}&_t=${Date.now()}`);
+      const data = await resp.json();
+
+      if (!data.ok) {
+        document.getElementById('shopifySection').style.display = 'none';
+        return;
+      }
+
+      // Show the section
+      document.getElementById('shopifySection').style.display = '';
+
+      // Populate KPI cards
+      document.getElementById('shopify-orderCount').textContent = data.orderCount.toLocaleString();
+      document.getElementById('shopify-totalSales').textContent = '$' + data.totalSales.toLocaleString();
+      document.getElementById('shopify-avgOrder').textContent = '$' + data.avgOrderValue.toLocaleString();
+      document.getElementById('shopify-online').textContent = '$' + (data.channels?.online || 0).toLocaleString();
+      document.getElementById('shopify-pos').textContent = '$' + (data.channels?.pos || 0).toLocaleString();
+
+      // Percentages
+      const total = data.totalSales || 1;
+      document.getElementById('shopify-onlinePct').textContent = 'Envío + pickup · ' + Math.round((data.channels?.online || 0) / total * 100) + '%';
+      document.getElementById('shopify-posPct').textContent = 'Ventas en mostrador · ' + Math.round((data.channels?.pos || 0) / total * 100) + '%';
+
+      // Sync timestamp
+      document.getElementById('shopifyLastSync').textContent = 'Actualizado: ' + new Date().toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
+
+      // Top products table
+      if (data.topProducts && data.topProducts.length > 0) {
+        let html = '<div style="background:#fff;border-radius:12px;padding:16px;box-shadow:0 1px 4px rgba(0,0,0,0.08);">';
+        html += '<h4 style="margin:0 0 10px;font-size:0.95rem;color:#555;">Top Productos por Ingreso</h4>';
+        html += '<table style="width:100%;border-collapse:collapse;font-size:0.85rem;">';
+        html += '<thead><tr style="border-bottom:2px solid #eee;"><th style="text-align:left;padding:6px;">Producto</th><th style="text-align:right;padding:6px;">Cant.</th><th style="text-align:right;padding:6px;">Ingreso</th></tr></thead><tbody>';
+        data.topProducts.slice(0, 5).forEach(p => {
+          html += `<tr style="border-bottom:1px solid #f5f5f5;">
+            <td style="padding:6px;">${p.title}</td>
+            <td style="text-align:right;padding:6px;">${p.qty}</td>
+            <td style="text-align:right;padding:6px;font-weight:600;">$${p.revenue.toLocaleString()}</td>
+          </tr>`;
+        });
+        html += '</tbody></table></div>';
+        document.getElementById('shopifyTopProducts').innerHTML = html;
+      }
+
+    } catch (e) {
+      console.warn('Shopify dashboard optional:', e.message);
+      document.getElementById('shopifySection').style.display = 'none';
+    }
+  }
 
   // AUTO-REFRESH EVERY 5 MINUTES
   setInterval(fetchData, 300000);

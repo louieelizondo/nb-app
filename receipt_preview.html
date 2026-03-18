@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Receipt Preview</title>
+<style>
+  body {
+    background: #e0e0e0;
+    display: flex;
+    gap: 40px;
+    justify-content: center;
+    align-items: flex-start;
+    padding: 40px;
+    font-family: 'Courier New', monospace;
+  }
+  .receipt {
+    background: white;
+    width: 302px;
+    padding: 16px 12px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.2);
+    border-radius: 4px;
+  }
+  .label {
+    text-align: center;
+    font-size: 10px;
+    color: #888;
+    margin-bottom: 6px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+  .title {
+    text-align: center;
+    font-size: 18px;
+    font-weight: bold;
+    letter-spacing: 2px;
+    margin-bottom: 8px;
+  }
+  .teller-info {
+    text-align: center;
+    font-size: 14px;
+    font-weight: bold;
+    margin-bottom: 3px;
+  }
+  .meta {
+    text-align: center;
+    font-size: 11px;
+    color: #555;
+    margin-bottom: 2px;
+  }
+  .divider {
+    border: none;
+    border-top: 1px dashed #aaa;
+    margin: 10px 0;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+  }
+  th {
+    text-align: left;
+    font-size: 10px;
+    color: #888;
+    padding-bottom: 4px;
+    border-bottom: 1px solid #ddd;
+  }
+  th:last-child { text-align: right; }
+  td { padding: 3px 0; }
+  td:nth-child(2) { text-align: center; color: #888; }
+  td:last-child { text-align: right; }
+  .total-label {
+    font-size: 11px;
+    color: #888;
+    text-align: right;
+    padding-top: 10px;
+    border-top: 1px dashed #aaa;
+    margin-top: 8px;
+  }
+  .total-amount {
+    font-size: 22px;
+    font-weight: bold;
+    text-align: right;
+    margin-top: 2px;
+  }
+  .footer {
+    text-align: center;
+    font-size: 9px;
+    color: #bbb;
+    margin-top: 12px;
+  }
+</style>
+</head>
+<body>
+
+<!-- DEPOSITO BBVA -->
+<div class="receipt">
+  <div class="label">Vista Previa — 80mm</div>
+  <div class="title">DEPOSITO BBVA</div>
+  <div class="teller-info">NATURAL BALANCE RANCH</div>
+  <div class="teller-info">Cta: 0118685134</div>
+  <div class="teller-info">Referencia: 2026-03-03</div>
+  <div class="meta">Tienda: SAN FELIPE</div>
+  <hr class="divider">
+  <table>
+    <thead>
+      <tr>
+        <th>Billete</th>
+        <th>Cant.</th>
+        <th>Subtotal</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td>$1,000</td><td>× 20</td><td>$20,000</td></tr>
+      <tr><td>$500</td><td>× 7</td><td>$3,500</td></tr>
+      <tr><td>$200</td><td>× 2</td><td>$400</td></tr>
+      <tr><td>$20</td><td>× 4</td><td>$80</td></tr>
+    </tbody>
+  </table>
+  <div class="total-label">TOTAL DEPÓSITO</div>
+  <div class="total-amount">$23,980</div>
+  <div class="footer">— — — — — — — — — —</div>
+</div>
+
+<!-- SOBRE 2 -->
+<div class="receipt">
+  <div class="label">Vista Previa — 80mm</div>
+  <div class="title">SOBRE 2</div>
+  <div class="meta">Tienda: SAN FELIPE</div>
+  <div class="meta">2026-03-03</div>
+  <hr class="divider">
+  <table>
+    <thead>
+      <tr>
+        <th>Billete</th>
+        <th>Cant.</th>
+        <th>Subtotal</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td>$500</td><td>× 8</td><td>$4,000</td></tr>
+    </tbody>
+  </table>
+  <div class="total-label">TOTAL SOBRE 2</div>
+  <div class="total-amount">$4,000</div>
+  <div class="footer">— — — — — — — — — —</div>
+</div>
+
+</body>
+</html>
