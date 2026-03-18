@@ -718,8 +718,9 @@
 
 <!-- TAB 3: VENTAS POR MESA -->
 <div id="tab-ventas" class="tab-content">
+  <!-- SECTION 1: Date range + mesa sales input -->
   <div class="card">
-    <h2>Ventas por Mesa (Biweekly)</h2>
+    <h2>Ventas por Mesa (Quincenal)</h2>
 
     <div class="form-grid">
       <div class="form-group">
@@ -733,7 +734,7 @@
     </div>
 
     <p style="color: #7a6b5d; font-size: 13px; margin-bottom: 16px;">
-      <strong>Modo:</strong> Totales del período — Estos datos vienen de Shopify → Ventas por Proveedor → Total Neto
+      <strong>Datos:</strong> Shopify → Ventas por Proveedor → Total Neto por mesa del período
     </p>
 
     <div class="tbl-wrap">
@@ -744,13 +745,59 @@
             <th>Total Neto</th>
           </tr>
         </thead>
-        <tbody id="ventas-table-body">
-        </tbody>
+        <tbody id="ventas-table-body"></tbody>
       </table>
     </div>
 
     <div class="btn-group">
-      <button class="btn btn-primary" onclick="saveVentasPorMesa()">Guardar Ventas</button>
+      <button class="btn btn-primary" onclick="saveVentasPorMesa()">Guardar y Calcular Bonos</button>
+      <button class="btn" onclick="calcBonosPreview()" style="background:#f5f0eb;color:#3d3428;border:1px solid #d4c9b8;">Vista Previa Bonos</button>
+    </div>
+  </div>
+
+  <!-- SECTION 2: Bonus results (appears after calculation) -->
+  <div class="card" id="bonos-results-card" style="display:none;">
+    <h2>Bono de Productividad</h2>
+    <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:16px;">
+      <div style="flex:1;min-width:140px;background:#e8f5e9;border-radius:10px;padding:14px;text-align:center;">
+        <div style="font-size:12px;color:#2e7d32;font-weight:600;">TOTAL BONOS</div>
+        <div id="bonos-grand-total" style="font-size:24px;font-weight:800;color:#1b5e20;">$0.00</div>
+      </div>
+      <div style="flex:1;min-width:140px;background:#fff3e0;border-radius:10px;padding:14px;text-align:center;">
+        <div style="font-size:12px;color:#e65100;font-weight:600;">PAGOS RECIBIDOS</div>
+        <div id="bonos-pagos-recibidos" style="font-size:24px;font-weight:800;color:#bf360c;">$0.00</div>
+      </div>
+    </div>
+
+    <div class="tbl-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Mesa / Rol</th>
+            <th>Bono Prod</th>
+          </tr>
+        </thead>
+        <tbody id="bonos-table-body"></tbody>
+      </table>
+    </div>
+
+    <p style="color:#7a6b5d;font-size:12px;margin-top:12px;">
+      Los porcentajes y tasas se editan en la pestaña <strong>PORCENTAJES_MESA</strong> de Google Sheets.
+      Para ajustes individuales (merma, asistencia), usa Notion.
+    </p>
+  </div>
+
+  <!-- SECTION 3: Current percentage matrix (read-only reference) -->
+  <div class="card" id="pctj-matrix-card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+      <h2 style="margin:0;">Porcentajes Actuales</h2>
+      <button class="btn" onclick="loadPercentageMatrix()" style="font-size:12px;padding:6px 14px;background:#f5f0eb;color:#3d3428;border:1px solid #d4c9b8;">⟳ Actualizar</button>
+    </div>
+    <p style="color:#7a6b5d;font-size:12px;margin-bottom:12px;">
+      Edita en Google Sheets → pestaña PORCENTAJES_MESA. Los cambios se reflejan al calcular.
+    </p>
+    <div class="tbl-wrap" id="pctj-matrix-container">
+      <div class="empty-state"><p>Toca "Actualizar" para cargar la tabla</p></div>
     </div>
   </div>
 </div>
@@ -1328,15 +1375,60 @@ function showCorteRedirect(fecha) {
   if (tab) tab.insertBefore(banner, tab.firstChild);
 }
 
-// TAB 3: VENTAS POR MESA
+// TAB 3: VENTAS POR MESA + BONOS
+
+// Only the 9 bonus mesas for input (not Granja, FrutasVerduras, etc.)
+const BONUS_MESAS = ['Cocina1', 'Cocina2', 'Cocina3', 'Produccion1', 'Produccion2', 'Produccion3', 'Casa1', 'Casa2', 'Express'];
+const BONUS_MESA_LABELS = {
+  'Cocina1': 'Cocina 1', 'Cocina2': 'Cocina 2', 'Cocina3': 'Cocina 3',
+  'Produccion1': 'Producción 1', 'Produccion2': 'Producción 2', 'Produccion3': 'Producción 3',
+  'Casa1': 'Casa 1', 'Casa2': 'Casa 2', 'Express': 'Express'
+};
+
 async function loadVentasMesas() {
   const container = document.getElementById('ventas-table-body');
-  container.innerHTML = MESAS.map(mesa => `
+  container.innerHTML = BONUS_MESAS.map(mesa => `
     <tr>
-      <td>${MESA_LABELS[mesa] || mesa}</td>
-      <td><input type="number" data-mesa="${mesa}" placeholder="0.00"></td>
+      <td>${BONUS_MESA_LABELS[mesa] || mesa}</td>
+      <td><input type="number" data-mesa="${mesa}" placeholder="0.00" step="0.01"></td>
     </tr>
   `).join('');
+
+  // Try loading existing data for the selected period
+  const startDate = document.getElementById('ventas-dateStart').value;
+  const endDate = document.getElementById('ventas-dateEnd').value;
+  if (startDate && endDate) {
+    try {
+      const data = await callAPI('get_ventas_mesa', { fechaInicio: startDate, fechaFin: endDate });
+      if (data.periodos && data.periodos.length > 0) {
+        const period = data.periodos[0];
+        BONUS_MESAS.forEach(mesa => {
+          const input = document.querySelector(`input[data-mesa="${mesa}"]`);
+          if (input && period[mesa]) input.value = parseFloat(period[mesa]) || '';
+        });
+        // Also show bonuses if they exist
+        displayBonos({
+          bonos: {
+            Produccion1: period.Bono_Produccion1, Produccion2: period.Bono_Produccion2,
+            Produccion3: period.Bono_Produccion3, Casa1: period.Bono_Casa1, Casa2: period.Bono_Casa2,
+            Cocina1: period.Bono_Cocina1, Cocina2: period.Bono_Cocina2, Cocina3: period.Bono_Cocina3,
+            Express: period.Bono_Express, AuxTienda: period.Bono_AuxTienda, LiderTienda: period.Bono_LiderTienda
+          },
+          totalBonos: period.TotalBonos,
+          pagosRecibidos: period.PagosRecibidos
+        });
+      }
+    } catch (e) { /* no saved period yet, that's fine */ }
+  }
+}
+
+function collectMesaSales() {
+  const sales = {};
+  BONUS_MESAS.forEach(mesa => {
+    const input = document.querySelector(`input[data-mesa="${mesa}"]`);
+    sales[mesa] = parseFloat(input?.value) || 0;
+  });
+  return sales;
 }
 
 async function saveVentasPorMesa() {
@@ -1348,32 +1440,147 @@ async function saveVentasPorMesa() {
     return;
   }
 
-  const mesaValues = {};
-  MESAS.forEach(mesa => {
-    const input = document.querySelector(`input[data-mesa="${mesa}"]`);
-    mesaValues[mesa] = parseFloat(input?.value) || 0;
-  });
+  const sales = collectMesaSales();
 
   try {
-    // Get all dates in range
-    const dates = [];
-    const current = new Date(startDate);
-    const end = new Date(endDate);
-    while (current <= end) {
-      dates.push(current.toISOString().split('T')[0]);
-      current.setDate(current.getDate() + 1);
-    }
+    const result = await callAPI('save_ventas_mesa', {
+      ventasMesa: {
+        FechaInicio: startDate,
+        FechaFin: endDate,
+        ...sales
+      }
+    });
 
-    // Save for each date (divide equally)
-    for (const fecha of dates) {
-      const body = { ingreso: { Fecha: fecha, ...mesaValues } };
-      await callAPI('save_ingreso', body);
-    }
-
-    showToast('Ventas guardadas ✓', 'success');
-    loadVentasMesas();
+    showToast('Ventas guardadas y bonos calculados ✓', 'success');
+    displayBonos(result);
   } catch (err) {
     showToast('Error: ' + err.message, 'error');
+  }
+}
+
+async function calcBonosPreview() {
+  const startDate = document.getElementById('ventas-dateStart').value;
+  const endDate = document.getElementById('ventas-dateEnd').value;
+  const sales = collectMesaSales();
+
+  const hasAnySales = Object.values(sales).some(v => v > 0);
+  if (!hasAnySales) {
+    showToast('Ingresa al menos un valor de ventas', 'error');
+    return;
+  }
+
+  try {
+    // Auto-sum PagosRecibidos from INGRESOS for the date range
+    let totalPR = 0;
+    if (startDate && endDate) {
+      const ingData = await callAPI('get_ingresos', { startDate });
+      (ingData.ingresos || []).forEach(r => {
+        const f = (r.Fecha || '').slice(0, 10);
+        if (f >= startDate && f <= endDate) {
+          totalPR += parseFloat(r.PagosRecibidos) || 0;
+        }
+      });
+    }
+
+    const result = await callAPI('calc_bonos', {
+      sales: JSON.stringify(sales),
+      pagosRecibidos: totalPR
+    });
+    displayBonos(result);
+    showToast('Vista previa calculada (no guardada)', 'success');
+  } catch (err) {
+    showToast('Error: ' + err.message, 'error');
+  }
+}
+
+function displayBonos(result) {
+  const card = document.getElementById('bonos-results-card');
+  card.style.display = 'block';
+
+  const bonos = result.bonos || {};
+  const total = parseFloat(result.totalBonos) || 0;
+  const pr = parseFloat(result.pagosRecibidos) || 0;
+
+  document.getElementById('bonos-grand-total').textContent = formatPeso(total);
+  document.getElementById('bonos-pagos-recibidos').textContent = formatPeso(pr);
+
+  // Build bonus table — mesa bonuses first, then flat-rate roles
+  const allBonos = [
+    ...BONUS_MESAS.map(m => ({ key: m, label: BONUS_MESA_LABELS[m], amount: parseFloat(bonos[m]) || 0 })),
+    { key: 'AuxTienda', label: 'Aux de Tienda (c/u)', amount: parseFloat(bonos.AuxTienda) || 0 },
+    { key: 'LiderTienda', label: 'Líder de Tienda', amount: parseFloat(bonos.LiderTienda) || 0 }
+  ];
+
+  const tbody = document.getElementById('bonos-table-body');
+  tbody.innerHTML = allBonos.map(b => `
+    <tr style="${b.amount > 0 ? '' : 'opacity:0.5;'}">
+      <td>${b.label}</td>
+      <td style="font-weight:700;color:${b.amount > 0 ? '#2e7d32' : '#999'};">${formatPeso(b.amount)}</td>
+    </tr>
+  `).join('');
+
+  // Scroll to results
+  card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+async function loadPercentageMatrix() {
+  const container = document.getElementById('pctj-matrix-container');
+  container.innerHTML = '<div class="loading"><div class="spinner"></div> Cargando...</div>';
+
+  try {
+    const data = await callAPI('get_percentage_matrix');
+    if (!data.matrix) {
+      container.innerHTML = '<div class="empty-state"><p>No se encontró la tabla. Se creará automáticamente al guardar.</p></div>';
+      return;
+    }
+
+    const destMesas = data.destMesas || [];
+    const srcMesas = data.sourceMesas || [];
+    const destLabels = data.destLabels || {};
+    const srcLabels = {
+      'Cocina1': 'Cocina 1', 'Cocina2': 'Cocina 2', 'Cocina3': 'Cocina 3',
+      'Casa1': 'Casa 1', 'Casa2': 'Casa 2', 'Express': 'Express', 'Mixto': 'Mixto',
+      'Produccion1': 'Prod 1', 'Produccion2': 'Prod 2', 'Produccion3': 'Prod 3'
+    };
+
+    let html = '<table style="font-size:12px;"><thead><tr><th></th>';
+    destMesas.forEach(d => html += `<th style="writing-mode:vertical-lr;transform:rotate(180deg);padding:4px 2px;font-size:11px;">${destLabels[d] || d}</th>`);
+    html += '</tr></thead><tbody>';
+
+    srcMesas.forEach(src => {
+      html += `<tr><td style="font-weight:600;white-space:nowrap;padding-right:8px;">${srcLabels[src] || src}</td>`;
+      destMesas.forEach(dest => {
+        const pct = (data.matrix[src] && data.matrix[src][dest]) ? data.matrix[src][dest] : 0;
+        const display = pct > 0 ? (pct * 100).toFixed(1).replace('.0', '') + '%' : '';
+        html += `<td style="text-align:center;padding:3px 6px;${pct > 0 ? 'background:#e8f5e9;color:#2e7d32;font-weight:600;' : 'color:#ccc;'}">${display}</td>`;
+      });
+      html += '</tr>';
+    });
+
+    // Tasa Bono row
+    html += '<tr style="border-top:2px solid #3d3428;"><td style="font-weight:700;">Tasa Bono</td>';
+    destMesas.forEach(d => {
+      const rate = data.tasaBono[d] || 0;
+      html += `<td style="text-align:center;font-weight:600;color:#bf360c;">${rate}</td>`;
+    });
+    html += '</tr>';
+
+    // Tasa PagosRecibidos row
+    html += '<tr><td style="font-weight:700;">Tasa PR</td>';
+    destMesas.forEach(d => {
+      const rate = data.tasaPagosRecibidos[d] || 0;
+      html += `<td style="text-align:center;color:#e65100;">${rate > 0 ? rate : ''}</td>`;
+    });
+    html += '</tr>';
+
+    // Flat rates
+    html += `<tr style="border-top:1px solid #d4c9b8;"><td style="font-weight:700;">Aux Tienda</td><td colspan="${destMesas.length}" style="color:#e65100;">PR × ${data.flatRates.auxTienda}</td></tr>`;
+    html += `<tr><td style="font-weight:700;">Líder Tienda</td><td colspan="${destMesas.length}" style="color:#e65100;">PR × ${data.flatRates.liderTienda}</td></tr>`;
+
+    html += '</tbody></table>';
+    container.innerHTML = html;
+  } catch (err) {
+    container.innerHTML = `<div class="empty-state" style="color:#c62828;"><p>Error: ${err.message}</p></div>`;
   }
 }
 
