@@ -147,6 +147,7 @@ function doPost(e) {
       case 'save_ingreso':            return jsonResp(saveIngreso(body));
       case 'update_sobre2':           return jsonResp(updateSobre2(body));
       case 'update_facturacion':      return jsonResp(updateFacturacion(body));
+      case 'update_facturacion_batch': return jsonResp(batchUpdateFacturacion(body));
       case 'update_neto_mensual':     return jsonResp(updateNetoMensual(body));
       case 'sync_shopify':            return jsonResp(syncShopifyDaily(body));
       case 'update_config_cajas':     return jsonResp(updateConfigCajas(body));

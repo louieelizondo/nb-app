@@ -1709,7 +1709,7 @@ async function saveFacturacion() {
 
   showStatusBanner(`⏳ Guardando facturación (${dateCount} fechas)…`);
   try {
-    const result = await callAPI('batch_update_facturacion', { changes: batchChanges });
+    const result = await callAPI('update_facturacion_batch', { changes: batchChanges });
     showStatusBanner(`✅ Facturación actualizada — ${result.updated || dateCount} fechas`, 4000);
     loadFacturacionMonth();
   } catch (err) {
