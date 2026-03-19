@@ -1500,19 +1500,19 @@
         const resp = await fetch(config.scriptUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'text/plain' },
-          body: JSON.stringify({ action: 'sync_shopify_daily', fecha })
+          body: JSON.stringify({ action: 'sync_shopify', fecha })
         });
         const data = await resp.json();
 
-        if (data.ok && data.summary) {
-          const s = data.summary;
-          document.getElementById('tienda_shopifyVentas').value = s.totalSales || 0;
-          document.getElementById('tienda_shopifyTarjeta').value = s.tarjeta || 0;
-          document.getElementById('tienda_shopifyTransf').value = s.transferencias || 0;
+        if (data.ok && data.ventasTotales !== undefined) {
+          const b = data.breakdown || {};
+          document.getElementById('tienda_shopifyVentas').value = data.ventasTotales || 0;
+          document.getElementById('tienda_shopifyTarjeta').value = b.tarjeta || 0;
+          document.getElementById('tienda_shopifyTransf').value = b.transferencias || 0;
 
-          document.getElementById('comp_shopify_ventas').textContent = formatCurrency(s.totalSales || 0);
-          document.getElementById('comp_shopify_tarjeta').textContent = formatCurrency(s.tarjeta || 0);
-          document.getElementById('comp_shopify_transf').textContent = formatCurrency(s.transferencias || 0);
+          document.getElementById('comp_shopify_ventas').textContent = formatCurrency(data.ventasTotales || 0);
+          document.getElementById('comp_shopify_tarjeta').textContent = formatCurrency(b.tarjeta || 0);
+          document.getElementById('comp_shopify_transf').textContent = formatCurrency(b.transferencias || 0);
 
           statusEl.textContent = '✅ Datos de ' + fecha;
           statusEl.style.color = '#2e7d32';
