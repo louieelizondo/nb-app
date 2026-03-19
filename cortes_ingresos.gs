@@ -63,7 +63,7 @@ const CORTE_TIENDA_HEADERS = [
 
 const ARQUEO_TAB = 'ARQUEO_CAJA';
 const ARQUEO_HEADERS = [
-  'ID', 'Fecha', 'Colaborador',
+  'ID', 'Fecha', 'Colaborador', 'Caja',
   'Fondo1', 'Fondo2', 'Fondo3', 'Fondo4', 'FondoRepartidor1', 'FondoRepartidor2', 'BolsitaCambio', 'GastosReponer',
   // Denominations
   'D_1000', 'D_500', 'D_200', 'D_100', 'D_50', 'D_20',
@@ -590,6 +590,7 @@ function saveArqueo(body) {
     id,
     a.Fecha || formatDateStr(new Date()),
     a.Colaborador || '',
+    a.Caja || '',
     fondo1, fondo2, fondo3, fondo4, fondoRep1, fondoRep2, bolsita, gastosRep,
     ...denoms,
     totalEfectivo, totalGeneral, faltanteSobrante,
