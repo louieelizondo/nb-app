@@ -343,7 +343,7 @@ function getConfigCajas() {
     const obj = {};
     headers.forEach((h, i) => obj[h] = row[i]);
     return obj;
-  }).filter(c => c.Activa !== false && c.Activa !== 'FALSE');
+  }).filter(c => String(c.Activa).toUpperCase() !== 'FALSE' && c.Activa !== false);
 }
 
 function updateConfigCajas(body) {
