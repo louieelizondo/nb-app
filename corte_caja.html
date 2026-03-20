@@ -734,6 +734,7 @@
             <div style="font-size:12px;color:#888;">
               <div style="display:flex;justify-content:space-between;padding:4px 0;"><span>Tarjeta:</span><span id="comp_lider_tarjeta">$0.00</span></div>
               <div style="display:flex;justify-content:space-between;padding:4px 0;"><span>Transferencias:</span><span id="comp_lider_transf">$0.00</span></div>
+              <div style="display:flex;justify-content:space-between;padding:4px 0;"><span>Cashback:</span><span id="comp_lider_cashback">$0.00</span></div>
               <div style="display:flex;justify-content:space-between;padding:4px 0;border-top:1px solid #e0d6cc;margin-top:4px;padding-top:6px;font-weight:700;color:#2d2319;"><span>Pagos Recibidos:</span><span id="comp_lider_pagos">$0.00</span></div>
             </div>
           </div>
@@ -743,7 +744,8 @@
             <div id="shopify_data_display" style="font-size:12px;color:#888;">
               <div style="display:flex;justify-content:space-between;padding:4px 0;"><span>Tarjeta:</span><span id="comp_shopify_tarjeta">—</span></div>
               <div style="display:flex;justify-content:space-between;padding:4px 0;"><span>Transferencias:</span><span id="comp_shopify_transf">—</span></div>
-              <div style="display:flex;justify-content:space-between;padding:4px 0;border-top:1px solid #bbdefb;margin-top:4px;padding-top:6px;font-weight:700;color:#1565c0;"><span>Total Ventas:</span><span id="comp_shopify_ventas">—</span></div>
+              <div style="display:flex;justify-content:space-between;padding:4px 0;"><span>Cashback:</span><span id="comp_shopify_cashback">—</span></div>
+              <div style="display:flex;justify-content:space-between;padding:4px 0;border-top:1px solid #bbdefb;margin-top:4px;padding-top:6px;font-weight:700;color:#1565c0;"><span>Pagos Recibidos:</span><span id="comp_shopify_pagos">—</span></div>
             </div>
           </div>
         </div>
@@ -1471,9 +1473,11 @@
       // Update Shopify comparison panel - Líder side
       const compLiderTarjeta = document.getElementById('comp_lider_tarjeta');
       const compLiderTransf = document.getElementById('comp_lider_transf');
+      const compLiderCashback = document.getElementById('comp_lider_cashback');
       const compLiderPagos = document.getElementById('comp_lider_pagos');
       if (compLiderTarjeta) compLiderTarjeta.textContent = formatCurrency(tarjeta);
       if (compLiderTransf) compLiderTransf.textContent = formatCurrency(transferencias);
+      if (compLiderCashback) compLiderCashback.textContent = formatCurrency(cashback);
       if (compLiderPagos) compLiderPagos.textContent = formatCurrency(pagosRecibidos);
 
       updateShopifyDiffBanner();
@@ -1516,15 +1520,17 @@
         });
         const data = await resp.json();
 
-        if (data.ok && data.ventasTotales !== undefined) {
+        if (data.ok && (data.pagosRecibidos !== undefined || data.ventasTotales !== undefined)) {
           const b = data.breakdown || {};
-          document.getElementById('tienda_shopifyVentas').value = data.ventasTotales || 0;
+          const pagos = data.pagosRecibidos || data.ventasTotales || 0;
+          document.getElementById('tienda_shopifyVentas').value = pagos;
           document.getElementById('tienda_shopifyTarjeta').value = b.tarjeta || 0;
           document.getElementById('tienda_shopifyTransf').value = b.transferencias || 0;
 
-          document.getElementById('comp_shopify_ventas').textContent = formatCurrency(data.ventasTotales || 0);
+          document.getElementById('comp_shopify_pagos').textContent = formatCurrency(pagos);
           document.getElementById('comp_shopify_tarjeta').textContent = formatCurrency(b.tarjeta || 0);
           document.getElementById('comp_shopify_transf').textContent = formatCurrency(b.transferencias || 0);
+          document.getElementById('comp_shopify_cashback').textContent = formatCurrency(b.cashback || 0);
 
           statusEl.textContent = '✅ Datos de ' + fecha;
           statusEl.style.color = '#2e7d32';

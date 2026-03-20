@@ -1289,34 +1289,38 @@ function syncShopifyDaily(body) {
     const result = JSON.parse(resp.getContentText());
     const orders = result.data?.orders?.edges || [];
 
-    // Aggregate by payment type
+    // Aggregate by payment type from transactions (SALE minus REFUND = Pagos netos)
     let ventasTotales = 0;
     let tarjeta = 0, efectivo = 0, transferencias = 0, cashback = 0, storeCredit = 0;
+
+    function classifyGateway(gateway, amount) {
+      const g = (gateway || '').toLowerCase();
+      if (g.includes('cash') && !g.includes('back')) { efectivo += amount; }
+      else if (g.includes('card') || g.includes('tarjeta') || g.includes('stripe') || g.includes('shopify_payments')) { tarjeta += amount; }
+      else if (g.includes('transfer') || g.includes('bank')) { transferencias += amount; }
+      else if (g.includes('cashback')) { cashback += amount; }
+      else if (g.includes('store_credit') || g.includes('gift_card')) { storeCredit += amount; }
+      else {
+        log('SHOPIFY_UNKNOWN_GATEWAY', gateway + ' | $' + amount);
+        efectivo += amount;
+      }
+    }
 
     orders.forEach(({ node: order }) => {
       const total = parseFloat(order.totalPriceSet?.shopMoney?.amount) || 0;
       ventasTotales += total;
 
       (order.transactions || []).forEach(tx => {
-        if (tx.kind !== 'SALE' && tx.kind !== 'sale') return;
-        if (tx.status !== 'SUCCESS' && tx.status !== 'success') return;
+        const kind = (tx.kind || '').toUpperCase();
+        const status = (tx.status || '').toUpperCase();
+        if (status !== 'SUCCESS') return;
         const amount = parseFloat(tx.amountSet?.shopMoney?.amount) || 0;
-        const gateway = (tx.gateway || '').toLowerCase();
 
-        if (gateway.includes('cash') && !gateway.includes('back')) {
-          efectivo += amount;
-        } else if (gateway.includes('card') || gateway.includes('tarjeta') || gateway.includes('stripe') || gateway.includes('shopify_payments')) {
-          tarjeta += amount;
-        } else if (gateway.includes('transfer') || gateway.includes('bank')) {
-          transferencias += amount;
-        } else if (gateway.includes('cashback')) {
-          cashback += amount;
-        } else if (gateway.includes('store_credit') || gateway.includes('gift_card')) {
-          storeCredit += amount;
-        } else {
-          // Unknown gateway — log it, default to cash
-          log('SHOPIFY_UNKNOWN_GATEWAY', gateway + ' | $' + amount);
-          efectivo += amount;
+        if (kind === 'SALE') {
+          classifyGateway(tx.gateway, amount);
+        } else if (kind === 'REFUND') {
+          // Subtract refunds from the same gateway category
+          classifyGateway(tx.gateway, -amount);
         }
       });
     });
@@ -1338,14 +1342,17 @@ function syncShopifyDaily(body) {
 
     log('SHOPIFY_SYNC', fecha + ' | Orders: ' + orders.length + ' | Total: $' + ventasTotales);
 
+    const pagosRecibidos = efectivo + tarjeta + transferencias + cashback + storeCredit;
+
     return {
       ok: true,
       fecha,
       orderCount: orders.length,
       ventasTotales,
+      pagosRecibidos,
       breakdown: { efectivo, tarjeta, transferencias, cashback, storeCredit },
       corteTiendaUpdated: corteTiendaRow > 0,
-      message: 'Shopify sync complete: ' + orders.length + ' orders, $' + ventasTotales
+      message: 'Shopify sync complete: ' + orders.length + ' orders, $' + ventasTotales + ' | Pagos: $' + pagosRecibidos
     };
 
   } catch (err) {
