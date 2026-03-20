@@ -114,7 +114,7 @@ const NETO_HEADERS = [
 
 const CONFIG_CAJAS_TAB = 'CONFIG_CAJAS';
 const CONFIG_CAJAS_HEADERS = [
-  'Caja', 'Tipo', 'Activa', 'Orden'
+  'Caja', 'Tipo'
 ];
 
 // Bonus mesas — the 9 production/station mesas that have percentage-based formulas
@@ -329,21 +329,21 @@ function getConfigCajas() {
   if (data.length <= 1) {
     // Seed default registers
     const defaults = [
-      ['Caja 1', 'Tienda', true, 1],
-      ['Caja 2', 'Tienda', true, 2],
-      ['Caja 3', 'Tienda', true, 3],
-      ['Repartidor 1', 'Delivery', true, 4],
-      ['Repartidor 2', 'Delivery', true, 5]
+      ['Caja 1', 'Tienda'],
+      ['Caja 2', 'Tienda'],
+      ['Caja 3', 'Tienda'],
+      ['Repartidor 1', 'Delivery'],
+      ['Repartidor 2', 'Delivery']
     ];
     defaults.forEach(r => sheet.appendRow(r));
-    return defaults.map(r => ({ Caja: r[0], Tipo: r[1], Activa: r[2], Orden: r[3] }));
+    return defaults.map(r => ({ Caja: r[0], Tipo: r[1] }));
   }
   const headers = data[0];
   return data.slice(1).map(row => {
     const obj = {};
     headers.forEach((h, i) => obj[h] = row[i]);
     return obj;
-  }).filter(c => String(c.Activa).toUpperCase() !== 'FALSE' && c.Activa !== false);
+  });
 }
 
 function updateConfigCajas(body) {

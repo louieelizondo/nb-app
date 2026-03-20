@@ -1208,8 +1208,7 @@
       try {
         const resp = await fetch(config.scriptUrl + '?action=get_config_cajas');
         const data = await resp.json();
-        const raw = (data.ok && data.cajas && data.cajas.length > 0) ? data.cajas : DEFAULT_CAJAS;
-        _cajasCache = raw.filter(c => String(c.Activa).toUpperCase() !== 'FALSE' && c.Activa !== false);
+        _cajasCache = (data.ok && data.cajas && data.cajas.length > 0) ? data.cajas : DEFAULT_CAJAS;
       } catch (e) {
         console.error('Error loading cajas, using defaults:', e);
         _cajasCache = DEFAULT_CAJAS;
