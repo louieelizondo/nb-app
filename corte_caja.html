@@ -1193,12 +1193,11 @@
     }
 
     const DEFAULT_CAJAS = [
-      { Caja: 'Caja 1', Tipo: 'Registro' },
-      { Caja: 'Caja 2', Tipo: 'Registro' },
-      { Caja: 'Caja 3', Tipo: 'Registro' },
-      { Caja: 'Caja 4', Tipo: 'Registro' },
-      { Caja: 'Repartidor 1', Tipo: 'Repartidor' },
-      { Caja: 'Repartidor 2', Tipo: 'Repartidor' }
+      { Caja: 'Caja 1', Tipo: 'Tienda' },
+      { Caja: 'Caja 2', Tipo: 'Tienda' },
+      { Caja: 'Caja 3', Tipo: 'Tienda' },
+      { Caja: 'Repartidor 1', Tipo: 'Delivery' },
+      { Caja: 'Repartidor 2', Tipo: 'Delivery' }
     ];
 
     // Shared cajas cache — fetched once, reused everywhere
@@ -1208,7 +1207,8 @@
       try {
         const resp = await fetch(config.scriptUrl + '?action=get_config_cajas');
         const data = await resp.json();
-        _cajasCache = (data.ok && data.cajas && data.cajas.length > 0) ? data.cajas : DEFAULT_CAJAS;
+        console.log('get_config_cajas response:', JSON.stringify(data));
+        _cajasCache = (data.cajas && data.cajas.length > 0) ? data.cajas : DEFAULT_CAJAS;
       } catch (e) {
         console.error('Error loading cajas, using defaults:', e);
         _cajasCache = DEFAULT_CAJAS;
