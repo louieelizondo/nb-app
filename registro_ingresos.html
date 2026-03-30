@@ -1666,9 +1666,28 @@ async function loadFacturacionMonth() {
     // Sort ascending (oldest first) so dates go 1, 2, 3...
     ingresos.sort((a, b) => new Date(a.Fecha) - new Date(b.Fecha));
 
+    // Calculate column totals
+    let tPagos = 0, tSobre2 = 0, tAFact = 0, tFC = 0, tG1 = 0, tG2 = 0, tG3 = 0, tG4 = 0, tG5 = 0, tG6 = 0, tFacturado = 0, tFalta = 0;
+    ingresos.forEach(r => {
+      const pagos = parseFloat(r.PagosRecibidos) || 0;
+      const sobre2 = parseFloat(r.Sobre2) || 0;
+      tPagos += pagos;
+      tSobre2 += sobre2;
+      tAFact += pagos - sobre2;
+      tFC += parseFloat(r.FactClientes) || 0;
+      tG1 += parseFloat(r.FactGen1) || 0;
+      tG2 += parseFloat(r.FactGen2) || 0;
+      tG3 += parseFloat(r.FactGen3) || 0;
+      tG4 += parseFloat(r.FactGen4) || 0;
+      tG5 += parseFloat(r.FactGen5) || 0;
+      tG6 += parseFloat(r.FactGen6) || 0;
+      tFacturado += parseFloat(r.TotalFacturado) || 0;
+      tFalta += (parseFloat(r.TotalXFacturar) || 0) - (parseFloat(r.TotalFacturado) || 0);
+    });
+
     // Populate daily table
     const tbody = document.getElementById('facturacion-table-body');
-    tbody.innerHTML = ingresos.map(r => `
+    const rows = ingresos.map(r => `
       <tr>
         <td>${formatDate(r.Fecha)}</td>
         <td>${formatPeso(r.PagosRecibidos)}</td>
@@ -1685,6 +1704,25 @@ async function loadFacturacionMonth() {
         <td class="total" style="color:#c62828;font-weight:700;">${formatPeso((r.TotalXFacturar || 0) - (r.TotalFacturado || 0))}</td>
       </tr>
     `).join('');
+
+    // Totals row
+    const totalsRow = `<tr style="background:#e8f5e9;font-weight:700;position:sticky;bottom:0;">
+      <td>TOTALES</td>
+      <td>${formatPeso(tPagos)}</td>
+      <td>${formatPeso(tSobre2)}</td>
+      <td>${formatPeso(tAFact)}</td>
+      <td>${formatPeso(tFC)}</td>
+      <td>${formatPeso(tG1)}</td>
+      <td>${formatPeso(tG2)}</td>
+      <td>${formatPeso(tG3)}</td>
+      <td>${formatPeso(tG4)}</td>
+      <td>${formatPeso(tG5)}</td>
+      <td>${formatPeso(tG6)}</td>
+      <td>${formatPeso(tFacturado)}</td>
+      <td style="color:#c62828;">${formatPeso(tFalta)}</td>
+    </tr>`;
+
+    tbody.innerHTML = rows + totalsRow;
   } catch (err) {
     showToast('Error: ' + err.message, 'error');
   }
