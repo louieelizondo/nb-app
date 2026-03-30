@@ -555,6 +555,33 @@
     }
 
     /* ═══════════════════════════════════════════
+       TAP BUTTONS (replace inputs on touch devices)
+    ═══════════════════════════════════════════ */
+    .np-tap-btn {
+      width: 100%;
+      text-align: right;
+      font-size: 22px;
+      font-weight: 800;
+      color: #2d2319;
+      border: 2.5px solid #d4c9b8;
+      border-radius: 14px;
+      padding: 18px 16px;
+      background: #fafaf8;
+      min-height: 62px;
+      cursor: pointer;
+      touch-action: manipulation;
+      user-select: none;
+      -webkit-user-select: none;
+      -webkit-tap-highlight-color: transparent;
+      transition: background 0.1s, border-color 0.1s;
+      font-family: inherit;
+    }
+    .np-tap-btn:active {
+      background: #e8f5e9;
+      border-color: #4caf50;
+    }
+
+    /* ═══════════════════════════════════════════
        PHONE NUMPAD
     ═══════════════════════════════════════════ */
     #nb-numpad {
@@ -1050,6 +1077,13 @@ function formatPeso(num) {
   return '$' + (num || 0).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
 }
 
+// Sync all tap buttons on Sobre 2 tab with their hidden input values
+function syncTapButtons() {
+  document.querySelectorAll('#tab-sobre2 input[type="number"]').forEach(inp => {
+    inp.dispatchEvent(new Event('change'));
+  });
+}
+
 function normalizeDateStr(dateStr) {
   if (!dateStr) return '';
   const s = String(dateStr).trim();
@@ -1310,6 +1344,7 @@ async function loadCorteData() {
         document.getElementById('sobre2-socios').value = ing['2ndoSocios'] || '';
         document.getElementById('sobre2-nominas').value = ing['2ndoNominas'] || '';
         document.getElementById('ivaAVenta').value = ing.IvaAVenta || '';
+        syncTapButtons();
       }
       return;
     }
@@ -1343,6 +1378,7 @@ async function loadCorteData() {
     corteModified = false;
     document.getElementById('corte-modified-badge').style.display = 'none';
     calculateSobre2Totals();
+    syncTapButtons();
   } catch (err) {
     showToast('Error cargando datos: ' + err.message, 'error');
   }
@@ -1353,8 +1389,13 @@ function setSobre2Total(amount) {
   const socios = Math.floor(amount / 2);
   const nominas = amount - socios;
 
-  document.getElementById('sobre2-socios').value = socios;
-  document.getElementById('sobre2-nominas').value = nominas;
+  const sociosInp = document.getElementById('sobre2-socios');
+  const nominasInp = document.getElementById('sobre2-nominas');
+  sociosInp.value = socios;
+  nominasInp.value = nominas;
+  // Sync tap buttons if they exist
+  sociosInp.dispatchEvent(new Event('change'));
+  nominasInp.dispatchEvent(new Event('change'));
   calculateSobre2Totals();
 }
 
@@ -1900,28 +1941,29 @@ async function callAPI(action, params = {}) {
 
 // ═══════════════════════════════════════════════════════════════
 // PHONE NUMPAD (touch devices only)
+// Uses tappable BUTTONS instead of inputs — Android can't fight that
+// Pattern copied from corte_caja.html denomination grid
 // ═══════════════════════════════════════════════════════════════
 (function() {
   if (!('ontouchstart' in window)) return;
 
-  let _npTarget = null;
+  let _npTarget = null;   // the hidden <input> that stores the value
+  let _npBtn = null;      // the visible <button> that shows the value
   let _npStr = '';
+  let _npOnDone = null;   // callback when numpad closes
 
   const numpad = document.getElementById('nb-numpad');
   const npVal  = document.getElementById('np-value');
   const npLbl  = document.getElementById('np-label');
   const npDot  = document.getElementById('np-dot');
 
-  function getLabel(inp) {
-    const ancestor = inp.closest('.form-group');
-    return (ancestor?.querySelector('label')?.textContent || '').trim();
-  }
-
-  function npShow(inp) {
-    _npTarget = inp;
-    _npStr = (inp.value && inp.value !== '0') ? inp.value : '';
+  function npShow(hiddenInput, displayBtn, label, onDone) {
+    _npTarget = hiddenInput;
+    _npBtn = displayBtn;
+    _npOnDone = onDone || null;
+    _npStr = (hiddenInput.value && hiddenInput.value !== '0' && hiddenInput.value !== '0.00') ? hiddenInput.value : '';
     npDot.disabled = false;
-    npLbl.textContent = getLabel(inp) || 'Monto';
+    npLbl.textContent = label || 'Monto';
     npVal.textContent = _npStr || '0';
     numpad.classList.add('np-open');
   }
@@ -1931,7 +1973,13 @@ async function callAPI(action, params = {}) {
     if (_npTarget) {
       _npTarget.value = _npStr || '';
       _npTarget.dispatchEvent(new Event('input', { bubbles: true }));
+      if (_npBtn) {
+        _npBtn.textContent = _npStr ? formatPeso(parseFloat(_npStr)) : '$0.00';
+      }
+      if (_npOnDone) _npOnDone();
       _npTarget = null;
+      _npBtn = null;
+      _npOnDone = null;
     }
     _npStr = '';
   }
@@ -1948,28 +1996,64 @@ async function callAPI(action, params = {}) {
       else { _npStr += k; }
     }
     npVal.textContent = _npStr || '0';
+    // Live-update the hidden input + button as you type
     _npTarget.value = _npStr || '';
     _npTarget.dispatchEvent(new Event('input', { bubbles: true }));
+    if (_npBtn) {
+      _npBtn.textContent = _npStr ? formatPeso(parseFloat(_npStr)) : '$0.00';
+    }
   }
 
+  // Convert each number input on Sobre 2 tab to a tappable button
+  function convertToTapButton(inp) {
+    if (inp.dataset.npConverted) return;
+    inp.dataset.npConverted = 'true';
+
+    const label = (inp.closest('.form-group')?.querySelector('label')?.textContent || '').trim();
+    const val = parseFloat(inp.value) || 0;
+
+    // Create tappable button that shows the value
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'np-tap-btn';
+    btn.textContent = formatPeso(val);
+    btn.setAttribute('touch-action', 'manipulation');
+
+    // Hide the real input
+    inp.style.display = 'none';
+
+    // Insert button after the hidden input
+    inp.parentNode.insertBefore(btn, inp.nextSibling);
+
+    // Tap button → open numpad
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+      npShow(inp, btn, label);
+    });
+
+    // Keep button in sync if input changes programmatically
+    inp.addEventListener('change', () => {
+      btn.textContent = formatPeso(parseFloat(inp.value) || 0);
+    });
+  }
+
+  // Legacy: for any non-Sobre2 inputs that still use the old pattern
   function attachOne(inp) {
     if (inp.dataset.npAttached) return;
     inp.dataset.npAttached = 'true';
+    const label = (inp.closest('.form-group')?.querySelector('label')?.textContent || '').trim();
     inp.setAttribute('inputmode', 'none');
     inp.style.caretColor = 'transparent';
     inp.addEventListener('touchstart', (e) => {
       e.preventDefault();
       e.stopPropagation();
-      npShow(inp);
+      npShow(inp, null, label);
     }, { passive: false });
-    inp.addEventListener('focus', () => {
-      if (_npTarget !== inp) npShow(inp);
-    });
   }
 
   document.addEventListener('DOMContentLoaded', () => {
-    // Attach to number inputs on the Sobre 2 tab
-    document.querySelectorAll('#tab-sobre2 input[type="number"]').forEach(attachOne);
+    // Convert all Sobre 2 number inputs to tappable buttons + hidden inputs
+    document.querySelectorAll('#tab-sobre2 input[type="number"]').forEach(convertToTapButton);
 
     numpad.querySelectorAll('.np-btn').forEach(btn => {
       btn.addEventListener('click', (e) => {
@@ -1983,7 +2067,7 @@ async function callAPI(action, params = {}) {
 
     document.addEventListener('touchstart', (e) => {
       if (numpad.classList.contains('np-open') && !numpad.contains(e.target)
-          && e.target !== _npTarget) {
+          && e.target !== _npTarget && (!_npBtn || e.target !== _npBtn)) {
         npHide();
       }
     }, { passive: true });
