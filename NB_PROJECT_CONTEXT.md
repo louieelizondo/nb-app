@@ -1,8 +1,8 @@
 # NB System — Full Project Context
 ## Natural Balance Club · Cash Flow & Operations Management
 **Owner:** Louie Elizondo (`le.nbclub@gmail.com`)
-**Last updated:** March 2, 2026
-**Status:** Phase 3 — All apps live, responsive design complete, verified on desktop
+**Last updated:** March 30, 2026
+**Status:** Phase 3 — All apps live, responsive design complete, Shopify POS integrated, Arqueo de Caja frontend shipped
 
 ---
 
@@ -90,10 +90,14 @@ A suite of single-page web apps for **Natural Balance Club** (food/retail store 
 - **URL:** `louieelizondo.github.io/nb-app/corte_caja.html`
 - Individual register cuts with denomination counting (bills + coins)
 - Consolidated store cut (Corte de Tienda)
-- Caja selector: 4 cajas + 2 repartidores (DEFAULT_CAJAS fallback)
+- Caja selector: 3 cajas + 2 repartidores (DEFAULT_CAJAS fallback, CONFIG_CAJAS presence-based — no boolean flags)
 - Required field validation (fecha, colaborador, caja, ventas, efectivo > 0)
 - Faltante/Sobrante calculation
 - Email notification to owner on save
+- **5 tabs:** Corte Individual, Corte de Tienda, Cambio de Billetes, Cambio de Billetes 2/3, Arqueo de Caja
+- **Shopify comparison panel:** Fetches Shopify POS data (Pagos Recibidos = SALE − REFUND transactions), displays side-by-side Líder vs Shopify for Tarjeta, Transferencias, Cashback, Pagos Recibidos
+- **Denomination inputs:** Mobile uses +/− stepper buttons (`createDenomGrid`), desktop uses plain number inputs (`createDenomGridSimple`). Both auto-select value on focus for quick overwrite.
+- **Arqueo de Caja:** Petty cash reconciliation (Fondo1-3, FondoRepartidor, BolsitaCambio, GastosReponer + denomination count). No per-register dropdown — this is global petty cash.
 
 ### 3.6 `registro_ingresos.html` — Registro de Ingresos
 - **URL:** `louieelizondo.github.io/nb-app/registro_ingresos.html`
@@ -137,8 +141,8 @@ A suite of single-page web apps for **Natural Balance Club** (food/retail store 
 ### doGet actions (cortes_ingresos.gs):
 `get_cortes_dia`, `get_corte_tienda`, `get_config_cajas`, `get_ingresos`, `get_monthly_summary`, `get_dashboard_data`, `get_payment_trends`, `get_mesa_sales`, `get_faltante_history`, `get_arqueos`, `get_transferencias`
 
-### doPost actions (cortes_ingresos.gs):
-`save_corte_individual`, `delete_corte_individual`, `save_corte_tienda`, `save_arqueo`, `save_transferencia`, `save_ingreso`, `update_sobre2`, `update_facturacion`, `update_neto_mensual`, `update_config_cajas`, `sync_shopify_daily`
+### doPost actions (gastos_script_DEPLOY_THIS.gs — main router):
+`save_corte_individual`, `delete_corte_individual`, `save_corte_tienda`, `save_arqueo`, `save_transferencia`, `save_ingreso`, `update_sobre2`, `update_facturacion`, `update_neto_mensual`, `update_config_cajas`, `sync_shopify` (routes to `syncShopifyDaily` in cortes_ingresos.gs)
 
 ---
 
@@ -237,37 +241,48 @@ A suite of single-page web apps for **Natural Balance Club** (food/retail store 
 8. ✅ GitHub Pages deployment — all apps live with shared nav
 9. ✅ Notification system — email triggers for Corte de Tienda + Sobre 2
 10. ✅ Responsive design — all 6 apps mobile/tablet/desktop optimized
+11. ✅ Shopify POS integration — live in Corte de Tienda, fetches Pagos Recibidos (SALE − REFUND), Tarjeta/Transferencias/Cashback breakdown, side-by-side comparison with líder input
+12. ✅ Arqueo de Caja frontend — petty cash reconciliation tab shipped in corte_caja.html
+13. ✅ CONFIG_CAJAS simplified — presence-based (no Activa/Orden), dropdown works dynamically
+14. ✅ Denomination inputs desktop UX — editable number inputs with auto-select on focus, +/− buttons for mobile
+15. ✅ Cambio de Billetes desktop fix — switched from mobile stepper to plain inputs (`createDenomGridSimple`)
 
 ---
 
 ## 10. PENDING / NEXT UP
 
+- [ ] **Backend redeploy needed** — User must paste updated `cortes_ingresos.gs` into Apps Script and redeploy for: Shopify pagos netos, ARQUEO_CAJA backend, CONFIG_CAJAS simplification
 - [ ] **Responsive Phase 2** — Visual QA on real devices, fine-tune touch targets, test charts on mobile
 - [ ] **Corte de Caja editability** — user asked if saved cortes should be editable
 - [ ] **Notification test** — first trigger will prompt for Gmail permissions in Apps Script
-- [ ] **Shopify POS integration** — code exists, needs SHOPIFY_TOKEN + SHOPIFY_STORE in Script Properties
 - [ ] **CLAUDE_API_KEY** — needs to be set in Script Properties for invoice photo analysis
 - [ ] **Portal de Finanzas** — exists but unclear completeness
 - [ ] **sync_batch_patch** — offline support for cortes/ingresos (patch file ready)
-- [ ] **Arqueo de Caja** — petty cash web app (backend ready)
 - [ ] **Transferencias Log** — bank transfers web app (backend ready)
-- [ ] **Config Cajas UI** — manage registers without editing the sheet
+- [x] ~~**Shopify POS integration**~~ — ✅ Live (March 2026). Uses GraphQL, SALE − REFUND for net payments
+- [x] ~~**Arqueo de Caja**~~ — ✅ Frontend shipped (March 2026). Backend ready.
+- [x] ~~**Config Cajas UI**~~ — ✅ Simplified to presence-based. No UI needed — edit sheet directly.
 
 ---
 
 ## 11. RECENT GIT HISTORY
 
 ```
+f2a44ee UX: auto-select input value on focus for quick overwrite
+df5c275 fix: denom counter now editable on desktop — type numbers directly
+040edc5 Fix numpad not opening: lazy-init DOM refs
+[earlier commits from March 2026 session:]
+- Shopify comparison panel + fetchShopifyData() in Corte de Tienda
+- Arqueo de Caja frontend tab with denomination counting
+- CONFIG_CAJAS simplified to presence-based (removed Activa/Orden)
+- Cambio de Billetes switched to createDenomGridSimple for desktop
+- DEFAULT_CAJAS updated (removed Caja 4)
+- Shopify sync_shopify action wired in gastos_script doPost router
+[earlier:]
 27439e0 Wire charts-grid class to HTML for side-by-side charts on wide desktop
 4038321 Update project summaries: responsive design complete, deployment status current
 bdd7935 Responsive design: mobile/tablet/desktop optimization for all apps
 20191c9 perf: cut Dashboard from 4 API calls to 2 + fix March gastos bug
-30fe5a1 fix: Gastos showing $0 — use formatDateStr instead of String for date filtering
-38d697e fix: caja selector, field validation, totals row, filter reorder
-f88a094 feat: wire notification emails for Corte de Tienda workflow
-9fb5056 feat: standardized month rotator across Dashboard and Portal de Pagos
-3ef2456 Reorder nav + rename tabs + fix daily sales chart
-b6da48a Add Finance Center: nav bar, auth gates, landing page + new apps
 ```
 
 ---
@@ -388,8 +403,8 @@ b6da48a Add Finance Center: nav bar, auth gates, landing page + new apps
 |--------|------|-------|
 | Caja | String | Register name |
 | Tipo | String | Tienda or Delivery |
-| Activa | Boolean | Is active? |
-| Orden | Number | Display order |
+
+*Simplified March 2026: removed Activa/Orden columns. Presence-based — if it's on the list, it shows in dropdowns.*
 
 ---
 
@@ -434,14 +449,12 @@ At end of month, Louie creates up to 6 general invoices (FactGen1-6) to cover Fa
 
 ## 16. SHOPIFY POS INTEGRATION
 
-### Status: Code built, credentials needed
+### Status: ✅ Live — integrated in Corte de Tienda
 
-### Setup Required
-1. Shopify Admin → Settings → Apps → Develop apps → Create "NB Sync"
-2. Scopes: `read_orders`, `read_locations`
-3. Copy Admin API access token
-4. In Apps Script Properties: set `SHOPIFY_TOKEN` and `SHOPIFY_STORE`
-5. API endpoint: `https://{store}.myshopify.com/admin/api/2025-01/graphql.json`
+### Setup
+- SHOPIFY_TOKEN and SHOPIFY_STORE set in Apps Script Properties
+- API endpoint: `https://{store}.myshopify.com/admin/api/2025-01/graphql.json`
+- Frontend calls `sync_shopify` action → routes to `syncShopifyDaily()` in cortes_ingresos.gs
 
 ### Payment Gateway Mapping
 | Shopify Gateway | NB Category |
@@ -454,8 +467,11 @@ At end of month, Louie creates up to 6 general invoices (FactGen1-6) to cover Fa
 
 ### Daily Sync
 - Function: `syncShopifyDaily({fecha: 'YYYY-MM-DD'})`
+- Returns `pagosRecibidos` (net: SALE − REFUND transactions) and `breakdown` (tarjeta, transferencias, cashback)
+- `classifyGateway()` helper maps Shopify payment gateways to NB categories
 - Populates Shopify_* columns in CORTE_TIENDA
-- Can be triggered manually or via Google Cloud Scheduler (11:30 PM daily)
+- Frontend shows side-by-side Líder vs Shopify with diff banner (green = match, red = discrepancy)
+- Can be triggered manually via button or via Google Cloud Scheduler (11:30 PM daily)
 
 ---
 
@@ -523,9 +539,9 @@ The columns Cocina1/2/3, Casa1/2, Express, Granja, etc. in INGRESOS are **sales 
 - All currently in Notion, planned migration to Sheets + web apps
 
 ### Registers
-- Currently: 3 in-store (Caja 1-3) + 2 delivery (Repartidor 1-2)
-- Planning: add Caja 4, possibly Caja 5
-- Config is dynamic via CONFIG_CAJAS tab
+- Currently: 3 in-store (Caja 1 Tienda, Caja 2 Tienda, Caja 3 Tienda) + 2 delivery (Repartidor 1 Delivery, Repartidor 2 Delivery)
+- Config is dynamic via CONFIG_CAJAS tab (presence-based, 2 columns: Caja + Tipo)
+- DEFAULT_CAJAS fallback in frontend matches this list (no Caja 4)
 
 ---
 
