@@ -500,26 +500,58 @@
        PHONE ENHANCEMENTS — SOBRE 2 TAB
     ═══════════════════════════════════════════ */
     @media (max-width: 600px) {
+      /* All number inputs on Sobre 2: much bigger tap targets */
+      #tab-sobre2 .form-group input[type="number"] {
+        padding: 18px 16px;
+        font-size: 22px;
+        font-weight: 700;
+        text-align: right;
+        border-radius: 14px;
+        border: 2.5px solid #d4c9b8;
+        min-height: 60px;
+        background: #fafaf8;
+      }
+      #tab-sobre2 .form-group input[type="number"]:focus {
+        border-color: #4caf50;
+        background: #fff;
+        box-shadow: 0 0 0 4px rgba(76, 175, 80, 0.15);
+      }
+      /* Labels: bigger and bolder for touch */
+      #tab-sobre2 .form-group label {
+        font-size: 14px;
+        font-weight: 800;
+        margin-bottom: 8px;
+        color: #5a4d3f;
+      }
+      /* Sobre 2 section highlight — the main inputs you use */
+      #tab-sobre2 .form-grid:nth-of-type(3) .form-group input[type="number"] {
+        border-color: #4caf50;
+        background: #f0faf0;
+        font-size: 26px;
+        min-height: 68px;
+      }
       /* Quick amount buttons: bigger tap targets on phone */
       .quick-btn-group { gap: 10px; }
       .quick-btn {
-        padding: 14px 20px;
-        font-size: 15px;
+        padding: 16px 20px;
+        font-size: 17px;
+        font-weight: 700;
         border-radius: 14px;
         flex: 1 0 calc(33% - 10px);
         text-align: center;
+        min-height: 52px;
       }
       /* Summary boxes: larger value display */
       .summary-box.large .value { font-size: 38px; }
       /* Save button: full width, bigger tap target */
       .btn-group { flex-direction: column; }
-      .btn-group .btn { width: 100%; justify-content: center; padding: 16px; font-size: 15px; }
+      .btn-group .btn { width: 100%; justify-content: center; padding: 18px; font-size: 17px; font-weight: 700; min-height: 56px; }
       /* Corte summary: visually de-emphasize (it's just reference on phone) */
       #tab-sobre2 h3:first-of-type { font-size: 12px; color: #aaa; }
-      /* Number inputs: taller for fat-finger tap */
-      .form-group input[type="number"] { padding: 14px 16px; font-size: 18px; text-align: right; }
       /* Pending cards: bigger text */
       .pending-card h4 { font-size: 17px; }
+      /* Date input: bigger too */
+      #tab-sobre2 input[type="date"] { padding: 16px; font-size: 16px; min-height: 54px; }
     }
 
     /* ═══════════════════════════════════════════
