@@ -852,7 +852,7 @@
 
     <h3>Detalle Diario</h3>
     <div class="tbl-wrap" style="overflow-x:scroll;-webkit-overflow-scrolling:touch;">
-      <table style="font-size:12px;min-width:1200px;table-layout:fixed;">
+      <table style="font-size:12px;min-width:1050px;">
         <thead>
           <tr>
             <th style="white-space:nowrap;">Fecha</th>
@@ -866,7 +866,6 @@
             <th style="white-space:nowrap;">Gen4</th>
             <th style="white-space:nowrap;">Gen5</th>
             <th style="white-space:nowrap;">Gen6</th>
-            <th>CFDI</th>
             <th style="white-space:nowrap;">Facturado</th>
             <th style="white-space:nowrap;">Falta</th>
           </tr>
@@ -1664,6 +1663,9 @@ async function loadFacturacionMonth() {
       document.getElementById('monthly-falta-box').classList.add('alert');
     }
 
+    // Sort ascending (oldest first) so dates go 1, 2, 3...
+    ingresos.sort((a, b) => new Date(a.Fecha) - new Date(b.Fecha));
+
     // Populate daily table
     const tbody = document.getElementById('facturacion-table-body');
     tbody.innerHTML = ingresos.map(r => `
@@ -1679,7 +1681,6 @@ async function loadFacturacionMonth() {
         <td><input type="number" data-fecha="${(r.Fecha||'').slice(0,10)}" data-field="FactGen4" value="${r.FactGen4 || 0}" style="width:80px"></td>
         <td><input type="number" data-fecha="${(r.Fecha||'').slice(0,10)}" data-field="FactGen5" value="${r.FactGen5 || 0}" style="width:80px"></td>
         <td><input type="number" data-fecha="${(r.Fecha||'').slice(0,10)}" data-field="FactGen6" value="${r.FactGen6 || 0}" style="width:80px"></td>
-        <td><input type="text" data-fecha="${(r.Fecha||'').slice(0,10)}" data-field="FacturasCFDI" value="${r.FacturasCFDI || ''}" placeholder="CFDI" style="width:60px"></td>
         <td class="total">${formatPeso(r.TotalFacturado)}</td>
         <td class="total">${formatPeso((r.TotalXFacturar || 0) - (r.TotalFacturado || 0))}</td>
       </tr>
@@ -1699,7 +1700,7 @@ async function saveFacturacion() {
     const field = inp.dataset.field;
     if (!fecha || !field) return;
     if (!changes[fecha]) changes[fecha] = {};
-    changes[fecha][field] = field.includes('CFDI') ? inp.value : (parseFloat(inp.value) || 0);
+    changes[fecha][field] = parseFloat(inp.value) || 0;
   });
 
   const dateCount = Object.keys(changes).length;

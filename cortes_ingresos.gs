@@ -935,59 +935,67 @@ function batchUpdateFacturacion(body) {
   if (!changes.length) throw new Error('No changes provided');
 
   const sheet = getOrCreateTab(INGRESOS_TAB, INGRESOS_HEADERS);
-  const data = sheet.getDataRange().getValues();
+  const range = sheet.getDataRange();
+  const data = range.getValues();
   const headers = data[0].map(String);
   const fechaCol = headers.indexOf('Fecha');
   const invoiceFields = ['FactClientes', 'FactGen1', 'FactGen2', 'FactGen3', 'FactGen4', 'FactGen5', 'FactGen6', 'FacturasCFDI'];
 
-  // Build a date→row map for fast lookup
+  // Column indexes
+  const colIdx = {};
+  invoiceFields.forEach(f => colIdx[f] = headers.indexOf(f));
+  colIdx.TotalFacturado = headers.indexOf('TotalFacturado');
+  colIdx.TotalXFacturar = headers.indexOf('TotalXFacturar');
+  colIdx.FaltaFactura = headers.indexOf('FaltaFactura');
+  colIdx.Updated_At = headers.indexOf('Updated_At');
+
+  // Build a date→row index map (0-based into data array)
   const dateRowMap = {};
   for (let i = 1; i < data.length; i++) {
     const f = formatDateStr(data[i][fechaCol]);
-    if (f) dateRowMap[f] = i + 1; // 1-indexed
+    if (f) dateRowMap[f] = i;
   }
 
+  const now = new Date().toISOString();
   let updated = 0;
+
   changes.forEach(c => {
     const fecha = c.fecha;
     if (!fecha) return;
-    const rowNum = dateRowMap[fecha];
-    if (!rowNum) return;
+    const rowIdx = dateRowMap[fecha];
+    if (rowIdx === undefined) return;
 
-    // Update invoice fields
+    // Write invoice fields directly into data array
     invoiceFields.forEach(field => {
-      if (c[field] !== undefined) {
-        const col = headers.indexOf(field);
-        if (col >= 0) sheet.getRange(rowNum, col + 1).setValue(c[field]);
+      if (c[field] !== undefined && colIdx[field] >= 0) {
+        data[rowIdx][colIdx[field]] = c[field];
       }
     });
 
-    // Recalculate TotalFacturado
+    // Recalculate TotalFacturado from the data array (no extra API reads)
     let totalFacturado = 0;
-    const fcCol = headers.indexOf('FactClientes');
-    if (fcCol >= 0) totalFacturado += parseFloat(c.FactClientes !== undefined ? c.FactClientes : sheet.getRange(rowNum, fcCol + 1).getValue()) || 0;
+    if (colIdx.FactClientes >= 0) totalFacturado += parseFloat(data[rowIdx][colIdx.FactClientes]) || 0;
     for (let g = 1; g <= 6; g++) {
-      const gCol = headers.indexOf('FactGen' + g);
-      if (gCol >= 0) totalFacturado += parseFloat(c['FactGen' + g] !== undefined ? c['FactGen' + g] : sheet.getRange(rowNum, gCol + 1).getValue()) || 0;
+      const key = 'FactGen' + g;
+      if (colIdx[key] >= 0) totalFacturado += parseFloat(data[rowIdx][colIdx[key]]) || 0;
     }
 
-    const tfCol = headers.indexOf('TotalFacturado');
-    if (tfCol >= 0) sheet.getRange(rowNum, tfCol + 1).setValue(totalFacturado);
+    if (colIdx.TotalFacturado >= 0) data[rowIdx][colIdx.TotalFacturado] = totalFacturado;
 
-    const txfCol = headers.indexOf('TotalXFacturar');
-    const ffCol = headers.indexOf('FaltaFactura');
-    if (txfCol >= 0 && ffCol >= 0) {
-      const totalXFacturar = parseFloat(sheet.getRange(rowNum, txfCol + 1).getValue()) || 0;
-      sheet.getRange(rowNum, ffCol + 1).setValue(totalXFacturar - totalFacturado);
+    if (colIdx.TotalXFacturar >= 0 && colIdx.FaltaFactura >= 0) {
+      const totalXFacturar = parseFloat(data[rowIdx][colIdx.TotalXFacturar]) || 0;
+      data[rowIdx][colIdx.FaltaFactura] = totalXFacturar - totalFacturado;
     }
 
-    const uaCol = headers.indexOf('Updated_At');
-    if (uaCol >= 0) sheet.getRange(rowNum, uaCol + 1).setValue(new Date().toISOString());
+    if (colIdx.Updated_At >= 0) data[rowIdx][colIdx.Updated_At] = now;
 
     updated++;
   });
 
+  // ONE bulk write for the entire sheet
+  range.setValues(data);
   SpreadsheetApp.flush();
+
   log('BATCH_FACTURACION', updated + ' dates updated');
   return { ok: true, updated, message: updated + ' fechas actualizadas' };
 }
