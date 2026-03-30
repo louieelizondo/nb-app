@@ -612,6 +612,38 @@
           <select id="ind_caja"></select>
         </div>
 
+        <!-- Shopify POS per-register lookup -->
+        <div id="ind_shopify_section" style="margin:12px 0;">
+          <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+            <button class="btn btn-secondary btn-sm" onclick="fetchShopifyByRegister()" id="ind_shopify_btn">📡 Consultar Shopify</button>
+            <span id="ind_shopify_status" style="font-size:13px;"></span>
+          </div>
+          <div id="ind_shopify_panel" style="display:none; margin-top:10px; padding:14px; background:#f5f9f5; border-radius:10px; border:1px solid #c8e6c9;">
+            <div style="font-size:13px; font-weight:700; color:#2e7d32; margin-bottom:8px;">📊 Datos Shopify POS — <span id="ind_shopify_caja_label"></span></div>
+            <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px;">
+              <div style="text-align:center;">
+                <div style="font-size:11px; color:#666;">Tarjeta</div>
+                <div id="ind_shopify_tarjeta" style="font-size:18px; font-weight:700;">—</div>
+              </div>
+              <div style="text-align:center;">
+                <div style="font-size:11px; color:#666;">Transferencias</div>
+                <div id="ind_shopify_transf" style="font-size:18px; font-weight:700;">—</div>
+              </div>
+              <div style="text-align:center;">
+                <div style="font-size:11px; color:#666;">Cashback</div>
+                <div id="ind_shopify_cashback" style="font-size:18px; font-weight:700;">—</div>
+              </div>
+            </div>
+            <div style="text-align:center; margin-top:8px; padding-top:8px; border-top:1px solid #c8e6c9;">
+              <div style="font-size:11px; color:#666;">Pagos Recibidos</div>
+              <div id="ind_shopify_pagos" style="font-size:20px; font-weight:900; color:#2e7d32;">—</div>
+            </div>
+            <div style="text-align:center; margin-top:6px;">
+              <button class="btn btn-sm" onclick="autoFillFromShopify()" style="font-size:12px; background:#e8f5e9; border:1px solid #a5d6a7; color:#2e7d32; cursor:pointer; padding:4px 12px; border-radius:6px;">✅ Usar estos datos</button>
+            </div>
+          </div>
+        </div>
+
         <h3>Métodos de Pago</h3>
         <div class="form-grid col3">
           <div class="form-group">
@@ -1195,11 +1227,12 @@
     }
 
     const DEFAULT_CAJAS = [
-      { Caja: 'Caja 1', Tipo: 'Tienda' },
-      { Caja: 'Caja 2', Tipo: 'Tienda' },
-      { Caja: 'Caja 3', Tipo: 'Tienda' },
-      { Caja: 'Repartidor 1', Tipo: 'Delivery' },
-      { Caja: 'Repartidor 2', Tipo: 'Delivery' }
+      { Caja: 'Caja 1', Tipo: 'Tienda', POS_ID: '' },
+      { Caja: 'Caja 2', Tipo: 'Tienda', POS_ID: '' },
+      { Caja: 'Caja 3', Tipo: 'Tienda', POS_ID: '' },
+      { Caja: 'Caja 4', Tipo: 'Tienda', POS_ID: '' },
+      { Caja: 'Repartidor 1', Tipo: 'Delivery', POS_ID: '' },
+      { Caja: 'Repartidor 2', Tipo: 'Delivery', POS_ID: '' }
     ];
 
     // Shared cajas cache — fetched once, reused everywhere
@@ -1552,6 +1585,120 @@
       } finally {
         btn.disabled = false;
         btn.textContent = '📡 Traer datos de Shopify';
+      }
+    }
+
+    // ═══════════════════════════════════════════
+    // SHOPIFY PER-REGISTER (Corte Individual)
+    // ═══════════════════════════════════════════
+
+    let _shopifyRegisterData = null; // cached per-register data for current fetch
+
+    async function fetchShopifyByRegister() {
+      const fecha = document.getElementById('ind_fecha').value;
+      const cajaName = document.getElementById('ind_caja').value;
+      if (!fecha) { showToast('Selecciona una fecha primero', 'error'); return; }
+      if (!cajaName) { showToast('Selecciona una caja primero', 'error'); return; }
+
+      // Get POS_ID for selected caja
+      const cajas = await fetchCajas();
+      const cajaConfig = cajas.find(c => c.Caja === cajaName);
+      const posId = cajaConfig?.POS_ID ? String(cajaConfig.POS_ID) : '';
+
+      const btn = document.getElementById('ind_shopify_btn');
+      const statusEl = document.getElementById('ind_shopify_status');
+      const panel = document.getElementById('ind_shopify_panel');
+      btn.disabled = true;
+      btn.textContent = '⏳ Consultando…';
+      statusEl.textContent = '';
+
+      try {
+        const resp = await fetch(config.scriptUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain' },
+          body: JSON.stringify({ action: 'sync_shopify_register', fecha, debug: true })
+        });
+        const data = await resp.json();
+
+        if (!data.ok) {
+          statusEl.textContent = '❌ ' + (data.error || data.message || 'Error');
+          statusEl.style.color = '#c62828';
+          panel.style.display = 'none';
+          return;
+        }
+
+        _shopifyRegisterData = data;
+
+        // Find matching register data
+        const regs = data.registers || {};
+        let matchedData = null;
+        let matchedKey = null;
+
+        // Try to match by POS_ID
+        if (posId && regs[posId]) {
+          matchedData = regs[posId];
+          matchedKey = posId;
+        }
+
+        // If no match and only one register + "unknown", use unknown
+        const keys = Object.keys(regs);
+        if (!matchedData && keys.length === 1) {
+          matchedData = regs[keys[0]];
+          matchedKey = keys[0];
+        }
+
+        if (matchedData) {
+          document.getElementById('ind_shopify_caja_label').textContent = cajaName + (matchedKey !== 'unknown' ? ' (POS: ' + matchedKey + ')' : '');
+          document.getElementById('ind_shopify_tarjeta').textContent = formatCurrency(matchedData.tarjeta || 0);
+          document.getElementById('ind_shopify_transf').textContent = formatCurrency(matchedData.transferencias || 0);
+          document.getElementById('ind_shopify_cashback').textContent = formatCurrency(matchedData.cashback || 0);
+          document.getElementById('ind_shopify_pagos').textContent = formatCurrency(matchedData.pagosRecibidos || 0);
+          panel.style.display = 'block';
+          statusEl.textContent = '✅ ' + (matchedData.orderCount || 0) + ' órdenes encontradas';
+          statusEl.style.color = '#2e7d32';
+        } else if (keys.length > 0) {
+          // Show which device IDs were found so user can map them
+          panel.style.display = 'none';
+          const foundIds = keys.join(', ');
+          statusEl.innerHTML = '⚠️ POS_ID "' + (posId || 'vacío') + '" no coincide. Dispositivos encontrados: <strong>' + foundIds + '</strong>. Actualiza CONFIG_CAJAS con el POS_ID correcto.';
+          statusEl.style.color = '#e65100';
+          console.log('Shopify register debug:', JSON.stringify(data.debug || data.registers));
+        } else {
+          panel.style.display = 'none';
+          statusEl.textContent = '⚠️ Sin órdenes para ' + fecha;
+          statusEl.style.color = '#e65100';
+        }
+      } catch (e) {
+        console.error('Shopify register fetch error:', e);
+        statusEl.textContent = '❌ Error de conexión';
+        statusEl.style.color = '#c62828';
+        panel.style.display = 'none';
+      } finally {
+        btn.disabled = false;
+        btn.textContent = '📡 Consultar Shopify';
+      }
+    }
+
+    function autoFillFromShopify() {
+      const cajaName = document.getElementById('ind_caja').value;
+      if (!_shopifyRegisterData || !cajaName) return;
+
+      const cajas = _cajasCache || [];
+      const cajaConfig = cajas.find(c => c.Caja === cajaName);
+      const posId = cajaConfig?.POS_ID ? String(cajaConfig.POS_ID) : '';
+      const regs = _shopifyRegisterData.registers || {};
+      const keys = Object.keys(regs);
+
+      let data = null;
+      if (posId && regs[posId]) data = regs[posId];
+      else if (keys.length === 1) data = regs[keys[0]];
+
+      if (data) {
+        document.getElementById('ind_tarjeta').value = (data.tarjeta || 0).toFixed(2);
+        document.getElementById('ind_transferencias').value = (data.transferencias || 0).toFixed(2);
+        document.getElementById('ind_cashback').value = (data.cashback || 0).toFixed(2);
+        updateIndividualCalcs();
+        showToast('Datos de Shopify aplicados', 'success');
       }
     }
 

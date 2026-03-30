@@ -114,7 +114,7 @@ const NETO_HEADERS = [
 
 const CONFIG_CAJAS_TAB = 'CONFIG_CAJAS';
 const CONFIG_CAJAS_HEADERS = [
-  'Caja', 'Tipo'
+  'Caja', 'Tipo', 'POS_ID'
 ];
 
 // Bonus mesas — the 9 production/station mesas that have percentage-based formulas
@@ -329,14 +329,15 @@ function getConfigCajas() {
   if (data.length <= 1) {
     // Seed default registers
     const defaults = [
-      ['Caja 1', 'Tienda'],
-      ['Caja 2', 'Tienda'],
-      ['Caja 3', 'Tienda'],
-      ['Repartidor 1', 'Delivery'],
-      ['Repartidor 2', 'Delivery']
+      ['Caja 1', 'Tienda', ''],
+      ['Caja 2', 'Tienda', ''],
+      ['Caja 3', 'Tienda', ''],
+      ['Caja 4', 'Tienda', ''],
+      ['Repartidor 1', 'Delivery', ''],
+      ['Repartidor 2', 'Delivery', '']
     ];
     defaults.forEach(r => sheet.appendRow(r));
-    return defaults.map(r => ({ Caja: r[0], Tipo: r[1] }));
+    return defaults.map(r => ({ Caja: r[0], Tipo: r[1], POS_ID: r[2] }));
   }
   const headers = data[0];
   return data.slice(1).map(row => {
@@ -1365,6 +1366,168 @@ function syncShopifyDaily(body) {
 
   } catch (err) {
     log('SHOPIFY_ERROR', fecha + ': ' + err.message);
+    return { ok: false, error: err.message };
+  }
+}
+
+// ══════════════════════════════════════════════
+// SHOPIFY POS — PER-REGISTER BREAKDOWN
+// ══════════════════════════════════════════════
+
+/**
+ * Fetches Shopify POS orders for a date and groups transaction totals by POS device.
+ * Each device maps to a register (caja) via CONFIG_CAJAS.POS_ID.
+ *
+ * @param {Object} body - { fecha: 'YYYY-MM-DD', debug: boolean }
+ * @returns {Object} { ok, fecha, registers: { deviceId: { tarjeta, transferencias, cashback, ... } }, deviceIds: [...] }
+ */
+function syncShopifyByRegister(body) {
+  const token = PropertiesService.getScriptProperties().getProperty('SHOPIFY_TOKEN');
+  const store = PropertiesService.getScriptProperties().getProperty('SHOPIFY_STORE');
+
+  if (!token || !store) {
+    return { ok: false, message: 'Shopify not configured. Set SHOPIFY_TOKEN and SHOPIFY_STORE in Script Properties.', setup_needed: true };
+  }
+
+  const fecha = body.fecha || formatDateStr(new Date());
+  const apiVersion = '2025-01';
+  const url = 'https://' + store + '.myshopify.com/admin/api/' + apiVersion + '/graphql.json';
+
+  // GraphQL query: orders with transactions + device ID + custom attributes
+  const query = `{
+    orders(first: 250, query: "created_at:>='${fecha}T00:00:00' created_at:<='${fecha}T23:59:59'") {
+      edges {
+        node {
+          name
+          totalPriceSet { shopMoney { amount } }
+          customAttributes { key value }
+          transactions(first: 10) {
+            gateway
+            kind
+            status
+            amountSet { shopMoney { amount } }
+            receiptJson
+          }
+        }
+      }
+    }
+  }`;
+
+  const options = {
+    method: 'post',
+    contentType: 'application/json',
+    headers: { 'X-Shopify-Access-Token': token },
+    payload: JSON.stringify({ query }),
+    muteHttpExceptions: true
+  };
+
+  try {
+    const resp = UrlFetchApp.fetch(url, options);
+    if (resp.getResponseCode() !== 200) {
+      throw new Error('Shopify API error ' + resp.getResponseCode() + ': ' + resp.getContentText().slice(0, 200));
+    }
+
+    const result = JSON.parse(resp.getContentText());
+    const orders = result.data?.orders?.edges || [];
+
+    // Also try REST API to get device_id per order (GraphQL doesn't expose it directly)
+    let restDeviceMap = {};
+    try {
+      const restUrl = 'https://' + store + '.myshopify.com/admin/api/' + apiVersion + '/orders.json?' +
+        'created_at_min=' + encodeURIComponent(fecha + 'T00:00:00-06:00') +
+        '&created_at_max=' + encodeURIComponent(fecha + 'T23:59:59-06:00') +
+        '&status=any&limit=250&fields=id,name,device_id,source_name';
+      const restResp = UrlFetchApp.fetch(restUrl, {
+        method: 'get',
+        headers: { 'X-Shopify-Access-Token': token },
+        muteHttpExceptions: true
+      });
+      if (restResp.getResponseCode() === 200) {
+        const restData = JSON.parse(restResp.getContentText());
+        (restData.orders || []).forEach(o => {
+          if (o.device_id) restDeviceMap[o.name] = String(o.device_id);
+        });
+      }
+    } catch (restErr) {
+      log('SHOPIFY_REST_FALLBACK_ERROR', restErr.message);
+    }
+
+    // Group by device/register
+    const registers = {}; // deviceId -> { tarjeta, transferencias, cashback, efectivo, storeCredit, ventasTotales, orderCount }
+    const debugOrders = [];
+
+    function classifyToRegister(reg, gateway, amount) {
+      const g = (gateway || '').toLowerCase();
+      if (g.includes('cash') && !g.includes('back')) { reg.efectivo += amount; }
+      else if (g.includes('card') || g.includes('tarjeta') || g.includes('stripe') || g.includes('shopify_payments')) { reg.tarjeta += amount; }
+      else if (g.includes('transfer') || g.includes('bank')) { reg.transferencias += amount; }
+      else if (g.includes('cashback')) { reg.cashback += amount; }
+      else if (g.includes('store_credit') || g.includes('gift_card')) { reg.storeCredit += amount; }
+      else { reg.efectivo += amount; }
+    }
+
+    orders.forEach(({ node: order }) => {
+      const orderName = order.name;
+      const total = parseFloat(order.totalPriceSet?.shopMoney?.amount) || 0;
+
+      // Determine device/register ID
+      // Priority: 1) customAttributes register_id/device_id  2) REST device_id  3) 'unknown'
+      let deviceId = null;
+      const attrs = {};
+      (order.customAttributes || []).forEach(a => { attrs[a.key] = a.value; });
+      deviceId = attrs['register_id'] || attrs['pos_register_id'] || attrs['Register'] || attrs['device_id'] || attrs['Device'];
+
+      if (!deviceId && restDeviceMap[orderName]) {
+        deviceId = restDeviceMap[orderName];
+      }
+      if (!deviceId) deviceId = 'unknown';
+
+      if (!registers[deviceId]) {
+        registers[deviceId] = { tarjeta: 0, transferencias: 0, cashback: 0, efectivo: 0, storeCredit: 0, ventasTotales: 0, orderCount: 0 };
+      }
+      registers[deviceId].ventasTotales += total;
+      registers[deviceId].orderCount++;
+
+      // Aggregate transactions by gateway
+      (order.transactions || []).forEach(tx => {
+        const kind = (tx.kind || '').toUpperCase();
+        const status = (tx.status || '').toUpperCase();
+        if (status !== 'SUCCESS') return;
+        const amount = parseFloat(tx.amountSet?.shopMoney?.amount) || 0;
+        if (kind === 'SALE') {
+          classifyToRegister(registers[deviceId], tx.gateway, amount);
+        } else if (kind === 'REFUND') {
+          classifyToRegister(registers[deviceId], tx.gateway, -amount);
+        }
+      });
+
+      // Debug info for first 5 orders
+      if (body.debug && debugOrders.length < 5) {
+        debugOrders.push({ name: orderName, customAttributes: attrs, restDeviceId: restDeviceMap[orderName] || null, resolvedDeviceId: deviceId });
+      }
+    });
+
+    // Calculate pagosRecibidos per register
+    Object.keys(registers).forEach(k => {
+      const r = registers[k];
+      r.pagosRecibidos = r.efectivo + r.tarjeta + r.transferencias + r.cashback + r.storeCredit;
+    });
+
+    const allDeviceIds = Object.keys(registers);
+    log('SHOPIFY_BY_REGISTER', fecha + ' | Devices: ' + allDeviceIds.join(',') + ' | Orders: ' + orders.length);
+
+    return {
+      ok: true,
+      fecha,
+      orderCount: orders.length,
+      registers,
+      deviceIds: allDeviceIds,
+      debug: body.debug ? debugOrders : undefined,
+      message: 'Per-register sync: ' + orders.length + ' orders across ' + allDeviceIds.length + ' devices'
+    };
+
+  } catch (err) {
+    log('SHOPIFY_BY_REGISTER_ERROR', fecha + ': ' + err.message);
     return { ok: false, error: err.message };
   }
 }

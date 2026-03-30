@@ -150,6 +150,7 @@ function doPost(e) {
       case 'update_facturacion_batch': return jsonResp(batchUpdateFacturacion(body));
       case 'update_neto_mensual':     return jsonResp(updateNetoMensual(body));
       case 'sync_shopify':            return jsonResp(syncShopifyDaily(body));
+      case 'sync_shopify_register':   return jsonResp(syncShopifyByRegister(body));
       case 'update_config_cajas':     return jsonResp(updateConfigCajas(body));
       // Ventas por Mesa + Bonos
       case 'save_ventas_mesa':        return jsonResp(saveVentasMesa(body));
