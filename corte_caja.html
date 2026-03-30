@@ -202,8 +202,9 @@
     .denom-grid-simple .denom-input:focus { outline: none; border-color: #4caf50; }
     .denom-grid-simple .denom-calc { font-size: 12px; margin-top: 0; text-align: right; min-width: 100px; }
 
-    /* Big tappable number button — single tap always registers */
-    .denom-qty-btn {
+    /* Big tappable number — editable input with +/- buttons */
+    .denom-qty-input {
+      display: block !important;
       flex: 1;
       text-align: center;
       font-size: 28px;
@@ -214,14 +215,15 @@
       padding: 8px 4px;
       background: white;
       min-width: 0;
-      cursor: pointer;
-      touch-action: manipulation;
-      user-select: none;
-      -webkit-user-select: none;
-      -webkit-tap-highlight-color: transparent;
+      cursor: text;
+      -webkit-appearance: none;
+      -moz-appearance: textfield;
+      font-family: inherit;
       transition: background 0.08s, border-color 0.08s;
     }
-    .denom-qty-btn:active { background: #e8f5e9; border-color: #4caf50; }
+    .denom-qty-input:focus { outline: none; border-color: #4caf50; background: #f0fff0; }
+    .denom-qty-input::-webkit-inner-spin-button,
+    .denom-qty-input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
     .denom-calc {
       font-size: 12px;
       color: #7a6b5d;
@@ -1085,34 +1087,32 @@
           <div class="denom-label">${d.label}</div>
           <div class="denom-counter">
             <button type="button" class="denom-btn denom-btn-minus">−</button>
-            <button type="button" class="denom-qty-btn">0</button>
-            <input type="hidden" class="denom-input" data-key="${d.key}" value="0" />
+            <input type="number" class="denom-input denom-qty-input" data-key="${d.key}" value="0" min="0" step="1" inputmode="numeric" />
             <button type="button" class="denom-btn denom-btn-plus">+</button>
           </div>
           <div class="denom-calc">× ${d.label} = <span>$0.00</span></div>
         `;
-        const hiddenInput = item.querySelector('.denom-input');
-        const qtyBtn      = item.querySelector('.denom-qty-btn');
-        const minus       = item.querySelector('.denom-btn-minus');
-        const plus        = item.querySelector('.denom-btn-plus');
+        const inp   = item.querySelector('.denom-input');
+        const minus = item.querySelector('.denom-btn-minus');
+        const plus  = item.querySelector('.denom-btn-plus');
 
         function refresh() {
-          qtyBtn.textContent = hiddenInput.value || '0';
           updateDenomCalc(item, d.value);
           onChange();
         }
 
         minus.addEventListener('click', () => {
-          hiddenInput.value = Math.max(0, (parseInt(hiddenInput.value) || 0) - 1);
+          inp.value = Math.max(0, (parseInt(inp.value) || 0) - 1);
           refresh();
         });
         plus.addEventListener('click', () => {
-          hiddenInput.value = (parseInt(hiddenInput.value) || 0) + 1;
+          inp.value = (parseInt(inp.value) || 0) + 1;
           refresh();
         });
-        // Single tap on the number → open numpad
-        qtyBtn.addEventListener('click', () => {
-          openDenomNumpad(hiddenInput, qtyBtn, d.label, refresh);
+        // Direct typing on desktop — also updates on input
+        inp.addEventListener('input', () => {
+          if ((parseInt(inp.value) || 0) < 0) inp.value = 0;
+          refresh();
         });
         container.appendChild(item);
       });
