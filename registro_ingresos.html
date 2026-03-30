@@ -84,7 +84,6 @@
       padding: 24px;
       box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
       margin-bottom: 20px;
-      overflow: hidden;
     }
     .card h2 {
       font-size: 18px;
@@ -854,8 +853,8 @@
     </div>
 
     <h3>Detalle Diario</h3>
-    <div class="tbl-wrap" style="overflow-x:scroll;-webkit-overflow-scrolling:touch;">
-      <table style="font-size:13px;min-width:1200px;">
+    <div style="display:block;max-width:calc(100vw - 80px);overflow-x:auto;-webkit-overflow-scrolling:touch;border-radius:12px;border:1px solid #e0d8cf;">
+      <table style="font-size:13px;min-width:1200px;border-collapse:collapse;">
         <thead>
           <tr>
             <th style="white-space:nowrap;">Fecha</th>
