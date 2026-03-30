@@ -1952,12 +1952,19 @@ async function callAPI(action, params = {}) {
   let _npStr = '';
   let _npOnDone = null;   // callback when numpad closes
 
-  const numpad = document.getElementById('nb-numpad');
-  const npVal  = document.getElementById('np-value');
-  const npLbl  = document.getElementById('np-label');
-  const npDot  = document.getElementById('np-dot');
+  // Lazy-init: numpad HTML is below this script, so grab refs on first use
+  let numpad, npVal, npLbl, npDot;
+  function ensureRefs() {
+    if (!numpad) {
+      numpad = document.getElementById('nb-numpad');
+      npVal  = document.getElementById('np-value');
+      npLbl  = document.getElementById('np-label');
+      npDot  = document.getElementById('np-dot');
+    }
+  }
 
   function npShow(hiddenInput, displayBtn, label, onDone) {
+    ensureRefs();
     _npTarget = hiddenInput;
     _npBtn = displayBtn;
     _npOnDone = onDone || null;
@@ -1969,6 +1976,7 @@ async function callAPI(action, params = {}) {
   }
 
   function npHide() {
+    ensureRefs();
     numpad.classList.remove('np-open');
     if (_npTarget) {
       _npTarget.value = _npStr || '';
@@ -1985,6 +1993,7 @@ async function callAPI(action, params = {}) {
   }
 
   function npKey(k) {
+    ensureRefs();
     if (!_npTarget) return;
     if (k === 'back') {
       _npStr = _npStr.slice(0, -1);
@@ -2052,6 +2061,8 @@ async function callAPI(action, params = {}) {
   }
 
   document.addEventListener('DOMContentLoaded', () => {
+    ensureRefs();
+
     // Convert all Sobre 2 number inputs to tappable buttons + hidden inputs
     document.querySelectorAll('#tab-sobre2 input[type="number"]').forEach(convertToTapButton);
 
