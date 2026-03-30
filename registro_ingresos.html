@@ -84,6 +84,7 @@
       padding: 24px;
       box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
       margin-bottom: 20px;
+      overflow: hidden;
     }
     .card h2 {
       font-size: 18px;
@@ -295,10 +296,12 @@
     /* TABLE */
     .tbl-wrap {
       overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
       background: white;
       border-radius: 16px;
       box-shadow: 0 2px 16px rgba(0, 0, 0, 0.06);
       margin-bottom: 20px;
+      max-width: 100%;
     }
     table {
       width: 100%;
