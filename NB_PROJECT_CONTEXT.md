@@ -90,12 +90,13 @@ A suite of single-page web apps for **Natural Balance Club** (food/retail store 
 - **URL:** `louieelizondo.github.io/nb-app/corte_caja.html`
 - Individual register cuts with denomination counting (bills + coins)
 - Consolidated store cut (Corte de Tienda)
-- Caja selector: 3 cajas + 2 repartidores (DEFAULT_CAJAS fallback, CONFIG_CAJAS presence-based — no boolean flags)
+- Caja selector: 4 cajas + 2 repartidores (DEFAULT_CAJAS fallback, CONFIG_CAJAS presence-based with POS_ID column)
 - Required field validation (fecha, colaborador, caja, ventas, efectivo > 0)
 - Faltante/Sobrante calculation
 - Email notification to owner on save
 - **5 tabs:** Corte Individual, Corte de Tienda, Cambio de Billetes, Cambio de Billetes 2/3, Arqueo de Caja
-- **Shopify comparison panel:** Fetches Shopify POS data (Pagos Recibidos = SALE − REFUND transactions), displays side-by-side Líder vs Shopify for Tarjeta, Transferencias, Cashback, Pagos Recibidos
+- **Shopify comparison panel (Corte de Tienda):** Fetches Shopify POS data (Pagos Recibidos = SALE − REFUND transactions), displays side-by-side Líder vs Shopify for Tarjeta, Transferencias, Cashback, Pagos Recibidos
+- **Shopify per-register lookup (Corte Individual):** "Consultar Shopify" button pulls per-POS-device data via `syncShopifyByRegister`. Groups orders by REST API `device_id`, matches to CONFIG_CAJAS.POS_ID. "Usar estos datos" auto-fills Tarjeta/Transferencias/Cashback fields.
 - **Denomination inputs:** Mobile uses +/− stepper buttons (`createDenomGrid`), desktop uses plain number inputs (`createDenomGridSimple`). Both auto-select value on focus for quick overwrite.
 - **Arqueo de Caja:** Petty cash reconciliation (Fondo1-3, FondoRepartidor, BolsitaCambio, GastosReponer + denomination count). No per-register dropdown — this is global petty cash.
 
@@ -142,7 +143,7 @@ A suite of single-page web apps for **Natural Balance Club** (food/retail store 
 `get_cortes_dia`, `get_corte_tienda`, `get_config_cajas`, `get_ingresos`, `get_monthly_summary`, `get_dashboard_data`, `get_payment_trends`, `get_mesa_sales`, `get_faltante_history`, `get_arqueos`, `get_transferencias`
 
 ### doPost actions (gastos_script_DEPLOY_THIS.gs — main router):
-`save_corte_individual`, `delete_corte_individual`, `save_corte_tienda`, `save_arqueo`, `save_transferencia`, `save_ingreso`, `update_sobre2`, `update_facturacion`, `update_neto_mensual`, `update_config_cajas`, `sync_shopify` (routes to `syncShopifyDaily` in cortes_ingresos.gs)
+`save_corte_individual`, `delete_corte_individual`, `save_corte_tienda`, `save_arqueo`, `save_transferencia`, `save_ingreso`, `update_sobre2`, `update_facturacion`, `update_neto_mensual`, `update_config_cajas`, `sync_shopify` (store-wide → `syncShopifyDaily`), `sync_shopify_register` (per-device → `syncShopifyByRegister`)
 
 ---
 
@@ -246,12 +247,13 @@ A suite of single-page web apps for **Natural Balance Club** (food/retail store 
 13. ✅ CONFIG_CAJAS simplified — presence-based (no Activa/Orden), dropdown works dynamically
 14. ✅ Denomination inputs desktop UX — editable number inputs with auto-select on focus, +/− buttons for mobile
 15. ✅ Cambio de Billetes desktop fix — switched from mobile stepper to plain inputs (`createDenomGridSimple`)
+16. ✅ Shopify per-register lookup — Corte Individual pulls Tarjeta/Transferencias/Cashback per POS device via `syncShopifyByRegister` (GraphQL transactions + REST device_id). CONFIG_CAJAS.POS_ID maps registers to Shopify devices. "Usar estos datos" auto-fills form fields.
 
 ---
 
 ## 10. PENDING / NEXT UP
 
-- [ ] **Backend redeploy needed** — User must paste updated `cortes_ingresos.gs` into Apps Script and redeploy for: Shopify pagos netos, ARQUEO_CAJA backend, CONFIG_CAJAS simplification
+- [x] ~~**Backend redeploy needed**~~ — ✅ Deployed March 30, 2026
 - [ ] **Responsive Phase 2** — Visual QA on real devices, fine-tune touch targets, test charts on mobile
 - [ ] **Corte de Caja editability** — user asked if saved cortes should be editable
 - [ ] **Notification test** — first trigger will prompt for Gmail permissions in Apps Script
@@ -268,6 +270,8 @@ A suite of single-page web apps for **Natural Balance Club** (food/retail store 
 ## 11. RECENT GIT HISTORY
 
 ```
+7307fde feat: Shopify POS per-register lookup for Corte Individual
+eecd040 docs: update project tracker — Shopify live, Arqueo shipped, CONFIG_CAJAS simplified
 f2a44ee UX: auto-select input value on focus for quick overwrite
 df5c275 fix: denom counter now editable on desktop — type numbers directly
 040edc5 Fix numpad not opening: lazy-init DOM refs
@@ -403,8 +407,9 @@ bdd7935 Responsive design: mobile/tablet/desktop optimization for all apps
 |--------|------|-------|
 | Caja | String | Register name |
 | Tipo | String | Tienda or Delivery |
+| POS_ID | String/Number | Shopify POS device ID (maps to REST API `device_id` on orders) |
 
-*Simplified March 2026: removed Activa/Orden columns. Presence-based — if it's on the list, it shows in dropdowns.*
+*Simplified March 2026: presence-based. POS_ID added March 30 for per-register Shopify lookup. Current mapping: Caja 1=14, Caja 2=13, Caja 3=15, Caja 4=29, Repartidor 1=31, Repartidor 2=33.*
 
 ---
 
@@ -467,10 +472,9 @@ At end of month, Louie creates up to 6 general invoices (FactGen1-6) to cover Fa
 
 ### Daily Sync
 - Function: `syncShopifyDaily({fecha: 'YYYY-MM-DD'})`
-- Returns `pagosRecibidos` (net: SALE − REFUND transactions) and `breakdown` (tarjeta, transferencias, cashback)
-- `classifyGateway()` helper maps Shopify payment gateways to NB categories
-- Populates Shopify_* columns in CORTE_TIENDA
-- Frontend shows side-by-side Líder vs Shopify with diff banner (green = match, red = discrepancy)
+- **Store-wide** (`syncShopifyDaily`): Returns `pagosRecibidos` (net: SALE − REFUND transactions) and `breakdown` (tarjeta, transferencias, cashback). Populates Shopify_* columns in CORTE_TIENDA. Frontend shows side-by-side Líder vs Shopify with diff banner.
+- **Per-register** (`syncShopifyByRegister`): GraphQL for transactions + REST API for `device_id`. Groups orders by POS device, matched via CONFIG_CAJAS.POS_ID. Debug mode returns all found device IDs. Used in Corte Individual for auto-filling payment fields.
+- `classifyGateway()` / `classifyToRegister()` helper maps Shopify payment gateways to NB categories
 - Can be triggered manually via button or via Google Cloud Scheduler (11:30 PM daily)
 
 ---
@@ -539,9 +543,9 @@ The columns Cocina1/2/3, Casa1/2, Express, Granja, etc. in INGRESOS are **sales 
 - All currently in Notion, planned migration to Sheets + web apps
 
 ### Registers
-- Currently: 3 in-store (Caja 1 Tienda, Caja 2 Tienda, Caja 3 Tienda) + 2 delivery (Repartidor 1 Delivery, Repartidor 2 Delivery)
-- Config is dynamic via CONFIG_CAJAS tab (presence-based, 2 columns: Caja + Tipo)
-- DEFAULT_CAJAS fallback in frontend matches this list (no Caja 4)
+- Currently: 4 in-store (Caja 1-4 Tienda) + 2 delivery (Repartidor 1-2 Delivery)
+- Config is dynamic via CONFIG_CAJAS tab (presence-based, 3 columns: Caja + Tipo + POS_ID)
+- Each register mapped to Shopify POS device_id for per-register data pulls
 
 ---
 
