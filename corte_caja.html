@@ -1114,6 +1114,8 @@
           if ((parseInt(inp.value) || 0) < 0) inp.value = 0;
           refresh();
         });
+        // Auto-select value on focus so typing overwrites it
+        inp.addEventListener('focus', () => { inp.select(); });
         container.appendChild(item);
       });
     }
@@ -1137,6 +1139,8 @@
           updateDenomCalc(item, d.value);
           onChange();
         });
+        // Auto-select value on focus so typing overwrites it
+        inp.addEventListener('focus', () => { inp.select(); });
         container.appendChild(item);
       });
     }
