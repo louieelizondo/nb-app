@@ -604,7 +604,6 @@
   }
 
   function addEmployee() {
-    if (employeeCount >= 10) return;
     employeeCount++;
     document.getElementById('employeeGrid').insertAdjacentHTML('beforeend', buildEmployeeCard(employeeCount));
     updateAddBtn();
@@ -612,15 +611,9 @@
 
   function updateAddBtn() {
     const btn = document.getElementById('addBtn');
-    if (employeeCount >= 10) {
-      btn.disabled = true;
-      btn.textContent = 'Máximo 10 empleados';
-      btn.style.opacity = '0.4';
-    } else {
-      btn.disabled = false;
-      btn.textContent = `+ Agregar empleado (${employeeCount}/10)`;
-      btn.style.opacity = '1';
-    }
+    btn.disabled = false;
+    btn.textContent = `+ Agregar empleado (${employeeCount})`;
+    btn.style.opacity = '1';
   }
 
   function breakdown(amount) {
