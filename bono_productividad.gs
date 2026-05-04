@@ -25,10 +25,12 @@ const BONO_PRODUCTIVIDAD_HEADERS = [
 ];
 
 // Notion config
+// Using API version 2025-09-03 + /data_sources endpoint (required for DBs with multiple data sources).
 const NOTION_API_BASE = 'https://api.notion.com/v1';
-const NOTION_API_VERSION = '2022-06-28';
-const NOTION_DB_COLABORADORES_ACTIVOS = '08c1bb68-a381-4481-a1dd-60b2c3d1cb49';
-const NOTION_DB_REPORTE_NOMINA_SEMANAL = '1763b368-f496-81f0-a2cb-f9b99e731cdb';
+const NOTION_API_VERSION = '2025-09-03';
+// Data source IDs (NOT database IDs). Get them from `<data-source url="collection://...">` in fetch responses.
+const NOTION_DS_COLABORADORES_ACTIVOS = '53bf0b9f-50fb-4c27-ae7e-cd2696df0c8f';
+const NOTION_DS_REPORTE_NOMINA_SEMANAL = '1763b368-f496-81ff-8806-000b6936b724';
 
 // Excluded from bono productividad (they have other compensation):
 //   #48 Louicarlos (Marketing — has own monthly bono)
@@ -75,8 +77,13 @@ function notionFetch_(method, path, body) {
   return JSON.parse(text);
 }
 
-/** Query a Notion database, paginating through all results. */
-function notionQueryAll_(databaseId, filter, sorts) {
+/**
+ * Query a Notion data source, paginating through all results.
+ * Uses /v1/data_sources/{id}/query (Notion-Version 2025-09-03+) which supports
+ * databases with multiple data sources. The legacy /v1/databases/{id}/query
+ * fails with 400 on multi-source databases.
+ */
+function notionQueryAll_(dataSourceId, filter, sorts) {
   const results = [];
   let cursor = null;
   do {
@@ -86,7 +93,7 @@ function notionQueryAll_(databaseId, filter, sorts) {
       start_cursor: cursor || undefined,
       page_size: 100
     };
-    const resp = notionFetch_('POST', '/databases/' + databaseId + '/query', body);
+    const resp = notionFetch_('POST', '/data_sources/' + dataSourceId + '/query', body);
     results.push.apply(results, resp.results || []);
     cursor = resp.has_more ? resp.next_cursor : null;
   } while (cursor);
@@ -135,7 +142,7 @@ function getBonoEmployeeRoster() {
     property: 'Estado ',
     select: { equals: 'Activo' }
   };
-  const pages = notionQueryAll_(NOTION_DB_COLABORADORES_ACTIVOS, filter, [
+  const pages = notionQueryAll_(NOTION_DS_COLABORADORES_ACTIVOS, filter, [
     { property: 'Número Colab.', direction: 'ascending' }
   ]);
 
@@ -186,7 +193,7 @@ function getAttendanceForPeriod(startDate, endDate) {
       { property: 'Date', date: { on_or_before: endDate } }
     ]
   };
-  const pages = notionQueryAll_(NOTION_DB_REPORTE_NOMINA_SEMANAL, filter);
+  const pages = notionQueryAll_(NOTION_DS_REPORTE_NOMINA_SEMANAL, filter);
 
   const map = {};
   pages.forEach(page => {
