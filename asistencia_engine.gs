@@ -66,11 +66,12 @@ const ASISTENCIA_SEMANAL_HEADERS = [
 const NB_ENTRADA_RETARDO_MIN = 4;       // Entrada > 4 min late = retardo
 const NB_COMIDA_RETARDO_MIN = 3;        // Regreso comida > 3 min late = retardo
 
-// Per-employee rule overrides (matches asistencia/scripts/config.py)
+// Per-employee rule overrides
 const EMPLEADO_RULES = {
-  // Louicarlos: trusted, llega 9am, retardos perdonados (entrada + comida)
-  48: { skipEntradaRetardos: true, skipComidaRetardos: true, expectedDaysPerWeek: 5 }
+  // Louicarlos: 9am-5pm L-V (no Sábado). Retardos perdonados (trusted, trabaja también desde casa).
+  48: { skipEntradaRetardos: true, skipComidaRetardos: true, expectedDaysPerWeek: 5, hoursPerDay: 8 }
 };
+const DEFAULT_HOURS_PER_DAY = 8;
 
 const DIAS_SP = { 0: 'Lun', 1: 'Mar', 2: 'Mié', 3: 'Jue', 4: 'Vie', 5: 'Sáb', 6: 'Dom' };
 
@@ -400,7 +401,7 @@ function recomputeSemanal(weekStart, weekEnd, sourceFile) {
         : agg.horasNoTrabajadas,
       'Puntualidad': agg.retardos <= 1 && agg.faltasRaw === 0,
       'Asistencia': agg.faltasRaw === 0,
-      'Ajustes': existing.Ajustes || agg.retardosDetalle,
+      'Ajustes': existing.Ajustes || '',  // libre — manual notes only, no auto-fill
       'Locked': existing.Locked === true || existing.Locked === '__YES__' ? true : false,
       'LastComputedAt': now,
       'SourceFile': sourceFile || existing.SourceFile || ''
@@ -461,8 +462,9 @@ function aggregateEmpDays_(days, numero) {
     ? 'Retardos (' + retardos.length + '): ' + retardos.map(r => r.dia + ' ' + (r.kind === 'entrada' ? 'entrada' : 'regreso comida') + ' ' + r.min + 'm').join(' · ')
     : '';
 
-  // 8 hours per falta day for accountant deduction (factual hours)
-  const horasNoTrabajadas = faltasRaw * 8;
+  // Hours per falta day for accountant deduction (per-employee, default 8)
+  const hoursPerDay = (rules.hoursPerDay) || DEFAULT_HOURS_PER_DAY;
+  const horasNoTrabajadas = faltasRaw * hoursPerDay;
 
   return {
     diasTrabajados: diasTrabajados,
