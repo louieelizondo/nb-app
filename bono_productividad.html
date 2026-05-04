@@ -523,26 +523,33 @@ async function loadCurrentPeriod() {
 }
 
 // ─── Render bono table ─────────────────────────────────────────────────────
+function n(v) { return parseFloat(v) || 0; }
+
 function renderBonoTable(rows) {
   const tbody = document.getElementById('bono-tbody');
   tbody.innerHTML = '';
   let total = 0;
 
   rows.forEach((r, idx) => {
+    // Defensive normalization — backend should send numbers but guard against nulls
+    r.bonoBase = n(r.bonoBase);
+    r.subBono = n(r.subBono);
+    r.bonoRedondeado = n(r.bonoRedondeado);
+    r.bonoFinal = n(r.bonoFinal);
+    r.ajuste = n(r.ajuste);
+    r.multiplicador = n(r.multiplicador);
+    r.multiplicadorAuto = n(r.multiplicadorAuto);
+    r.faltas = parseInt(r.faltas) || 0;
+    r.retardos = parseInt(r.retardos) || 0;
+
     const tr = document.createElement('tr');
-    if (r.bonoFinal === r.bonoBase * 1) tr.classList.add('full-bono');
+    if (r.bonoFinal > 0 && r.multiplicador === 1) tr.classList.add('full-bono');
     if (r.bonoFinal === 0) tr.classList.add('no-bono');
 
-    const multPill = (m) => {
-      const pct = Math.round(m * 100);
-      const cls = pct === 100 ? 'green' : pct === 50 ? 'yellow' : 'red';
-      return `<span class="pill ${cls}">${pct}%</span>`;
-    };
-
     tr.innerHTML = `
-      <td>${r.numero}</td>
-      <td><strong>${r.nombre.split(' ').slice(0, 2).join(' ')}</strong></td>
-      <td><span class="pill gray">${r.mesa}</span></td>
+      <td>${r.numero || ''}</td>
+      <td><strong>${(r.nombre || '').split(' ').slice(0, 2).join(' ')}</strong></td>
+      <td><span class="pill gray">${r.mesa || '—'}</span></td>
       <td class="num">$${r.bonoBase.toFixed(2)}</td>
       <td class="num">${r.faltas}</td>
       <td class="num">${r.retardos}</td>
@@ -557,7 +564,7 @@ function renderBonoTable(rows) {
       <td class="num">$${r.subBono.toFixed(2)}</td>
       <td class="num">$${r.bonoRedondeado.toFixed(0)}</td>
       <td class="num">
-        <input type="number" step="10" data-idx="${idx}" data-field="ajuste" value="${r.ajuste || 0}">
+        <input type="number" step="10" data-idx="${idx}" data-field="ajuste" value="${r.ajuste}">
       </td>
       <td class="num"><strong>$${r.bonoFinal.toFixed(0)}</strong></td>
       <td><input type="text" data-idx="${idx}" data-field="notas" value="${(r.notas || '').replace(/"/g, '&quot;')}" placeholder="—"></td>

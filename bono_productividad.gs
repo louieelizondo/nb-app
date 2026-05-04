@@ -152,16 +152,33 @@ function getBonoEmployeeRoster() {
     if (numero == null || BONO_PROD_EXCLUDED_NUMEROS.indexOf(numero) >= 0) return;
 
     const nombre = notionPropValue_(page, 'Nombre') || '';
-    const mesaArr = notionPropValue_(page, 'Mesa / Puesto ') || [];
-    const mesaPrimary = Array.isArray(mesaArr) ? mesaArr[0] : mesaArr;
-    if (!mesaPrimary) return;
+    let mesaArr = notionPropValue_(page, 'Mesa / Puesto ') || notionPropValue_(page, 'Mesa / Puesto') || [];
+    if (!Array.isArray(mesaArr)) mesaArr = [mesaArr];
+    if (!mesaArr.length) return;
+
+    // Find the first mesa that classifies as something other than NoBono.
+    // Iris example: ['Líder CEDIS', 'Producción 3'] — Líder CEDIS doesn't have its own
+    // bono row, but Producción 3 does (which already includes her PR rate via the matrix).
+    let mesaPrimary = mesaArr[0];
+    let tipoCalc = classifyMesa_(mesaPrimary);
+    if (tipoCalc === 'NoBono') {
+      for (let i = 1; i < mesaArr.length; i++) {
+        const t = classifyMesa_(mesaArr[i]);
+        if (t !== 'NoBono') {
+          mesaPrimary = mesaArr[i];
+          tipoCalc = t;
+          break;
+        }
+      }
+    }
+    if (tipoCalc === 'NoBono') return;  // No mesa eligible for bono prod
 
     roster.push({
       numero: numero,
       nombre: nombre,
       mesa: mesaPrimary,
       mesaAll: mesaArr,
-      tipoCalc: classifyMesa_(mesaPrimary)
+      tipoCalc: tipoCalc
     });
   });
 
