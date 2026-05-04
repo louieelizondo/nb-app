@@ -669,7 +669,6 @@
 <!-- TABS -->
 <div class="tabs">
   <button class="tab-btn active" data-tab="tab-sobre2">Sobre 2 + Depósito</button>
-  <button class="tab-btn" data-tab="tab-ventas">Ventas por Mesa</button>
   <button class="tab-btn" data-tab="tab-facturacion">Facturación</button>
   <button class="tab-btn" data-tab="tab-historial">Historial</button>
 </div>
@@ -778,90 +777,8 @@
 </div>
 
 <!-- TAB 3: VENTAS POR MESA -->
-<div id="tab-ventas" class="tab-content">
-  <!-- SECTION 1: Date range + mesa sales input -->
-  <div class="card">
-    <h2>Ventas por Mesa (Quincenal)</h2>
+<!-- Tab "Ventas por Mesa" se movió a bono_productividad.html (la captura + cálculo viven juntos ahora) -->
 
-    <div class="form-grid">
-      <div class="form-group">
-        <label>Fecha Inicio</label>
-        <input type="date" id="ventas-dateStart">
-      </div>
-      <div class="form-group">
-        <label>Fecha Fin</label>
-        <input type="date" id="ventas-dateEnd">
-      </div>
-    </div>
-
-    <p style="color: #7a6b5d; font-size: 13px; margin-bottom: 16px;">
-      <strong>Datos:</strong> Shopify → Ventas por Proveedor → Total Neto por mesa del período
-    </p>
-
-    <div class="tbl-wrap">
-      <table>
-        <thead>
-          <tr>
-            <th>Mesa / Estación</th>
-            <th>Total Neto</th>
-          </tr>
-        </thead>
-        <tbody id="ventas-table-body"></tbody>
-      </table>
-    </div>
-
-    <div class="btn-group">
-      <button class="btn btn-primary" onclick="saveVentasPorMesa()">Guardar y Calcular Bonos</button>
-      <button class="btn" onclick="calcBonosPreview()" style="background:#f5f0eb;color:#3d3428;border:1px solid #d4c9b8;">Vista Previa Bonos</button>
-    </div>
-  </div>
-
-  <!-- SECTION 2: Bonus results (appears after calculation) -->
-  <div class="card" id="bonos-results-card" style="display:none;">
-    <h2>Bono de Productividad</h2>
-    <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:16px;">
-      <div style="flex:1;min-width:140px;background:#e8f5e9;border-radius:10px;padding:14px;text-align:center;">
-        <div style="font-size:12px;color:#2e7d32;font-weight:600;">TOTAL BONOS</div>
-        <div id="bonos-grand-total" style="font-size:24px;font-weight:800;color:#1b5e20;">$0.00</div>
-      </div>
-      <div style="flex:1;min-width:140px;background:#fff3e0;border-radius:10px;padding:14px;text-align:center;">
-        <div style="font-size:12px;color:#e65100;font-weight:600;">PAGOS RECIBIDOS</div>
-        <div id="bonos-pagos-recibidos" style="font-size:24px;font-weight:800;color:#bf360c;">$0.00</div>
-      </div>
-    </div>
-
-    <div class="tbl-wrap">
-      <table>
-        <thead>
-          <tr>
-            <th>Mesa / Rol</th>
-            <th>Bono Prod</th>
-          </tr>
-        </thead>
-        <tbody id="bonos-table-body"></tbody>
-      </table>
-    </div>
-
-    <p style="color:#7a6b5d;font-size:12px;margin-top:12px;">
-      Los porcentajes y tasas se editan en la pestaña <strong>PORCENTAJES_MESA</strong> de Google Sheets.
-      Para ajustes individuales (merma, asistencia), usa Notion.
-    </p>
-  </div>
-
-  <!-- SECTION 3: Current percentage matrix (read-only reference) -->
-  <div class="card" id="pctj-matrix-card">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
-      <h2 style="margin:0;">Porcentajes Actuales</h2>
-      <button class="btn" onclick="loadPercentageMatrix()" style="font-size:12px;padding:6px 14px;background:#f5f0eb;color:#3d3428;border:1px solid #d4c9b8;">⟳ Actualizar</button>
-    </div>
-    <p style="color:#7a6b5d;font-size:12px;margin-bottom:12px;">
-      Edita en Google Sheets → pestaña PORCENTAJES_MESA. Los cambios se reflejan al calcular.
-    </p>
-    <div class="tbl-wrap" id="pctj-matrix-container">
-      <div class="empty-state"><p>Toca "Actualizar" para cargar la tabla</p></div>
-    </div>
-  </div>
-</div>
 
 <!-- TAB 4: FACTURACIÓN -->
 <div id="tab-facturacion" class="tab-content">
@@ -1196,9 +1113,7 @@ function initializeEventListeners() {
     document.getElementById(id).addEventListener('change', calculateSobre2Totals);
   });
 
-  // TAB 3: VENTAS
-  document.getElementById('ventas-dateStart').addEventListener('change', loadVentasMesas);
-  document.getElementById('ventas-dateEnd').addEventListener('change', loadVentasMesas);
+  // (TAB 3 "Ventas por Mesa" se movió a bono_productividad.html)
 
   // TAB 4: FACTURACIÓN
   document.getElementById('facturacion-month').addEventListener('change', loadFacturacionMonth);
@@ -1218,11 +1133,7 @@ function initializeEventListeners() {
   loadFacturacionMonth();
   loadHistorial();
 
-  // Biweekly defaults
-  const startDate = new Date(today);
-  startDate.setDate(startDate.getDate() - 14);
-  document.getElementById('ventas-dateStart').value = startDate.toISOString().split('T')[0];
-  document.getElementById('ventas-dateEnd').value = today;
+  // (Biweekly defaults para Ventas por Mesa se movieron a bono_productividad.html)
 }
 
 function updateCorteModified() {

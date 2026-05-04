@@ -240,14 +240,36 @@
       </div>
     </div>
 
-    <div id="captura-pendiente-alert" class="alert warning" style="display:none">
-      <strong>⚠ Captura de ventas pendiente.</strong> Esta quincena no tiene ventas guardadas en VENTAS_MESA.
-      Captura primero las ventas en <a href="registro_ingresos.html#tab-ventas" style="color:#856404; font-weight:700;">Registro de Ingresos → Ventas por Mesa</a>,
-      luego regresa aquí y presiona Cargar para ver los bonos.
+    <div class="card" id="ventas-capture-card" style="display:none">
+      <h2>2. Captura de ventas por mesa
+        <span style="font-size:12px; font-weight:500; color:#7a6b5d; margin-left:8px;">(Shopify → Ventas por Proveedor)</span>
+      </h2>
+      <div id="captura-pendiente-banner" class="alert warning" style="display:none; margin-bottom:14px;">
+        <strong>⚠ Esta quincena no tiene ventas guardadas.</strong> Captúralas abajo y guarda — el cálculo de bonos aparecerá automáticamente.
+      </div>
+      <div class="alert info" style="margin-bottom:14px;">
+        Captura el <strong>Total Neto por mesa</strong> del período. Auto-suma <strong>Pagos Recibidos</strong> de INGRESOS.
+        Edita los porcentajes en <em>Google Sheets → PORCENTAJES_MESA</em> si cambian las reglas.
+      </div>
+      <div style="overflow-x:auto">
+        <table class="bono-table">
+          <thead>
+            <tr>
+              <th>Mesa / Estación</th>
+              <th class="num">Total Neto ($)</th>
+            </tr>
+          </thead>
+          <tbody id="ventas-tbody"></tbody>
+        </table>
+      </div>
+      <div style="margin-top:14px; display:flex; gap:10px; flex-wrap:wrap;">
+        <button id="btn-save-ventas" style="padding:10px 18px; background:#2e7d32; color:white; border:none; border-radius:8px; font-weight:700; cursor:pointer; font-size:13px;">💾 Guardar ventas y calcular bonos</button>
+        <button id="btn-toggle-ventas" class="secondary" style="padding:10px 18px; background:#757575; color:white; border:none; border-radius:8px; font-weight:600; cursor:pointer; font-size:13px;">Ocultar captura</button>
+      </div>
     </div>
 
     <div class="card" id="bono-table-card" style="display:none">
-      <h2>2. Bono por colaborador</h2>
+      <h2>3. Bono por colaborador</h2>
       <div class="alert info">
         <strong>Reglas:</strong> 0 faltas + ≤3 retardos = 100% · 4-5 retardos = 50% · 6+ retardos = 0% · 1 falta + ≤3 ret = 50% · 1F+4R o 2+F = 0%.
         Multiplicador editable (override). Subtotal redondeado al $10 superior. Ajuste manual ±.
@@ -320,6 +342,17 @@ const API = 'https://script.google.com/macros/s/AKfycbxQ7BzFITQnxyndvo2q7Xa1-Sc-
 let currentPeriod = null;  // {start, end}
 let currentRows = [];
 let isDirty = false;
+
+// Mesa/fuente columns saved to VENTAS_MESA (matches existing schema in cortes_ingresos.gs)
+const MESAS = ['Casa1', 'Casa2', 'Cocina1', 'Cocina2', 'Cocina3', 'Express', 'FrutasVerduras', 'Granja', 'MermasCanastas', 'Produccion1', 'Produccion2', 'Produccion3', 'ProveedorVentas'];
+const MESA_LABELS = {
+  'Casa1': 'Casa 1', 'Casa2': 'Casa 2',
+  'Cocina1': 'Cocina 1', 'Cocina2': 'Cocina 2', 'Cocina3': 'Cocina 3',
+  'Express': 'Express', 'FrutasVerduras': 'Frutas y Verduras', 'Granja': 'Granja',
+  'MermasCanastas': 'Mermas y Canastas',
+  'Produccion1': 'Producción 1', 'Produccion2': 'Producción 2', 'Produccion3': 'Producción 3',
+  'ProveedorVentas': 'Proveedor'
+};
 
 // ─── Quincena helpers ──────────────────────────────────────────────────────
 // Quincenas son Vie→Jue × 2 = 14 días. Anchor: 2026-04-10 was a Vie that started a quincena.
@@ -401,6 +434,53 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
   });
 });
 
+// ─── Render captura de ventas form ─────────────────────────────────────────
+function renderVentasForm(prefilled) {
+  const tbody = document.getElementById('ventas-tbody');
+  prefilled = prefilled || {};
+  tbody.innerHTML = MESAS.map(mesa => `
+    <tr>
+      <td><strong>${MESA_LABELS[mesa]}</strong></td>
+      <td class="num"><input type="number" data-mesa="${mesa}" placeholder="0.00" step="0.01" style="width:140px; text-align:right;" value="${prefilled[mesa] || ''}"></td>
+    </tr>
+  `).join('');
+}
+
+function collectVentas() {
+  const sales = {};
+  MESAS.forEach(mesa => {
+    const input = document.querySelector(`#ventas-tbody input[data-mesa="${mesa}"]`);
+    sales[mesa] = parseFloat(input?.value) || 0;
+  });
+  return sales;
+}
+
+async function saveVentasMesa() {
+  if (!currentPeriod) return;
+  const sales = collectVentas();
+  const hasAny = Object.values(sales).some(v => v > 0);
+  if (!hasAny && !confirm('Todas las ventas están en cero. ¿Guardar de todas formas?')) return;
+
+  setStatus('loading', 'Guardando ventas...');
+  try {
+    const resp = await fetch(API, {
+      method: 'POST',
+      body: JSON.stringify({
+        action: 'save_ventas_mesa',
+        ventasMesa: { FechaInicio: currentPeriod.start, FechaFin: currentPeriod.end, ...sales }
+      })
+    });
+    const data = await resp.json();
+    if (!data.ok && data.error) throw new Error(data.error);
+    setStatus('saved', '✅ Ventas guardadas');
+    // Auto-recargar bono productividad para esta quincena
+    await loadCurrentPeriod();
+  } catch (err) {
+    setStatus('error', 'Error');
+    alert('Error guardando ventas: ' + err.message);
+  }
+}
+
 // ─── Load period ───────────────────────────────────────────────────────────
 async function loadCurrentPeriod() {
   const sel = document.getElementById('quincena-select');
@@ -409,7 +489,6 @@ async function loadCurrentPeriod() {
 
   setStatus('loading', 'Cargando...');
   document.getElementById('bono-table-card').style.display = 'none';
-  document.getElementById('captura-pendiente-alert').style.display = 'none';
 
   try {
     const url = `${API}?action=get_bono_productividad_data&start=${start}&end=${end}`;
@@ -422,10 +501,14 @@ async function loadCurrentPeriod() {
     document.getElementById('meta-pr').textContent = '$' + (data.pagosRecibidos || 0).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     document.getElementById('period-meta').style.display = 'flex';
 
+    // Always show capture form, prefilled with whatever exists
+    document.getElementById('ventas-capture-card').style.display = 'block';
+    document.getElementById('captura-pendiente-banner').style.display = data.capturaPendiente ? 'block' : 'none';
+    renderVentasForm(data.ventasPorMesa || {});
+
     if (data.capturaPendiente) {
-      document.getElementById('captura-pendiente-alert').style.display = 'block';
       setStatus('idle', 'Pendiente captura');
-      return;
+      return;  // bono table stays hidden until ventas saved
     }
 
     currentRows = data.rows;
@@ -562,6 +645,19 @@ document.addEventListener('DOMContentLoaded', () => {
 
   document.getElementById('btn-load').addEventListener('click', loadCurrentPeriod);
   document.getElementById('btn-save').addEventListener('click', saveQuincena);
+  document.getElementById('btn-save-ventas').addEventListener('click', saveVentasMesa);
+  document.getElementById('btn-toggle-ventas').addEventListener('click', () => {
+    const card = document.getElementById('ventas-capture-card');
+    const btn = document.getElementById('btn-toggle-ventas');
+    const tbody = document.getElementById('ventas-tbody');
+    if (tbody.style.display === 'none') {
+      tbody.style.display = '';
+      btn.textContent = 'Ocultar captura';
+    } else {
+      tbody.style.display = 'none';
+      btn.textContent = 'Mostrar captura';
+    }
+  });
   document.getElementById('btn-print').addEventListener('click', () => window.print());
   document.getElementById('btn-recalc').addEventListener('click', () => {
     currentRows.forEach(r => {
