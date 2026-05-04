@@ -1,0 +1,620 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="nb-brand.css">
+  <title>NB · Bono Productividad</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: linear-gradient(135deg, #faf6f1 0%, #f0ebe4 50%, #e8e0d8 100%);
+      color: #2d2319;
+      min-height: 100vh;
+    }
+    .topbar {
+      background: linear-gradient(135deg, #4caf50 0%, #388e3c 40%, #2e7d32 100%);
+      color: white;
+      padding: 18px 32px;
+      display: flex; align-items: center; gap: 16px;
+      box-shadow: 0 4px 20px rgba(46, 125, 50, 0.3);
+    }
+    .logo {
+      width: 44px; height: 44px;
+      background: rgba(255, 255, 255, 0.95);
+      border-radius: 12px;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 900; color: #2e7d32; font-size: 16px;
+      flex-shrink: 0;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    }
+    .topbar h1 { font-size: 20px; font-weight: 800; letter-spacing: -0.3px; }
+    .topbar-sub { font-size: 12px; opacity: 0.75; margin-top: 1px; }
+    .topbar a { color: white; text-decoration: none; opacity: 0.85; font-size: 13px; margin-left: auto; }
+    .topbar a:hover { opacity: 1; }
+
+    .container { max-width: 1400px; margin: 0 auto; padding: 24px 24px 100px; }
+
+    .tabs {
+      display: flex; gap: 6px;
+      margin-bottom: 20px;
+      border-bottom: 2px solid #e0d8cf;
+      flex-wrap: wrap;
+    }
+    .tab-btn {
+      padding: 12px 20px;
+      background: white;
+      border: none; cursor: pointer;
+      font-size: 14px; font-weight: 600;
+      color: #7a6b5d;
+      border-bottom: 3px solid transparent;
+      transition: all 0.2s;
+      border-radius: 10px 10px 0 0;
+    }
+    .tab-btn:hover { color: #2e7d32; background: #f5f0eb; }
+    .tab-btn.active {
+      color: #2e7d32;
+      border-bottom-color: #4caf50;
+      background: white;
+    }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+
+    .card {
+      background: white;
+      border-radius: 16px;
+      padding: 24px;
+      box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+      margin-bottom: 20px;
+    }
+    .card h2 {
+      font-size: 18px; margin-bottom: 18px; color: #2d2319;
+      border-bottom: 2px solid #e0d8cf;
+      padding-bottom: 12px;
+      display: flex; align-items: center; gap: 10px;
+    }
+
+    /* Period selector */
+    .period-row {
+      display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+      margin-bottom: 18px;
+    }
+    .period-row label { font-size: 13px; color: #7a6b5d; font-weight: 600; }
+    .period-row select, .period-row input {
+      padding: 10px 14px; border: 1px solid #d4cabd; border-radius: 8px;
+      background: white; font-size: 14px; color: #2d2319;
+      font-family: inherit;
+    }
+    .period-row button {
+      padding: 10px 18px; border: none; border-radius: 8px;
+      background: #2e7d32; color: white; font-weight: 600;
+      cursor: pointer; font-size: 13px;
+    }
+    .period-row button:hover { background: #1b5e20; }
+    .period-row button.secondary { background: #757575; }
+    .period-row button.secondary:hover { background: #424242; }
+    .period-row button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    .status-pill {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 4px 12px; border-radius: 999px;
+      font-size: 12px; font-weight: 600;
+      margin-left: auto;
+    }
+    .status-pill.idle    { background: #f5f0eb; color: #7a6b5d; }
+    .status-pill.loading { background: #fff3cd; color: #856404; }
+    .status-pill.dirty   { background: #ffe5e5; color: #c00; }
+    .status-pill.saved   { background: #e5f5e5; color: #2e7d32; }
+    .status-pill.error   { background: #ffe5e5; color: #c00; }
+
+    /* Bono table */
+    table.bono-table {
+      width: 100%; border-collapse: collapse; font-size: 13px;
+    }
+    .bono-table th, .bono-table td {
+      padding: 10px 8px;
+      text-align: left;
+      border-bottom: 1px solid #f0ebe4;
+    }
+    .bono-table thead th {
+      background: #fafafa;
+      font-size: 11px; font-weight: 700; text-transform: uppercase;
+      color: #7a6b5d; letter-spacing: 0.5px;
+      position: sticky; top: 0;
+    }
+    .bono-table td.num { text-align: right; font-variant-numeric: tabular-nums; }
+    .bono-table tr.locked { background: #fffbe5; }
+    .bono-table tr.no-bono { color: #999; }
+    .bono-table tr.full-bono { background: #f0fdf4; }
+
+    .bono-table input[type=number],
+    .bono-table select {
+      width: 70px;
+      padding: 6px 8px; border: 1px solid #d4cabd; border-radius: 6px;
+      font-size: 12px; font-family: inherit;
+      text-align: right;
+    }
+    .bono-table select { width: 90px; text-align: left; }
+    .bono-table input[type=text] {
+      width: 180px;
+      padding: 6px 8px; border: 1px solid #d4cabd; border-radius: 6px;
+      font-size: 12px; font-family: inherit;
+    }
+
+    .pill {
+      display: inline-block; padding: 2px 8px;
+      border-radius: 999px; font-size: 11px; font-weight: 600;
+    }
+    .pill.green { background: #d4edda; color: #155724; }
+    .pill.yellow { background: #fff3cd; color: #856404; }
+    .pill.red { background: #f8d7da; color: #721c24; }
+    .pill.gray { background: #e0e0e0; color: #555; }
+
+    .totals-row {
+      background: #f7f4ef !important; font-weight: 700;
+    }
+    .totals-row td { padding-top: 14px; padding-bottom: 14px; }
+
+    .meta-strip {
+      display: flex; gap: 24px; flex-wrap: wrap;
+      padding: 14px 18px; background: #faf7f3;
+      border-radius: 10px; margin-bottom: 14px;
+      font-size: 13px;
+    }
+    .meta-strip > div { display: flex; flex-direction: column; gap: 2px; }
+    .meta-strip label { font-size: 11px; color: #7a6b5d; font-weight: 600; }
+    .meta-strip span { font-weight: 700; color: #2d2319; }
+
+    .alert {
+      padding: 12px 16px; border-radius: 10px;
+      font-size: 13px; line-height: 1.5;
+      margin-bottom: 14px;
+    }
+    .alert.warning { background: #fff3cd; color: #856404; border-left: 4px solid #ffc107; }
+    .alert.info { background: #d1ecf1; color: #0c5460; border-left: 4px solid #17a2b8; }
+    .alert.error { background: #f8d7da; color: #721c24; border-left: 4px solid #dc3545; }
+
+    /* Histórico */
+    .filter-row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 16px; }
+    .filter-row select, .filter-row input {
+      padding: 8px 12px; border: 1px solid #d4cabd; border-radius: 8px;
+      font-size: 13px; font-family: inherit;
+    }
+    .filter-row button {
+      padding: 8px 16px; border: none; border-radius: 8px;
+      background: #2e7d32; color: white; font-weight: 600;
+      cursor: pointer; font-size: 13px;
+    }
+
+    @media (max-width: 768px) {
+      .container { padding: 16px 12px 80px; }
+      .topbar { padding: 14px 16px; }
+      .topbar h1 { font-size: 17px; }
+      .card { padding: 16px; }
+      .bono-table { font-size: 11px; }
+      .bono-table th, .bono-table td { padding: 6px 4px; }
+      .bono-table input[type=number], .bono-table select { width: 56px; }
+      .bono-table input[type=text] { width: 110px; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="logo">NB</div>
+  <div>
+    <h1>Bono Productividad</h1>
+    <div class="topbar-sub">Cálculo quincenal por colaborador</div>
+  </div>
+  <a href="index.html">← Centro</a>
+</div>
+
+<div class="container">
+
+  <div class="tabs">
+    <button class="tab-btn active" data-tab="tab-calc">📊 Calcular Quincena</button>
+    <button class="tab-btn" data-tab="tab-hist">🔍 Histórico</button>
+  </div>
+
+  <!-- ============ TAB 1: CALCULAR QUINCENA ============ -->
+  <div id="tab-calc" class="tab-content active">
+
+    <div class="card">
+      <h2>1. Selecciona quincena
+        <span id="status-pill" class="status-pill idle">Listo</span>
+      </h2>
+      <div class="period-row">
+        <label>Quincena (Vie–Jue × 2):</label>
+        <select id="quincena-select"></select>
+        <button id="btn-load">↻ Cargar</button>
+        <button class="secondary" id="btn-prev">◀ Anterior</button>
+        <button class="secondary" id="btn-next">Siguiente ▶</button>
+      </div>
+      <div id="period-meta" class="meta-strip" style="display:none">
+        <div><label>Inicio</label><span id="meta-inicio">—</span></div>
+        <div><label>Fin</label><span id="meta-fin">—</span></div>
+        <div><label>Días</label><span>14</span></div>
+        <div><label>Pagos Recibidos del período</label><span id="meta-pr">$—</span></div>
+      </div>
+    </div>
+
+    <div id="captura-pendiente-alert" class="alert warning" style="display:none">
+      <strong>⚠ Captura de ventas pendiente.</strong> Esta quincena no tiene ventas guardadas en VENTAS_MESA.
+      Captura primero las ventas en <a href="registro_ingresos.html#tab-ventas" style="color:#856404; font-weight:700;">Registro de Ingresos → Ventas por Mesa</a>,
+      luego regresa aquí y presiona Cargar para ver los bonos.
+    </div>
+
+    <div class="card" id="bono-table-card" style="display:none">
+      <h2>2. Bono por colaborador</h2>
+      <div class="alert info">
+        <strong>Reglas:</strong> 0 faltas + ≤3 retardos = 100% · 4-5 retardos = 50% · 6+ retardos = 0% · 1 falta + ≤3 ret = 50% · 1F+4R o 2+F = 0%.
+        Multiplicador editable (override). Subtotal redondeado al $10 superior. Ajuste manual ±.
+      </div>
+      <div style="overflow-x:auto">
+        <table class="bono-table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Colaborador</th>
+              <th>Mesa</th>
+              <th class="num">Bono Base</th>
+              <th class="num">F</th>
+              <th class="num">R</th>
+              <th class="num">Mult</th>
+              <th class="num">Sub-Bono</th>
+              <th class="num">Redondeado</th>
+              <th class="num">Ajuste ±</th>
+              <th class="num">Final</th>
+              <th>Notas</th>
+            </tr>
+          </thead>
+          <tbody id="bono-tbody"></tbody>
+          <tfoot>
+            <tr class="totals-row">
+              <td colspan="10" style="text-align:right">TOTAL FINAL DE LA QUINCENA</td>
+              <td class="num" id="total-final">$0</td>
+              <td></td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+      <div style="margin-top:18px; display:flex; gap:10px; flex-wrap:wrap;">
+        <button id="btn-save" style="padding:12px 24px; background:#2e7d32; color:white; border:none; border-radius:8px; font-weight:700; cursor:pointer; font-size:14px;">💾 Guardar quincena</button>
+        <button id="btn-recalc" class="secondary" style="padding:12px 20px; background:#757575; color:white; border:none; border-radius:8px; font-weight:600; cursor:pointer; font-size:13px;">↻ Recalcular multiplicadores</button>
+        <button id="btn-print" class="secondary" style="padding:12px 20px; background:#757575; color:white; border:none; border-radius:8px; font-weight:600; cursor:pointer; font-size:13px;">🖨 Imprimir</button>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ============ TAB 2: HISTÓRICO ============ -->
+  <div id="tab-hist" class="tab-content">
+    <div class="card">
+      <h2>🔍 Buscar histórico</h2>
+      <div class="filter-row">
+        <label><input type="radio" name="filter-mode" value="colaborador" checked> Por colaborador</label>
+        <label><input type="radio" name="filter-mode" value="periodo"> Por período</label>
+      </div>
+      <div id="filter-colab-row" class="filter-row">
+        <input type="text" id="filter-colab" placeholder="Nombre (parcial OK): Iris, Jaz, Andrea...">
+        <button id="btn-search">Buscar</button>
+      </div>
+      <div id="filter-periodo-row" class="filter-row" style="display:none">
+        <select id="filter-quincena"></select>
+        <button id="btn-search-periodo">Buscar</button>
+      </div>
+
+      <div id="history-results" style="margin-top:20px"></div>
+    </div>
+  </div>
+
+</div>
+
+<script src="nb_auth.js"></script>
+<script>
+const API = 'https://script.google.com/macros/s/AKfycbxQ7BzFITQnxyndvo2q7Xa1-Sc-yX5S8JGRc1mIbd4ye0rSpN2I2qx1zAjzRqbPXNeL/exec';
+
+// ─── State ─────────────────────────────────────────────────────────────────
+let currentPeriod = null;  // {start, end}
+let currentRows = [];
+let isDirty = false;
+
+// ─── Quincena helpers ──────────────────────────────────────────────────────
+// Quincenas son Vie→Jue × 2 = 14 días. Anchor: 2026-04-10 was a Vie that started a quincena.
+function quincenaForDate(d) {
+  // Returns the quincena {start, end} that contains date d.
+  const anchor = new Date(2026, 3, 10);  // 2026-04-10 (Friday)
+  const target = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const days = Math.round((target - anchor) / 86400000);
+  const period = Math.floor(days / 14);
+  const start = new Date(anchor); start.setDate(anchor.getDate() + period * 14);
+  const end = new Date(start); end.setDate(start.getDate() + 13);
+  return { start, end };
+}
+
+function fmtDate(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+function fmtSpanish(d) {
+  const months = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+  return `${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()}`;
+}
+
+function buildQuincenaList() {
+  // Build list of quincenas: 6 past + current + 1 future
+  const today = new Date();
+  const cur = quincenaForDate(today);
+  const list = [];
+  for (let offset = 1; offset >= -6; offset--) {
+    const start = new Date(cur.start);
+    start.setDate(start.getDate() + offset * 14);
+    const end = new Date(start); end.setDate(start.getDate() + 13);
+    list.push({ start, end });
+  }
+  return list;
+}
+
+function populateQuincenaSelect() {
+  const sel = document.getElementById('quincena-select');
+  sel.innerHTML = '';
+  const list = buildQuincenaList();
+  const today = new Date();
+  const cur = quincenaForDate(today);
+  list.forEach(q => {
+    const opt = document.createElement('option');
+    opt.value = fmtDate(q.start) + '|' + fmtDate(q.end);
+    opt.textContent = `${fmtSpanish(q.start)} → ${fmtSpanish(q.end)}`;
+    if (fmtDate(q.start) === fmtDate(cur.start)) opt.selected = true;
+    sel.appendChild(opt);
+  });
+  // Same for filter
+  const fSel = document.getElementById('filter-quincena');
+  fSel.innerHTML = '';
+  list.forEach(q => {
+    const opt = document.createElement('option');
+    opt.value = fmtDate(q.start) + '|' + fmtDate(q.end);
+    opt.textContent = `${fmtSpanish(q.start)} → ${fmtSpanish(q.end)}`;
+    fSel.appendChild(opt);
+  });
+}
+
+// ─── UI status ─────────────────────────────────────────────────────────────
+function setStatus(state, text) {
+  const pill = document.getElementById('status-pill');
+  pill.className = `status-pill ${state}`;
+  pill.textContent = text;
+}
+
+// ─── Tabs ──────────────────────────────────────────────────────────────────
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById(btn.dataset.tab).classList.add('active');
+  });
+});
+
+// ─── Load period ───────────────────────────────────────────────────────────
+async function loadCurrentPeriod() {
+  const sel = document.getElementById('quincena-select');
+  const [start, end] = sel.value.split('|');
+  currentPeriod = { start, end };
+
+  setStatus('loading', 'Cargando...');
+  document.getElementById('bono-table-card').style.display = 'none';
+  document.getElementById('captura-pendiente-alert').style.display = 'none';
+
+  try {
+    const url = `${API}?action=get_bono_productividad_data&start=${start}&end=${end}`;
+    const resp = await fetch(url);
+    const data = await resp.json();
+    if (!data.ok) throw new Error(data.error || 'Error desconocido');
+
+    document.getElementById('meta-inicio').textContent = start;
+    document.getElementById('meta-fin').textContent = end;
+    document.getElementById('meta-pr').textContent = '$' + (data.pagosRecibidos || 0).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    document.getElementById('period-meta').style.display = 'flex';
+
+    if (data.capturaPendiente) {
+      document.getElementById('captura-pendiente-alert').style.display = 'block';
+      setStatus('idle', 'Pendiente captura');
+      return;
+    }
+
+    currentRows = data.rows;
+    renderBonoTable(data.rows);
+    document.getElementById('bono-table-card').style.display = 'block';
+    isDirty = false;
+    setStatus(data.rows.some(r => r.saved) ? 'saved' : 'idle', data.rows.some(r => r.saved) ? 'Guardado' : 'Sin guardar');
+  } catch (err) {
+    setStatus('error', 'Error');
+    alert('Error cargando quincena: ' + err.message);
+  }
+}
+
+// ─── Render bono table ─────────────────────────────────────────────────────
+function renderBonoTable(rows) {
+  const tbody = document.getElementById('bono-tbody');
+  tbody.innerHTML = '';
+  let total = 0;
+
+  rows.forEach((r, idx) => {
+    const tr = document.createElement('tr');
+    if (r.bonoFinal === r.bonoBase * 1) tr.classList.add('full-bono');
+    if (r.bonoFinal === 0) tr.classList.add('no-bono');
+
+    const multPill = (m) => {
+      const pct = Math.round(m * 100);
+      const cls = pct === 100 ? 'green' : pct === 50 ? 'yellow' : 'red';
+      return `<span class="pill ${cls}">${pct}%</span>`;
+    };
+
+    tr.innerHTML = `
+      <td>${r.numero}</td>
+      <td><strong>${r.nombre.split(' ').slice(0, 2).join(' ')}</strong></td>
+      <td><span class="pill gray">${r.mesa}</span></td>
+      <td class="num">$${r.bonoBase.toFixed(2)}</td>
+      <td class="num">${r.faltas}</td>
+      <td class="num">${r.retardos}</td>
+      <td class="num">
+        <select data-idx="${idx}" data-field="multiplicador">
+          <option value="1" ${r.multiplicador === 1 ? 'selected' : ''}>100%</option>
+          <option value="0.5" ${r.multiplicador === 0.5 ? 'selected' : ''}>50%</option>
+          <option value="0" ${r.multiplicador === 0 ? 'selected' : ''}>0%</option>
+        </select>
+        ${r.multiplicador !== r.multiplicadorAuto ? '<span title="Override manual" style="color:#c00; font-size:10px;">●</span>' : ''}
+      </td>
+      <td class="num">$${r.subBono.toFixed(2)}</td>
+      <td class="num">$${r.bonoRedondeado.toFixed(0)}</td>
+      <td class="num">
+        <input type="number" step="10" data-idx="${idx}" data-field="ajuste" value="${r.ajuste || 0}">
+      </td>
+      <td class="num"><strong>$${r.bonoFinal.toFixed(0)}</strong></td>
+      <td><input type="text" data-idx="${idx}" data-field="notas" value="${(r.notas || '').replace(/"/g, '&quot;')}" placeholder="—"></td>
+    `;
+    tbody.appendChild(tr);
+    total += r.bonoFinal;
+  });
+
+  document.getElementById('total-final').textContent = '$' + total.toLocaleString('es-MX');
+
+  // Bind input listeners
+  tbody.querySelectorAll('select, input').forEach(el => {
+    el.addEventListener('change', (e) => {
+      const idx = parseInt(e.target.dataset.idx);
+      const field = e.target.dataset.field;
+      const val = e.target.type === 'number' ? parseFloat(e.target.value) || 0 : e.target.value;
+      currentRows[idx][field] = field === 'multiplicador' ? parseFloat(val) : val;
+      // Recalc subBono/redondeado/final for this row
+      const r = currentRows[idx];
+      r.subBono = r.bonoBase * r.multiplicador;
+      r.bonoRedondeado = Math.ceil(r.subBono / 10) * 10;
+      r.bonoFinal = Math.max(0, r.bonoRedondeado + (parseFloat(r.ajuste) || 0));
+      // Re-render just to refresh totals (simplest)
+      renderBonoTable(currentRows);
+      isDirty = true;
+      setStatus('dirty', 'Cambios sin guardar');
+    });
+  });
+}
+
+// ─── Save ──────────────────────────────────────────────────────────────────
+async function saveQuincena() {
+  if (!currentPeriod || !currentRows.length) return;
+  setStatus('loading', 'Guardando...');
+  try {
+    const resp = await fetch(API, {
+      method: 'POST',
+      body: JSON.stringify({
+        action: 'save_bono_productividad',
+        period: currentPeriod,
+        rows: currentRows
+      })
+    });
+    const data = await resp.json();
+    if (!data.ok) throw new Error(data.error || 'Error');
+    isDirty = false;
+    setStatus('saved', `Guardado (${data.inserted}+${data.updated})`);
+  } catch (err) {
+    setStatus('error', 'Error guardar');
+    alert('Error: ' + err.message);
+  }
+}
+
+// ─── History ───────────────────────────────────────────────────────────────
+async function searchHistory(filter) {
+  const params = new URLSearchParams(filter).toString();
+  const resp = await fetch(`${API}?action=get_bono_history&${params}`);
+  const data = await resp.json();
+  const container = document.getElementById('history-results');
+  if (!data.ok || !data.rows.length) {
+    container.innerHTML = '<div class="alert info">No hay resultados.</div>';
+    return;
+  }
+  let html = '<table class="bono-table"><thead><tr><th>Quincena</th><th>Colaborador</th><th>Mesa</th><th class="num">F</th><th class="num">R</th><th class="num">Final</th><th>Notas</th></tr></thead><tbody>';
+  let totalAcum = 0;
+  data.rows.forEach(r => {
+    html += `<tr>
+      <td>${r.QuincenaInicio} → ${r.QuincenaFin}</td>
+      <td>${r.Colaborador}</td>
+      <td><span class="pill gray">${r.Mesa}</span></td>
+      <td class="num">${r.Faltas}</td>
+      <td class="num">${r.Retardos}</td>
+      <td class="num"><strong>$${(r.BonoFinal || 0).toFixed(0)}</strong></td>
+      <td>${r.Notas || ''}</td>
+    </tr>`;
+    totalAcum += r.BonoFinal || 0;
+  });
+  html += `</tbody><tfoot><tr class="totals-row"><td colspan="5" style="text-align:right">TOTAL ACUMULADO</td><td class="num">$${totalAcum.toLocaleString('es-MX')}</td><td></td></tr></tfoot></table>`;
+  container.innerHTML = html;
+}
+
+// ─── Wire up ───────────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  populateQuincenaSelect();
+
+  document.getElementById('btn-load').addEventListener('click', loadCurrentPeriod);
+  document.getElementById('btn-save').addEventListener('click', saveQuincena);
+  document.getElementById('btn-print').addEventListener('click', () => window.print());
+  document.getElementById('btn-recalc').addEventListener('click', () => {
+    currentRows.forEach(r => {
+      r.multiplicador = r.multiplicadorAuto;
+      r.subBono = r.bonoBase * r.multiplicador;
+      r.bonoRedondeado = Math.ceil(r.subBono / 10) * 10;
+      r.bonoFinal = Math.max(0, r.bonoRedondeado + (parseFloat(r.ajuste) || 0));
+    });
+    renderBonoTable(currentRows);
+    isDirty = true;
+    setStatus('dirty', 'Recalculado, sin guardar');
+  });
+
+  document.getElementById('btn-prev').addEventListener('click', () => {
+    const sel = document.getElementById('quincena-select');
+    if (sel.selectedIndex < sel.options.length - 1) {
+      sel.selectedIndex++;
+      loadCurrentPeriod();
+    }
+  });
+  document.getElementById('btn-next').addEventListener('click', () => {
+    const sel = document.getElementById('quincena-select');
+    if (sel.selectedIndex > 0) {
+      sel.selectedIndex--;
+      loadCurrentPeriod();
+    }
+  });
+
+  // Hist filters
+  document.querySelectorAll('input[name="filter-mode"]').forEach(r => {
+    r.addEventListener('change', e => {
+      document.getElementById('filter-colab-row').style.display = e.target.value === 'colaborador' ? 'flex' : 'none';
+      document.getElementById('filter-periodo-row').style.display = e.target.value === 'periodo' ? 'flex' : 'none';
+    });
+  });
+  document.getElementById('btn-search').addEventListener('click', () => {
+    const v = document.getElementById('filter-colab').value.trim();
+    if (!v) return alert('Escribe un nombre');
+    searchHistory({ action: 'get_bono_history', tipo: 'colaborador', value: v });
+  });
+  document.getElementById('btn-search-periodo').addEventListener('click', () => {
+    const [start, end] = document.getElementById('filter-quincena').value.split('|');
+    searchHistory({ action: 'get_bono_history', tipo: 'periodo', start, end });
+  });
+
+  // Auto-load most recent completed quincena on page load
+  setTimeout(loadCurrentPeriod, 200);
+
+  // Warn before leaving with unsaved changes
+  window.addEventListener('beforeunload', (e) => {
+    if (isDirty) { e.preventDefault(); e.returnValue = ''; }
+  });
+});
+</script>
+</body>
+</html>

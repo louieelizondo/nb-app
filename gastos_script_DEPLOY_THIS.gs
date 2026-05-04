@@ -92,6 +92,10 @@ function doGet(e) {
       case 'get_percentage_matrix': return jsonResp(getPercentageMatrix());
       case 'get_ventas_mesa':       return jsonResp(getVentasMesa(e.parameter));
       case 'calc_bonos':            return jsonResp(calcBonos(e.parameter));
+      // Bono Productividad (per-employee)
+      case 'get_bono_productividad_data': return jsonResp(getBonoProductividadData(e.parameter));
+      case 'get_bono_history':            return jsonResp(getBonoHistory(e.parameter));
+      case 'get_bono_employee_roster':    return jsonResp({ ok: true, roster: getBonoEmployeeRoster() });
       case 'get_config_cajas':     return jsonResp({ cajas: getConfigCajas() });
       // Shopify API
       case 'get_shopify_daily_summary': return jsonResp(getShopifyDailySummary(e.parameter));
