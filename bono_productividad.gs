@@ -557,6 +557,125 @@ function getBonoHistory(params) {
 }
 
 
+// ─── Header-aware VENTAS_MESA save (fixes column-order bug) ────────────────
+//
+// Bug fixed (2026-05-04):
+//   - The original saveVentasMesa() wrote values positionally using ALL_MESAS
+//     order (alphabetical: Casa1, Casa2, Cocina1, ...). But the actual sheet
+//     was created with a DIFFERENT column order (Cocina1, Cocina2, ..., Casa1, Casa2, ...).
+//     Result: sales for Casa1 got stored in the Cocina1 column, etc.
+//   - Upsert used `String(dateObj) === 'YYYY-MM-DD'` which always fails because
+//     `String(Date)` produces 'Fri Apr 10 2026 ...'. Result: every save appended
+//     a new row instead of updating the existing one. → duplicates.
+//
+// This wrapper reads the sheet's actual header row and writes by header name.
+// Robust against any column reordering in the sheet.
+
+function saveVentasMesaSafe(body) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet = ss.getSheetByName(VENTAS_MESA_TAB);
+  if (!sheet) {
+    sheet = getOrCreateTab(VENTAS_MESA_TAB, VENTAS_MESA_HEADERS);
+  }
+
+  const vm = body.ventasMesa || body;
+  const fechaInicio = vm.FechaInicio;
+  const fechaFin = vm.FechaFin;
+  if (!fechaInicio || !fechaFin) throw new Error('FechaInicio y FechaFin son requeridas');
+
+  // Auto-sum PagosRecibidos from INGRESOS for the date range
+  const ingresos = sheetToObjects(INGRESOS_TAB, INGRESOS_HEADERS);
+  let totalPR = 0;
+  ingresos.forEach(r => {
+    const fecha = formatDateStr(r.Fecha);
+    if (fecha >= fechaInicio && fecha <= fechaFin) {
+      totalPR += parseFloat(r.PagosRecibidos) || 0;
+    }
+  });
+  const pagosRecibidos = vm.PagosRecibidos !== undefined ? parseFloat(vm.PagosRecibidos) : totalPR;
+
+  // Collect mesa sales (by name)
+  const sales = {};
+  ALL_MESAS.forEach(m => { sales[m] = parseFloat(vm[m]) || 0; });
+
+  // Calculate bonos
+  const bonoResult = calcBonos({ sales: sales, pagosRecibidos: pagosRecibidos });
+  const bonos = bonoResult.bonos;
+
+  // Read actual headers from sheet (row 1)
+  const lastCol = sheet.getLastColumn();
+  const actualHeaders = sheet.getRange(1, 1, 1, lastCol).getValues()[0].map(String);
+
+  // Find existing row by date — using formatDateStr (fixes upsert bug)
+  const data = sheet.getDataRange().getValues();
+  const iIni = actualHeaders.indexOf('FechaInicio');
+  const iFin = actualHeaders.indexOf('FechaFin');
+  if (iIni < 0 || iFin < 0) throw new Error('VENTAS_MESA missing FechaInicio/FechaFin headers');
+  let existingRowNum = -1;
+  for (let r = 1; r < data.length; r++) {
+    if (formatDateStr(data[r][iIni]) === fechaInicio && formatDateStr(data[r][iFin]) === fechaFin) {
+      existingRowNum = r + 1;  // 1-indexed
+      break;
+    }
+  }
+
+  const now = new Date().toISOString();
+  const idIdx = actualHeaders.indexOf('ID');
+  const createdIdx = actualHeaders.indexOf('Created_At');
+  const id = existingRowNum > 0 && idIdx >= 0 ? data[existingRowNum - 1][idIdx] : 'VM' + Date.now();
+  const createdAt = existingRowNum > 0 && createdIdx >= 0 ? data[existingRowNum - 1][createdIdx] : now;
+
+  // Build row dict by header name
+  const rowDict = {
+    'ID': id,
+    'FechaInicio': fechaInicio,
+    'FechaFin': fechaFin,
+    'PagosRecibidos': pagosRecibidos,
+    'Bono_Produccion1': bonos.Produccion1 || 0,
+    'Bono_Produccion2': bonos.Produccion2 || 0,
+    'Bono_Produccion3': bonos.Produccion3 || 0,
+    'Bono_Casa1': bonos.Casa1 || 0,
+    'Bono_Casa2': bonos.Casa2 || 0,
+    'Bono_Cocina1': bonos.Cocina1 || 0,
+    'Bono_Cocina2': bonos.Cocina2 || 0,
+    'Bono_Cocina3': bonos.Cocina3 || 0,
+    'Bono_Express': bonos.Express || 0,
+    'Bono_AuxTienda': bonos.AuxTienda || 0,
+    'Bono_LiderTienda': bonos.LiderTienda || 0,
+    'TotalBonos': bonoResult.totalBonos || 0,
+    'Created_At': createdAt,
+    'Updated_At': now
+  };
+  ALL_MESAS.forEach(m => { rowDict[m] = sales[m] || 0; });
+
+  // Build row in actual sheet column order
+  const row = actualHeaders.map(h => {
+    if (rowDict.hasOwnProperty(h)) return rowDict[h];
+    return existingRowNum > 0 ? data[existingRowNum - 1][actualHeaders.indexOf(h)] : '';
+  });
+
+  if (existingRowNum > 0) {
+    sheet.getRange(existingRowNum, 1, 1, row.length).setValues([row]);
+    log('UPDATE_VENTAS_MESA_SAFE', fechaInicio + ' to ' + fechaFin + ' | Total bonos: $' + bonoResult.totalBonos);
+  } else {
+    sheet.appendRow(row);
+    log('SAVE_VENTAS_MESA_SAFE', id + ' | ' + fechaInicio + ' to ' + fechaFin + ' | Total bonos: $' + bonoResult.totalBonos);
+  }
+  SpreadsheetApp.flush();
+
+  return {
+    ok: true,
+    id: id,
+    bonos: bonos,
+    totalBonos: bonoResult.totalBonos,
+    pagosRecibidos: pagosRecibidos,
+    sales: sales,
+    updated: existingRowNum > 0,
+    message: existingRowNum > 0 ? 'Ventas por mesa actualizadas' : 'Ventas por mesa guardadas'
+  };
+}
+
+
 // ─── One-time cleanup: dedupe VENTAS_MESA ──────────────────────────────────
 
 /**

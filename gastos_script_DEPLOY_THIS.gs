@@ -158,6 +158,7 @@ function doPost(e) {
       case 'update_config_cajas':     return jsonResp(updateConfigCajas(body));
       // Ventas por Mesa + Bonos
       case 'save_ventas_mesa':        return jsonResp(saveVentasMesa(body));
+      case 'save_ventas_mesa_safe':   return jsonResp(saveVentasMesaSafe(body));
       // Inventory v2 (MATERIA PRIMA as single source)
       case 'save_inventory_counts':    return jsonResp(saveInventoryCounts(body));
       case 'update_inv_field':         return jsonResp(updateInvField(body));

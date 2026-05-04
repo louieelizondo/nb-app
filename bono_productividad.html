@@ -466,7 +466,7 @@ async function saveVentasMesa() {
     const resp = await fetch(API, {
       method: 'POST',
       body: JSON.stringify({
-        action: 'save_ventas_mesa',
+        action: 'save_ventas_mesa_safe',  // header-aware version (handles column reorder + proper upsert)
         ventasMesa: { FechaInicio: currentPeriod.start, FechaFin: currentPeriod.end, ...sales }
       })
     });
