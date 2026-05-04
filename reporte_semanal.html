@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="nb-brand.css">
+  <title>NB · Reporte Semanal de Asistencia</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+           background: linear-gradient(135deg, #faf6f1 0%, #f0ebe4 50%, #e8e0d8 100%);
+           color: #2d2319; min-height: 100vh; }
+    .topbar { background: linear-gradient(135deg, #4caf50 0%, #388e3c 40%, #2e7d32 100%);
+              color: white; padding: 18px 32px; display: flex; align-items: center; gap: 16px;
+              box-shadow: 0 4px 20px rgba(46, 125, 50, 0.3); }
+    .logo { width: 44px; height: 44px; background: rgba(255, 255, 255, 0.95);
+            border-radius: 12px; display: flex; align-items: center; justify-content: center;
+            font-weight: 900; color: #2e7d32; font-size: 16px; flex-shrink: 0;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15); }
+    .topbar h1 { font-size: 20px; font-weight: 800; letter-spacing: -0.3px; }
+    .topbar-sub { font-size: 12px; opacity: 0.75; margin-top: 1px; }
+    .topbar a { color: white; text-decoration: none; opacity: 0.85; font-size: 13px; margin-left: auto; }
+    .topbar a:hover { opacity: 1; }
+    .container { max-width: 1400px; margin: 0 auto; padding: 24px 24px 100px; }
+
+    .card { background: white; border-radius: 16px; padding: 24px;
+            box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06); margin-bottom: 20px; }
+    .card h2 { font-size: 18px; margin-bottom: 18px; color: #2d2319;
+               border-bottom: 2px solid #e0d8cf; padding-bottom: 12px;
+               display: flex; align-items: center; gap: 10px; }
+
+    .upload-zone { border: 2px dashed #b8a890; border-radius: 12px;
+                   padding: 32px; text-align: center; background: #faf7f3;
+                   cursor: pointer; transition: all 0.2s; }
+    .upload-zone:hover { border-color: #4caf50; background: #f0fdf4; }
+    .upload-zone.has-file { border-color: #4caf50; background: #f0fdf4; border-style: solid; }
+    .upload-zone input[type=file] { display: none; }
+    .upload-zone .label { font-size: 15px; font-weight: 600; color: #2e7d32; }
+    .upload-zone .sub { font-size: 12px; color: #7a6b5d; margin-top: 6px; }
+
+    .week-row { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin: 14px 0; }
+    .week-row label { font-size: 13px; color: #7a6b5d; font-weight: 600; }
+    .week-row select { padding: 10px 14px; border: 1px solid #d4cabd; border-radius: 8px;
+                       background: white; font-size: 14px; color: #2d2319;
+                       font-family: inherit; min-width: 280px; }
+
+    button { padding: 10px 18px; border: none; border-radius: 8px;
+             background: #2e7d32; color: white; font-weight: 600;
+             cursor: pointer; font-size: 13px; font-family: inherit; }
+    button:hover { background: #1b5e20; }
+    button.secondary { background: #757575; }
+    button.secondary:hover { background: #424242; }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    .status-pill { display: inline-flex; align-items: center; gap: 6px;
+                   padding: 4px 12px; border-radius: 999px;
+                   font-size: 12px; font-weight: 600; margin-left: auto; }
+    .status-pill.idle    { background: #f5f0eb; color: #7a6b5d; }
+    .status-pill.loading { background: #fff3cd; color: #856404; }
+    .status-pill.dirty   { background: #ffe5e5; color: #c00; }
+    .status-pill.saved   { background: #e5f5e5; color: #2e7d32; }
+    .status-pill.error   { background: #ffe5e5; color: #c00; }
+
+    .alert { padding: 12px 16px; border-radius: 10px;
+             font-size: 13px; line-height: 1.5; margin-bottom: 14px; }
+    .alert.warning { background: #fff3cd; color: #856404; border-left: 4px solid #ffc107; }
+    .alert.info { background: #d1ecf1; color: #0c5460; border-left: 4px solid #17a2b8; }
+    .alert.success { background: #d4edda; color: #155724; border-left: 4px solid #28a745; }
+    .alert.error { background: #f8d7da; color: #721c24; border-left: 4px solid #dc3545; }
+
+    table.sem-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .sem-table th, .sem-table td { padding: 10px 8px; text-align: left;
+                                    border-bottom: 1px solid #f0ebe4; }
+    .sem-table thead th { background: #fafafa; font-size: 11px; font-weight: 700;
+                          text-transform: uppercase; color: #7a6b5d; letter-spacing: 0.5px; }
+    .sem-table td.num { text-align: right; font-variant-numeric: tabular-nums; }
+    .sem-table tr.locked { background: #fffbe5; }
+    .sem-table tr.has-falta { background: #fef5f5; }
+    .sem-table input[type=number] { width: 60px; padding: 4px 6px;
+                                     border: 1px solid #d4cabd; border-radius: 6px;
+                                     font-size: 12px; font-family: inherit; text-align: right; }
+    .sem-table input[type=text] { width: 100%; padding: 4px 6px;
+                                   border: 1px solid #d4cabd; border-radius: 6px;
+                                   font-size: 12px; font-family: inherit; }
+    .sem-table input[type=checkbox] { width: 18px; height: 18px; cursor: pointer; }
+
+    .pill { display: inline-block; padding: 2px 8px; border-radius: 999px;
+            font-size: 11px; font-weight: 600; }
+    .pill.green { background: #d4edda; color: #155724; }
+    .pill.yellow { background: #fff3cd; color: #856404; }
+    .pill.red { background: #f8d7da; color: #721c24; }
+    .pill.gray { background: #e0e0e0; color: #555; }
+
+    .meta-strip { display: flex; gap: 24px; flex-wrap: wrap;
+                  padding: 14px 18px; background: #faf7f3;
+                  border-radius: 10px; margin-bottom: 14px; font-size: 13px; }
+    .meta-strip > div { display: flex; flex-direction: column; gap: 2px; }
+    .meta-strip label { font-size: 11px; color: #7a6b5d; font-weight: 600; }
+    .meta-strip span { font-weight: 700; color: #2d2319; }
+
+    @media (max-width: 768px) {
+      .container { padding: 16px 12px 80px; }
+      .topbar { padding: 14px 16px; }
+      .topbar h1 { font-size: 17px; }
+      .card { padding: 16px; }
+      .sem-table { font-size: 11px; }
+      .sem-table th, .sem-table td { padding: 6px 4px; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="logo">NB</div>
+  <div>
+    <h1>Reporte Semanal de Asistencia</h1>
+    <div class="topbar-sub">Pre-nómina (Mié) + Final (Jue) — Vie a Jue</div>
+  </div>
+  <a href="index.html">← Centro</a>
+</div>
+
+<div class="container">
+
+  <div class="card">
+    <h2>1. Selecciona semana
+      <span id="status-pill" class="status-pill idle">Listo</span>
+    </h2>
+    <div class="week-row">
+      <label>Semana (Vie–Jue):</label>
+      <select id="week-select"></select>
+      <button class="secondary" id="btn-prev">◀ Anterior</button>
+      <button class="secondary" id="btn-next">Siguiente ▶</button>
+    </div>
+    <div id="period-meta" class="meta-strip" style="display:none">
+      <div><label>Inicio (Vie)</label><span id="meta-inicio">—</span></div>
+      <div><label>Fin (Jue)</label><span id="meta-fin">—</span></div>
+      <div><label>Empleados</label><span id="meta-empleados">—</span></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>2. Sube el xlsx del reloj checador</h2>
+    <div class="alert info">
+      Exporta del reloj checador con el rango <strong>Vie → Mié</strong> (pre-nómina) o <strong>Vie → Jue</strong> (final).
+      El sistema parsea, lo guarda en <code>ASISTENCIA_RAW</code>, y recalcula la semana automáticamente.
+    </div>
+    <label for="file-input" id="upload-zone" class="upload-zone">
+      <div class="label">📁 Click para seleccionar el xlsx</div>
+      <div class="sub" id="file-name">o arrástralo aquí</div>
+      <input type="file" id="file-input" accept=".xlsx,.xls">
+    </label>
+    <div style="margin-top:14px">
+      <button id="btn-upload" disabled>↑ Subir y procesar</button>
+      <button id="btn-load" class="secondary">↻ Re-cargar semana actual</button>
+    </div>
+  </div>
+
+  <div class="card" id="results-card" style="display:none">
+    <h2>3. Resultados de la semana</h2>
+    <div class="alert info">
+      Edita <strong>Faltas Real</strong>, <strong>Justificadas</strong>, <strong>Permiso Cubierto</strong> y <strong>Ajustes</strong> según necesites.
+      Marca <strong>🔒</strong> para que el siguiente upload del xlsx no sobrescriba tus ediciones.
+      Click <strong>Guardar fila</strong> para persistir.
+    </div>
+    <div style="overflow-x:auto">
+      <table class="sem-table">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Colaborador</th>
+            <th class="num">Días<br>Trab.</th>
+            <th class="num">Faltas<br>Raw</th>
+            <th class="num">Faltas<br>Real</th>
+            <th class="num">Just.</th>
+            <th class="num">Permiso<br>Cubre</th>
+            <th class="num">Retardos</th>
+            <th class="num">HNT</th>
+            <th>Punt</th>
+            <th>Asis</th>
+            <th>Ajustes</th>
+            <th>🔒</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="sem-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+<script src="nb_auth.js"></script>
+<script>
+const API = 'https://script.google.com/macros/s/AKfycbxQ7BzFITQnxyndvo2q7Xa1-Sc-yX5S8JGRc1mIbd4ye0rSpN2I2qx1zAjzRqbPXNeL/exec';
+
+let currentWeek = null;  // {start, end}
+let currentRows = [];
+let pendingFile = null;
+let pendingFileName = '';
+
+// ─── Week helpers ──────────────────────────────────────────────────────────
+function vieJueWeek(d) {
+  const js = d.getDay();
+  const offset = js >= 5 ? js - 5 : js + 2;
+  const friday = new Date(d.getFullYear(), d.getMonth(), d.getDate() - offset);
+  const thursday = new Date(friday.getFullYear(), friday.getMonth(), friday.getDate() + 6);
+  return { start: friday, end: thursday };
+}
+function fmtDate(d) {
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+}
+function fmtSpanish(d) {
+  const months = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+  return d.getDate() + ' ' + months[d.getMonth()] + ' ' + d.getFullYear();
+}
+function buildWeekList() {
+  const today = new Date();
+  const cur = vieJueWeek(today);
+  const list = [];
+  for (let offset = 1; offset >= -6; offset--) {
+    const start = new Date(cur.start);
+    start.setDate(start.getDate() + offset * 7);
+    const end = new Date(start); end.setDate(start.getDate() + 6);
+    list.push({ start, end });
+  }
+  return list;
+}
+function populateWeekSelect() {
+  const sel = document.getElementById('week-select');
+  sel.innerHTML = '';
+  const list = buildWeekList();
+  const today = new Date();
+  const cur = vieJueWeek(today);
+  list.forEach(w => {
+    const opt = document.createElement('option');
+    opt.value = fmtDate(w.start) + '|' + fmtDate(w.end);
+    opt.textContent = fmtSpanish(w.start) + ' → ' + fmtSpanish(w.end);
+    if (fmtDate(w.start) === fmtDate(cur.start)) opt.selected = true;
+    sel.appendChild(opt);
+  });
+}
+
+// ─── Status ────────────────────────────────────────────────────────────────
+function setStatus(state, text) {
+  const p = document.getElementById('status-pill');
+  p.className = 'status-pill ' + state;
+  p.textContent = text;
+}
+
+// ─── File upload ───────────────────────────────────────────────────────────
+document.getElementById('file-input').addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  pendingFile = file;
+  pendingFileName = file.name;
+  document.getElementById('file-name').textContent = file.name;
+  document.getElementById('upload-zone').classList.add('has-file');
+  document.getElementById('btn-upload').disabled = false;
+});
+
+async function uploadXlsx() {
+  if (!pendingFile) return alert('Selecciona un archivo primero');
+  const week = currentWeek;
+  if (!week) return alert('Selecciona una semana');
+
+  setStatus('loading', 'Parseando xlsx...');
+  try {
+    const buf = await pendingFile.arrayBuffer();
+    const wb = XLSX.read(buf, { type: 'array', cellDates: true });
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    const rows2D = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: null });
+
+    setStatus('loading', 'Subiendo y procesando...');
+    const resp = await fetch(API, {
+      method: 'POST',
+      body: JSON.stringify({
+        action: 'upload_asistencia',
+        rows2D: rows2D,
+        weekStart: week.start,
+        weekEnd: week.end,
+        sourceFile: pendingFileName
+      })
+    });
+    const data = await resp.json();
+    if (!data.ok) throw new Error(data.error || 'Error desconocido');
+
+    setStatus('saved', '✅ ' + data.records + ' días procesados');
+    pendingFile = null;
+    pendingFileName = '';
+    document.getElementById('file-input').value = '';
+    document.getElementById('upload-zone').classList.remove('has-file');
+    document.getElementById('file-name').textContent = 'o arrástralo aquí';
+    document.getElementById('btn-upload').disabled = true;
+
+    await loadCurrentWeek();
+  } catch (err) {
+    setStatus('error', 'Error');
+    alert('Error: ' + err.message);
+  }
+}
+
+// ─── Load week from SEMANAL ────────────────────────────────────────────────
+async function loadCurrentWeek() {
+  const sel = document.getElementById('week-select');
+  const [start, end] = sel.value.split('|');
+  currentWeek = { start, end };
+  setStatus('loading', 'Cargando semana...');
+
+  try {
+    const url = API + '?action=get_semana_detalle&weekStart=' + start + '&weekEnd=' + end;
+    const resp = await fetch(url);
+    const data = await resp.json();
+    if (!data.ok) throw new Error(data.error || 'Error');
+
+    currentRows = data.rows || [];
+    document.getElementById('meta-inicio').textContent = start;
+    document.getElementById('meta-fin').textContent = end;
+    document.getElementById('meta-empleados').textContent = currentRows.length;
+    document.getElementById('period-meta').style.display = 'flex';
+
+    if (currentRows.length === 0) {
+      document.getElementById('results-card').style.display = 'none';
+      setStatus('idle', 'Sin datos — sube el xlsx');
+      return;
+    }
+
+    renderSemTable(currentRows);
+    document.getElementById('results-card').style.display = 'block';
+    setStatus('saved', 'Cargado');
+  } catch (err) {
+    setStatus('error', 'Error');
+    alert('Error cargando semana: ' + err.message);
+  }
+}
+
+function renderSemTable(rows) {
+  const tbody = document.getElementById('sem-tbody');
+  tbody.innerHTML = '';
+  rows.forEach((r, idx) => {
+    const tr = document.createElement('tr');
+    if (r.Locked === true || r.Locked === '__YES__') tr.classList.add('locked');
+    if ((parseInt(r.FaltasReal) || 0) > 0) tr.classList.add('has-falta');
+    const punt = r.Puntualidad === true || r.Puntualidad === '__YES__';
+    const asis = r.Asistencia === true || r.Asistencia === '__YES__';
+    tr.innerHTML = `
+      <td>${r.NumeroColab || ''}</td>
+      <td><strong>${(r.Nombre || '').split(' ').slice(0,2).join(' ')}</strong>
+          <div style="font-size:10px; color:#7a6b5d;">${(r.RetardosDetalle || '').substring(0,80)}</div></td>
+      <td class="num">${r.DiasTrabajados || 0}</td>
+      <td class="num"><span class="pill gray">${r.FaltasRaw || 0}</span></td>
+      <td class="num"><input type="number" min="0" max="6" data-idx="${idx}" data-field="FaltasReal" value="${r.FaltasReal != null ? r.FaltasReal : (r.FaltasRaw || 0)}"></td>
+      <td class="num"><input type="number" min="0" max="6" data-idx="${idx}" data-field="FaltasJustificadas" value="${r.FaltasJustificadas || 0}"></td>
+      <td class="num"><input type="number" min="0" max="6" data-idx="${idx}" data-field="FaltasPermisoCubierto" value="${r.FaltasPermisoCubierto || 0}"></td>
+      <td class="num">${r.Retardos || 0}</td>
+      <td class="num"><input type="number" min="0" step="0.5" data-idx="${idx}" data-field="HorasNoTrabajadas" value="${r.HorasNoTrabajadas || 0}"></td>
+      <td>${punt ? '<span class="pill green">✓</span>' : '<span class="pill red">✗</span>'}</td>
+      <td>${asis ? '<span class="pill green">✓</span>' : '<span class="pill red">✗</span>'}</td>
+      <td><input type="text" data-idx="${idx}" data-field="Ajustes" value="${(r.Ajustes || '').replace(/"/g, '&quot;')}"></td>
+      <td><input type="checkbox" data-idx="${idx}" data-field="Locked" ${(r.Locked === true || r.Locked === '__YES__') ? 'checked' : ''}></td>
+      <td><button data-idx="${idx}" class="save-btn" style="font-size:11px; padding:6px 10px;">Guardar</button></td>
+    `;
+    tbody.appendChild(tr);
+  });
+
+  tbody.querySelectorAll('.save-btn').forEach(b => b.addEventListener('click', e => saveSemRow(parseInt(e.target.dataset.idx))));
+}
+
+async function saveSemRow(idx) {
+  const r = currentRows[idx];
+  const tbody = document.getElementById('sem-tbody');
+  const inputs = tbody.querySelectorAll('[data-idx="' + idx + '"]');
+  const updates = { id: r.ID };
+  inputs.forEach(el => {
+    const f = el.dataset.field;
+    if (!f) return;
+    if (el.type === 'number') updates[f] = parseFloat(el.value) || 0;
+    else if (el.type === 'checkbox') updates[f] = el.checked;
+    else updates[f] = el.value;
+  });
+  setStatus('loading', 'Guardando ' + (r.Nombre || '').split(' ')[0] + '...');
+  try {
+    const resp = await fetch(API, { method: 'POST', body: JSON.stringify({ action: 'update_semana_row', ...updates }) });
+    const data = await resp.json();
+    if (!data.ok) throw new Error(data.error);
+    setStatus('saved', '✅ Guardado ' + (r.Nombre || '').split(' ')[0]);
+    Object.assign(currentRows[idx], updates);
+  } catch (err) {
+    setStatus('error', 'Error');
+    alert('Error: ' + err.message);
+  }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  populateWeekSelect();
+  document.getElementById('btn-load').addEventListener('click', loadCurrentWeek);
+  document.getElementById('btn-upload').addEventListener('click', uploadXlsx);
+  document.getElementById('btn-prev').addEventListener('click', () => {
+    const sel = document.getElementById('week-select');
+    if (sel.selectedIndex < sel.options.length - 1) { sel.selectedIndex++; loadCurrentWeek(); }
+  });
+  document.getElementById('btn-next').addEventListener('click', () => {
+    const sel = document.getElementById('week-select');
+    if (sel.selectedIndex > 0) { sel.selectedIndex--; loadCurrentWeek(); }
+  });
+  setTimeout(loadCurrentWeek, 200);
+});
+</script>
+</body>
+</html>

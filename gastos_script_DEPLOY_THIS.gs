@@ -96,6 +96,9 @@ function doGet(e) {
       case 'get_bono_productividad_data': return jsonResp(getBonoProductividadData(e.parameter));
       case 'get_bono_history':            return jsonResp(getBonoHistory(e.parameter));
       case 'get_bono_employee_roster':    return jsonResp({ ok: true, roster: getBonoEmployeeRoster() });
+      // Asistencia (single source of truth for faltas/retardos)
+      case 'get_semana_detalle':          return jsonResp(getSemanaDetalle(e.parameter));
+      case 'get_asistencia_for_period':   return jsonResp(getAsistenciaForPeriod(e.parameter.start, e.parameter.end));
       case 'get_config_cajas':     return jsonResp({ cajas: getConfigCajas() });
       // Shopify API
       case 'get_shopify_daily_summary': return jsonResp(getShopifyDailySummary(e.parameter));
@@ -159,6 +162,9 @@ function doPost(e) {
       // Ventas por Mesa + Bonos
       case 'save_ventas_mesa':        return jsonResp(saveVentasMesa(body));
       case 'save_ventas_mesa_safe':   return jsonResp(saveVentasMesaSafe(body));
+      // Asistencia: upload xlsx → RAW → recompute SEMANAL
+      case 'upload_asistencia':       return jsonResp(uploadAsistencia(body));
+      case 'update_semana_row':       return jsonResp(updateSemanaRow(body));
       // Inventory v2 (MATERIA PRIMA as single source)
       case 'save_inventory_counts':    return jsonResp(saveInventoryCounts(body));
       case 'update_inv_field':         return jsonResp(updateInvField(body));
