@@ -164,7 +164,7 @@
       y si la falta tiene comprobante médico también pon el conteo en <em>Justificadas</em>.
       Las <em>Injustificadas</em> se calculan automático (Real − Just).
       <br><strong>Hrs Deducir:</strong> ponle 0 si tiene permiso reposiendo bien, o las horas a deducir del contador.
-      <br>Marca <strong>🔒</strong> para proteger tus ediciones del próximo upload del xlsx.
+      <br><em>Tus ediciones sobreviven re-uploads automáticamente — no hay que marcar nada.</em>
     </div>
     <div style="overflow-x:auto">
       <table class="sem-table">
@@ -181,7 +181,6 @@
             <th>Punt</th>
             <th>Asis</th>
             <th>Notas / Ajustes</th>
-            <th>🔒</th>
             <th></th>
           </tr>
         </thead>
@@ -391,7 +390,6 @@ function renderSemTable(rows) {
       <td>${punt ? '<span class="pill green">✓</span>' : '<span class="pill red">✗</span>'}</td>
       <td>${asis ? '<span class="pill green">✓</span>' : '<span class="pill red">✗</span>'}</td>
       <td><input type="text" data-idx="${idx}" data-field="Ajustes" value="${(r.Ajustes || '').replace(/"/g, '&quot;')}"></td>
-      <td><input type="checkbox" data-idx="${idx}" data-field="Locked" ${(r.Locked === true || r.Locked === '__YES__') ? 'checked' : ''}></td>
       <td><button data-idx="${idx}" class="save-btn" style="font-size:11px; padding:6px 10px;">Guardar</button></td>
     `;
     tbody.appendChild(tr);
