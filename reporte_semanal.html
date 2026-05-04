@@ -160,9 +160,11 @@
   <div class="card" id="results-card" style="display:none">
     <h2>3. Resultados de la semana</h2>
     <div class="alert info">
-      Edita <strong>Faltas Real</strong>, <strong>Justificadas</strong>, <strong>Permiso Cubierto</strong> y <strong>Ajustes</strong> según necesites.
-      Marca <strong>🔒</strong> para que el siguiente upload del xlsx no sobrescriba tus ediciones.
-      Click <strong>Guardar fila</strong> para persistir.
+      <strong>Cómo clasificar una falta:</strong> deja <em>Faltas Reales</em> (todas cuentan, incluso permisos),
+      y si la falta tiene comprobante médico también pon el conteo en <em>Justificadas</em>.
+      Las <em>Injustificadas</em> se calculan automático (Real − Just).
+      <br><strong>Hrs Deducir:</strong> ponle 0 si tiene permiso reposiendo bien, o las horas a deducir del contador.
+      <br>Marca <strong>🔒</strong> para proteger tus ediciones del próximo upload del xlsx.
     </div>
     <div style="overflow-x:auto">
       <table class="sem-table">
@@ -174,7 +176,6 @@
             <th class="num">Faltas<br>Checador</th>
             <th class="num">Faltas<br>Reales</th>
             <th class="num">Just.<br>(comp.)</th>
-            <th class="num">Permiso<br>✓</th>
             <th class="num">Retardos</th>
             <th class="num">Hrs<br>Deducir</th>
             <th>Punt</th>
@@ -385,7 +386,6 @@ function renderSemTable(rows) {
       <td class="num"><span class="pill gray">${r.FaltasRaw || 0}</span></td>
       <td class="num"><input type="number" min="0" max="6" data-idx="${idx}" data-field="FaltasReal" value="${r.FaltasReal != null ? r.FaltasReal : (r.FaltasRaw || 0)}"></td>
       <td class="num"><input type="number" min="0" max="6" data-idx="${idx}" data-field="FaltasJustificadas" value="${r.FaltasJustificadas || 0}"></td>
-      <td class="num"><input type="number" min="0" max="6" data-idx="${idx}" data-field="FaltasPermisoCubierto" value="${r.FaltasPermisoCubierto || 0}"></td>
       <td class="num">${r.Retardos || 0}</td>
       <td class="num"><input type="number" min="0" step="0.5" data-idx="${idx}" data-field="HorasNoTrabajadas" value="${r.HorasNoTrabajadas || 0}"></td>
       <td>${punt ? '<span class="pill green">✓</span>' : '<span class="pill red">✗</span>'}</td>

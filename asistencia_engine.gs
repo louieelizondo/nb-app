@@ -68,8 +68,9 @@ const NB_COMIDA_RETARDO_MIN = 3;        // Regreso comida > 3 min late = retardo
 
 // Per-employee rule overrides
 const EMPLEADO_RULES = {
-  // Louicarlos: 9am-5pm L-V (no Sábado). Retardos perdonados (trusted, trabaja también desde casa).
-  48: { skipEntradaRetardos: true, skipComidaRetardos: true, expectedDaysPerWeek: 5, hoursPerDay: 8 }
+  // Louicarlos: 9am-5pm L-V con 30min comida adentro (7.5 hrs efectivos). No trabaja Sábado.
+  // Retardos perdonados (trusted, trabaja también desde casa).
+  48: { skipEntradaRetardos: true, skipComidaRetardos: true, expectedDaysPerWeek: 5, hoursPerDay: 7.5 }
 };
 const DEFAULT_HOURS_PER_DAY = 8;
 
