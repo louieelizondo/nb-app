@@ -330,12 +330,17 @@ function recomputeSemanal(weekStart, weekEnd, sourceFile) {
   });
   if (!inPeriod.length) return { ok: true, computed: 0, message: 'Sin datos en RAW para el período' };
 
-  // Group by colaborador
+  // Group by NORMALIZED NAME (not numero) — handles cases where checador and
+  // Notion have different numeros for the same person (Andrea: checador #65,
+  // Notion #64). Whichever numero shows up first in the RAW rows wins as canonical.
   const byEmpleado = {};
   inPeriod.forEach(r => {
-    const num = parseInt(r.NumeroColab);
-    if (!byEmpleado[num]) byEmpleado[num] = { numero: num, nombre: r.Nombre, days: [] };
-    byEmpleado[num].days.push(r);
+    const key = String(r.Nombre || '').toUpperCase().replace(/\s+/g, ' ').trim();
+    if (!key) return;
+    if (!byEmpleado[key]) {
+      byEmpleado[key] = { numero: parseInt(r.NumeroColab), nombre: r.Nombre, days: [] };
+    }
+    byEmpleado[key].days.push(r);
   });
 
   // Read existing SEMANAL rows for the period to preserve locks/manual edits
@@ -596,6 +601,80 @@ function getSemanaDetalle(params) {
   filtered.sort((a, b) => (parseInt(a.NumeroColab) || 0) - (parseInt(b.NumeroColab) || 0));
   return { ok: true, weekStart: start, weekEnd: end, rows: filtered };
 }
+
+/**
+ * Cleanup helper — corre una vez desde Apps Script editor cuando hay duplicados.
+ *
+ * Para cada (nombre + fecha) que aparece bajo múltiples NumeroColab en ASISTENCIA_RAW,
+ * conserva una sola fila (la del numero más bajo, asumiendo que es el canónico actual).
+ * Borra las demás. También consolida ASISTENCIA_SEMANAL.
+ *
+ * Caso conocido: Andrea Sánchez aparece como #65 en checador pero #64 en Notion.
+ */
+function cleanupAsistenciaRawDuplicateNames() {
+  const rawSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(ASISTENCIA_RAW_TAB);
+  if (!rawSheet || rawSheet.getLastRow() < 2) return { ok: true, removed: 0 };
+
+  const data = rawSheet.getDataRange().getValues();
+  const headers = data[0];
+  const idIdx = headers.indexOf('ID');
+  const numIdx = headers.indexOf('NumeroColab');
+  const nomIdx = headers.indexOf('Nombre');
+  const fecIdx = headers.indexOf('Fecha');
+
+  const byKey = {};  // 'NOMBRE|FECHA' → array of { rowNum, numero }
+  for (let r = 1; r < data.length; r++) {
+    const nombre = String(data[r][nomIdx] || '').toUpperCase().replace(/\s+/g, ' ').trim();
+    const fecha = formatDateStr(data[r][fecIdx]);
+    if (!nombre || !fecha) continue;
+    const key = nombre + '|' + fecha;
+    if (!byKey[key]) byKey[key] = [];
+    byKey[key].push({ rowNum: r + 1, numero: parseInt(data[r][numIdx]) });
+  }
+
+  const toDelete = [];
+  Object.values(byKey).forEach(group => {
+    if (group.length <= 1) return;
+    // Sort by numero ascending — keep the lowest, delete the rest
+    group.sort((a, b) => a.numero - b.numero);
+    for (let i = 1; i < group.length; i++) toDelete.push(group[i].rowNum);
+  });
+
+  // Delete from bottom up to keep indices stable
+  toDelete.sort((a, b) => b - a).forEach(r => rawSheet.deleteRow(r));
+
+  // Same cleanup on SEMANAL
+  const semSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(ASISTENCIA_SEMANAL_TAB);
+  let semRemoved = 0;
+  if (semSheet && semSheet.getLastRow() >= 2) {
+    const sd = semSheet.getDataRange().getValues();
+    const sh = sd[0];
+    const sNumIdx = sh.indexOf('NumeroColab');
+    const sNomIdx = sh.indexOf('Nombre');
+    const sIniIdx = sh.indexOf('SemanaInicio');
+    const sBy = {};
+    for (let r = 1; r < sd.length; r++) {
+      const nombre = String(sd[r][sNomIdx] || '').toUpperCase().replace(/\s+/g, ' ').trim();
+      const ini = formatDateStr(sd[r][sIniIdx]);
+      const key = nombre + '|' + ini;
+      if (!nombre || !ini) continue;
+      if (!sBy[key]) sBy[key] = [];
+      sBy[key].push({ rowNum: r + 1, numero: parseInt(sd[r][sNumIdx]) });
+    }
+    const semToDelete = [];
+    Object.values(sBy).forEach(group => {
+      if (group.length <= 1) return;
+      group.sort((a, b) => a.numero - b.numero);
+      for (let i = 1; i < group.length; i++) semToDelete.push(group[i].rowNum);
+    });
+    semToDelete.sort((a, b) => b - a).forEach(r => semSheet.deleteRow(r));
+    semRemoved = semToDelete.length;
+  }
+
+  SpreadsheetApp.flush();
+  return { ok: true, rawRemoved: toDelete.length, semRemoved: semRemoved };
+}
+
 
 /** Update one SEMANAL row's manual fields (after parsing locks/classifications). */
 function updateSemanaRow(body) {
