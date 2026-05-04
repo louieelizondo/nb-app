@@ -583,16 +583,22 @@ function saveVentasMesaSafe(body) {
   const fechaFin = vm.FechaFin;
   if (!fechaInicio || !fechaFin) throw new Error('FechaInicio y FechaFin son requeridas');
 
-  // Auto-sum PagosRecibidos from INGRESOS for the date range
+  // Auto-sum NET Pagos Recibidos from INGRESOS for the date range.
+  // Net PR = PagosRecibidos - Cashback. Cashback isn't real income — it's a discount
+  // applied from store credit the customer earned earlier. Counting it would double-count.
+  // Aux Tienda + Líder Tienda bonos calculate off this net PR.
   const ingresos = sheetToObjects(INGRESOS_TAB, INGRESOS_HEADERS);
   let totalPR = 0;
+  let totalCashback = 0;
   ingresos.forEach(r => {
     const fecha = formatDateStr(r.Fecha);
     if (fecha >= fechaInicio && fecha <= fechaFin) {
       totalPR += parseFloat(r.PagosRecibidos) || 0;
+      totalCashback += parseFloat(r.Cashback) || 0;
     }
   });
-  const pagosRecibidos = vm.PagosRecibidos !== undefined ? parseFloat(vm.PagosRecibidos) : totalPR;
+  const netPR = totalPR - totalCashback;
+  const pagosRecibidos = vm.PagosRecibidos !== undefined ? parseFloat(vm.PagosRecibidos) : netPR;
 
   // Collect mesa sales (by name)
   const sales = {};
