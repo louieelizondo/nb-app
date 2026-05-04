@@ -545,32 +545,25 @@ function uploadAsistencia(body) {
   const records = parseAsistenciaXlsx(rows2D);
   const saveResult = saveAsistenciaRaw(records, sourceFile);
 
-  // Determine which weeks to recompute
-  const weeks = [];
-  if (body.weekStart && body.weekEnd) {
-    weeks.push({ start: body.weekStart, end: body.weekEnd });
-  } else {
-    // Derive Vie-Jue weeks from records
-    const fechaSet = {};
-    records.forEach(r => { fechaSet[r.fecha] = true; });
-    const fechas = Object.keys(fechaSet).sort();
-    if (fechas.length) {
-      // Walk and bucket into Vie-Jue weeks
-      const seenWeeks = {};
-      fechas.forEach(f => {
-        const w = vieJueWeek_(f);
-        seenWeeks[w.start + '|' + w.end] = w;
-      });
-      Object.values(seenWeeks).forEach(w => weeks.push(w));
-    }
-  }
+  // Always derive ALL Vie-Jue weeks present in the records.
+  // Works for weekly (Fri-Wed/Thu), biweekly, or monthly xlsx uploads — auto-detects.
+  const fechaSet = {};
+  records.forEach(r => { fechaSet[r.fecha] = true; });
+  const fechas = Object.keys(fechaSet).sort();
+  const seenWeeks = {};
+  fechas.forEach(f => {
+    const w = vieJueWeek_(f);
+    seenWeeks[w.start + '|' + w.end] = w;
+  });
+  const weeks = Object.values(seenWeeks);
 
   const recomputeResults = weeks.map(w => recomputeSemanal(w.start, w.end, sourceFile));
   return {
     ok: true,
     saveRaw: saveResult,
     weeksComputed: recomputeResults,
-    records: records.length
+    records: records.length,
+    weeksFound: weeks.length
   };
 }
 

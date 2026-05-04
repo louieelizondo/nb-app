@@ -198,29 +198,24 @@ function classifyMesa_(mesa) {
 // ─── Attendance for period (from Notion Reporte de Nómina semanal) ─────────
 
 /**
- * Sums faltas + retardos per colaborador from Notion Reporte de Nómina semanal,
- * for all weekly rows whose Date falls within [start, end].
+ * Sums faltas + retardos per colaborador for the given period.
+ * Reads from ASISTENCIA_SEMANAL (Google Sheets) — single source of truth.
+ *
+ * Previous version queried Notion Reporte de Nómina semanal. Migrated to Sheets
+ * because: faster (no HTTP), no missing-week issues, drives all bono calcs from
+ * the same raw checador data.
  *
  * Returns: { 'NombreNormalizado': { faltas: N, retardos: N } }
  */
 function getAttendanceForPeriod(startDate, endDate) {
-  const filter = {
-    and: [
-      { property: 'Date', date: { on_or_after: startDate } },
-      { property: 'Date', date: { on_or_before: endDate } }
-    ]
-  };
-  const pages = notionQueryAll_(NOTION_DS_REPORTE_NOMINA_SEMANAL, filter);
-
+  const data = getAsistenciaForPeriod(startDate, endDate);  // from asistencia_engine.gs
   const map = {};
-  pages.forEach(page => {
-    const nombre = notionPropValue_(page, 'Colaborador') || '';
-    const faltas = notionPropValue_(page, 'Faltas') || 0;
-    const retardos = notionPropValue_(page, 'Retardos ') || 0;
-    const key = normalizeName_(nombre);
-    if (!map[key]) map[key] = { faltas: 0, retardos: 0 };
-    map[key].faltas += parseFloat(faltas) || 0;
-    map[key].retardos += parseFloat(retardos) || 0;
+  Object.keys(data.byNombre || {}).forEach(key => {
+    const v = data.byNombre[key];
+    map[key] = {
+      faltas: v.faltas || 0,
+      retardos: v.retardos || 0
+    };
   });
   return map;
 }
