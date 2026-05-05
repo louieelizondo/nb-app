@@ -364,20 +364,65 @@ function recomputeSemanal(weekStart, weekEnd, sourceFile) {
   }
 
   const now = new Date().toISOString();
+  const todayStr = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd');
   let computedCount = 0;
 
-  // Fetch employee rules from Notion once for the whole recompute (cached 10min)
+  // Fetch employee rules from Notion once (cached 10min)
   const rulesMap = getEmpleadoRulesFromNotion_();
+
+  // Fetch all approved permisos once (cached 5min) and group by colab numero
+  let permisosByNumero = {};
+  try {
+    const allPermisos = getApprovedPermisos_();
+    permisosByNumero = groupPermisosByNumero_(allPermisos, rulesMap);
+  } catch (e) {
+    Logger.log('Permisos fetch failed (continuing without): ' + e.message);
+  }
+
+  // Read RAW once for Saldo-based repose verification
+  const allRaw = sheetToObjects(ASISTENCIA_RAW_TAB, ASISTENCIA_RAW_HEADERS);
+  const rawByNumero = {};
+  allRaw.forEach(r => {
+    const n = parseInt(r.NumeroColab);
+    if (!n) return;
+    if (!rawByNumero[n]) rawByNumero[n] = [];
+    rawByNumero[n].push(r);
+  });
+
+  // Helper: filter + decorate permisos for a single colab and a given week.
+  // Includes permisos whose date OR repose window overlaps with the current week.
+  const buildPermisosForWeek_ = (numero) => {
+    const all = permisosByNumero[numero] || [];
+    const rules = rulesMap[numero] || {};
+    const colabRaw = rawByNumero[numero] || [];
+    const result = [];
+    all.forEach(p => {
+      const decorated = Object.assign({}, p);
+      decorated.reposeWindow = computeReposeWindow_(decorated, rules.workDays);
+      decorated.reposeStatus = decorated.reposeWindow
+        ? checkReposeStatus_(decorated, colabRaw, todayStr)
+        : null;
+      // Include if: permiso date is in this week, OR repose window ends in this week and there's a shortfall
+      const inWeek = decorated.fechaPermiso >= weekStart && decorated.fechaPermiso <= weekEnd;
+      const reposeEndsThisWeek = decorated.reposeWindow
+        && decorated.reposeWindow.endDate >= weekStart
+        && decorated.reposeWindow.endDate <= weekEnd
+        && decorated.reposeStatus
+        && !decorated.reposeStatus.complete;
+      if (inWeek || reposeEndsThisWeek) result.push(decorated);
+    });
+    return result;
+  };
 
   Object.keys(byEmpleado).forEach(numStr => {
     const emp = byEmpleado[numStr];
     const id = emp.numero + '_' + weekStart;
     const existing = existingSem[id] || {};
+    const empPermisos = buildPermisosForWeek_(emp.numero);
 
     // If row is locked, skip the recompute (preserve manual values)
     if (existing.Locked === true || existing.Locked === '__YES__') {
-      // Still update DiasTrabajados (factual) if it changed
-      const aggLocked = aggregateEmpDays_(emp.days, emp.numero, rulesMap);
+      const aggLocked = aggregateEmpDays_(emp.days, emp.numero, rulesMap, empPermisos);
       if (existing.DiasTrabajados !== aggLocked.diasTrabajados) {
         const rowNum = existing._row;
         const colDT = semHeaders.indexOf('DiasTrabajados') + 1;
@@ -386,7 +431,7 @@ function recomputeSemanal(weekStart, weekEnd, sourceFile) {
       return;
     }
 
-    const agg = aggregateEmpDays_(emp.days, emp.numero, rulesMap);
+    const agg = aggregateEmpDays_(emp.days, emp.numero, rulesMap, empPermisos);
 
     // Build SEMANAL row
     const rowDict = {
@@ -405,7 +450,7 @@ function recomputeSemanal(weekStart, weekEnd, sourceFile) {
       'FaltasInjustificadas': existing.FaltasInjustificadas != null && existing.FaltasInjustificadas !== ''
         ? existing.FaltasInjustificadas
         : agg.faltasRaw,
-      'FaltasPermisoCubierto': existing.FaltasPermisoCubierto || 0,
+      'FaltasPermisoCubierto': agg.faltasPermisoCubierto != null ? agg.faltasPermisoCubierto : (existing.FaltasPermisoCubierto || 0),
       'Retardos': agg.retardos,
       'RetardosDetalle': agg.retardosDetalle,
       'HorasNoTrabajadas': existing.HorasNoTrabajadas != null && existing.HorasNoTrabajadas !== ''
@@ -447,6 +492,19 @@ function recomputeSemanal(weekStart, weekEnd, sourceFile) {
       return;
     }
 
+    // Build permiso lines for noChecador employees (display only — no auto-verify of repose)
+    const noCheckPermisos = buildPermisosForWeek_(numero);
+    const noCheckPermisoLines = noCheckPermisos.map(p => {
+      const dateShort = String(p.fechaPermiso).slice(5).replace('-', '/');
+      const asunto = (p.asunto || []).join('/') || 'Permiso';
+      const hrs = parseFloat(p.horasAusente) || 0;
+      const reponer = p.reponer === 'Si';
+      return '🗓 ' + dateShort + ' ' + asunto + ' ' + hrs + 'h · ' + (reponer ? 'reponiendo (sin checador)' : 'descontar ' + hrs + 'h');
+    });
+    const noCheckHnt = noCheckPermisos.reduce((sum, p) => {
+      return sum + (p.reponer === 'Si' ? 0 : (parseFloat(p.horasAusente) || 0));
+    }, 0);
+
     const expectedDays = rules.expectedDaysPerWeek || 6;
     const rowDict = {
       'ID': id,
@@ -462,8 +520,8 @@ function recomputeSemanal(weekStart, weekEnd, sourceFile) {
       'FaltasInjustificadas': 0,
       'FaltasPermisoCubierto': 0,
       'Retardos': 0,
-      'RetardosDetalle': '',
-      'HorasNoTrabajadas': 0,
+      'RetardosDetalle': noCheckPermisoLines.join('\n'),
+      'HorasNoTrabajadas': noCheckHnt,
       'Puntualidad': true,
       'Asistencia': true,
       'Ajustes': '(sin checador)',
@@ -518,6 +576,7 @@ function getEmpleadoRulesFromNotion_() {
     const retardosPerdonados = notionPropValue_(page, 'Retardos Perdonados') === true;
 
     byNumero[parseInt(numero)] = {
+      pageId: page.id.replace(/-/g, ''),  // for permiso relation matching
       nombre: String(nombre).trim(),
       noChecador: usaChecador === false,
       workDays: Array.isArray(diasTrabaja) ? diasTrabaja : [],
@@ -531,6 +590,179 @@ function getEmpleadoRulesFromNotion_() {
   cache.put(EMPLEADO_RULES_CACHE_KEY, JSON.stringify(byNumero), EMPLEADO_RULES_CACHE_TTL);
   return byNumero;
 }
+
+// ─── Permisos engine ──────────────────────────────────────────────────────
+//
+// Reads approved permisos from Notion Reporte de Permisos and applies them:
+//   • Suppresses retardos detected by checador on the permiso date
+//   • Counts full-day permisos (>= 6h) in FaltasPermisoCubierto, not FaltasRaw
+//   • Reponer=No → HNT += horas ausentes
+//   • Reponer=Sí → checks Saldo across the repose window:
+//       - Fully reposed → HNT = 0 ✅
+//       - Partially reposed but still in window → no shortfall yet (in progress)
+//       - Window ended with shortfall → HNT += shortfall hours (deducted this nómina)
+//
+// Per NB policy (Vacaciones-y-Permisos page):
+//   - Solo Médico/Legal/Educativo califican para reponer (Personal siempre se descuenta)
+//   - Repose en días consecutivos, mismo tiempo cada día
+//   - Métodos: entrada temprana 7:30/7:45 o reducir descanso 15/30 min
+
+const NOTION_DS_PERMISOS = '86d1a0bb-1660-44f0-970c-34bad0c6513a';
+const PERMISOS_CACHE_KEY = 'asistencia_permisos_v1';
+const PERMISOS_CACHE_TTL = 300;  // 5 min
+
+/** Fetches all Aprobado permisos. Returns array sorted by Fecha de permiso. Cached 5 min. */
+function getApprovedPermisos_() {
+  const cache = CacheService.getScriptCache();
+  const cached = cache.get(PERMISOS_CACHE_KEY);
+  if (cached) {
+    try { return JSON.parse(cached); } catch (e) { /* fall through */ }
+  }
+
+  const filter = { property: 'Respuesta', select: { equals: 'Aprobado' } };
+  const pages = notionQueryAll_(NOTION_DS_PERMISOS, filter, [
+    { property: 'Fecha de permiso', direction: 'ascending' }
+  ]);
+
+  const permisos = pages.map(page => ({
+    id: page.id,
+    fechaPermiso: notionPropValue_(page, 'Fecha de permiso'),
+    nombreCompleto: String(notionPropValue_(page, 'Nombre Completo ') || '').trim(),
+    colaboradorIds: notionPropValue_(page, 'Colaborador') || [],  // array of related page IDs
+    horasAusente: notionPropValue_(page, 'Tiempo total ausente (8 horas por día)') || 0,
+    horarioAusente: notionPropValue_(page, 'HORARIO AUSENTE') || '',
+    asunto: notionPropValue_(page, 'Asunto de permiso ') || [],
+    reponer: notionPropValue_(page, 'Vas a reponer el tiempo ausente?'),  // 'Si' | 'No' | null
+    comoReponer: notionPropValue_(page, '¿Cómo vas a reponer el tiempo?') || [],
+    fechaFinalManual: notionPropValue_(page, 'Fecha final de tiempo pagado')
+  }));
+
+  cache.put(PERMISOS_CACHE_KEY, JSON.stringify(permisos), PERMISOS_CACHE_TTL);
+  return permisos;
+}
+
+/** Force-clear the permisos cache. Run after changing data in Reporte de Permisos. */
+function refreshPermisos() {
+  CacheService.getScriptCache().remove(PERMISOS_CACHE_KEY);
+  const list = getApprovedPermisos_();
+  Logger.log('Refreshed ' + list.length + ' permisos aprobados');
+  return list;
+}
+
+/** Maps "¿Cómo vas a reponer?" array to total minutes/day to be reposed. */
+function inferDailyReposeMin_(comoReponer) {
+  if (!Array.isArray(comoReponer)) return 0;
+  let total = 0;
+  comoReponer.forEach(m => {
+    const s = String(m).toLowerCase();
+    if (s.indexOf('7:30') >= 0)        total += 30;  // entrada 30 min antes
+    else if (s.indexOf('7:45') >= 0)   total += 15;  // entrada 15 min antes
+    else if (s.indexOf('15min') >= 0)  total += 15;  // descanso reducido 15
+    else if (s.indexOf('30min') >= 0)  total += 30;  // descanso reducido 30
+  });
+  return total;
+}
+
+/**
+ * Computes the repose window for a permiso.
+ * Returns { startDate, endDate, daysNeeded, dailyMin, totalMin } or null if can't auto-compute.
+ *
+ * Repose starts the day after the permiso. Walks forward through workDays only.
+ */
+function computeReposeWindow_(permiso, workDays) {
+  const dailyMin = inferDailyReposeMin_(permiso.comoReponer);
+  if (!dailyMin || !permiso.fechaPermiso) return null;
+  const totalMin = (parseFloat(permiso.horasAusente) || 0) * 60;
+  if (totalMin <= 0) return null;
+  const daysNeeded = Math.ceil(totalMin / dailyMin);
+
+  const workDaysSet = {};
+  (Array.isArray(workDays) ? workDays : ['Lun','Mar','Mié','Jue','Vie','Sáb']).forEach(d => workDaysSet[d] = true);
+
+  const start = new Date(permiso.fechaPermiso + 'T00:00:00');
+  start.setDate(start.getDate() + 1);  // skip the permiso day itself
+  const startStr = formatDateStr(start);
+
+  let dayCount = 0;
+  let endStr = startStr;
+  const cursor = new Date(start);
+  for (let safety = 0; safety < 90; safety++) {
+    const dia = DIAS_SP[dayOfWeek_(formatDateStr(cursor))];
+    if (workDaysSet[dia]) {
+      dayCount++;
+      endStr = formatDateStr(cursor);
+      if (dayCount >= daysNeeded) break;
+    }
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  return { startDate: startStr, endDate: endStr, daysNeeded: daysNeeded, dailyMin: dailyMin, totalMin: totalMin };
+}
+
+/**
+ * Checks how much of a permiso has been reposed by analyzing Saldo in RAW.
+ * Sums positive Saldo across the repose window (entered early or stayed late = reposing).
+ *
+ * Returns { reposedMin, expectedMin, shortfallMin, complete, windowOver }
+ * windowOver = true if today >= reposeWindow.endDate (so any shortfall should be deducted now)
+ */
+function checkReposeStatus_(permiso, rawForColab, todayStr) {
+  if (!permiso.reposeWindow) return null;
+  const { startDate, endDate, totalMin } = permiso.reposeWindow;
+  let reposedMin = 0;
+  rawForColab.forEach(r => {
+    const fecha = formatDateStr(r.Fecha);
+    if (fecha >= startDate && fecha <= endDate) {
+      const saldo = parseInt(r.Saldo_min) || 0;
+      if (saldo > 0) reposedMin += saldo;
+    }
+  });
+  const shortfallMin = Math.max(0, totalMin - reposedMin);
+  const complete = reposedMin >= totalMin;
+  const windowOver = todayStr >= endDate;
+  return { reposedMin, expectedMin: totalMin, shortfallMin, complete, windowOver };
+}
+
+/**
+ * Group permisos by colaborador numero. Uses Colaborador relation if set,
+ * falls back to Nombre Completo string match.
+ */
+function groupPermisosByNumero_(permisos, rulesMap) {
+  const byPageId = {};   // pageId → numero
+  const byNombre = {};   // normalizedNombre → numero
+  Object.keys(rulesMap).forEach(numStr => {
+    const r = rulesMap[numStr];
+    if (r.pageId) byPageId[r.pageId] = parseInt(numStr);
+    if (r.nombre) byNombre[normalizeNombre_(r.nombre)] = parseInt(numStr);
+  });
+
+  const result = {};
+  permisos.forEach(p => {
+    let numero = null;
+    // Prefer relation match
+    for (let i = 0; i < (p.colaboradorIds || []).length; i++) {
+      const id = String(p.colaboradorIds[i]).replace(/-/g, '');
+      if (byPageId[id] != null) { numero = byPageId[id]; break; }
+    }
+    // Fallback: name match
+    if (numero == null) {
+      const key = normalizeNombre_(p.nombreCompleto);
+      if (byNombre[key] != null) numero = byNombre[key];
+    }
+    if (numero == null) return;  // unmatched permiso, ignore
+    if (!result[numero]) result[numero] = [];
+    result[numero].push(p);
+  });
+  return result;
+}
+
+function normalizeNombre_(s) {
+  return String(s || '')
+    .toUpperCase()
+    .replace(/\s+/g, ' ')
+    .trim()
+    .normalize('NFD').replace(/[̀-ͯ]/g, '');  // strip accents
+}
+
 
 /** Force-refresh the empleado rules cache. Call this from the editor after changing Notion. */
 function refreshEmpleadoRules() {
@@ -578,23 +810,38 @@ function syncNombresFromNotion() {
 
 
 /**
- * Aggregate one employee's days for a week. Applies NB rules + per-employee overrides.
+ * Aggregate one employee's days for a week. Applies NB rules + per-employee overrides
+ * + permisos (suppress retardos, count covered faltas, compute HNT including shortfalls).
+ *
+ * @param days        RAW rows for this empleado in the current week
+ * @param numero      empleado numero
+ * @param rulesMap    full rules map from getEmpleadoRulesFromNotion_
+ * @param permisos    array of permisos for this empleado, each pre-decorated with
+ *                    .reposeWindow (from computeReposeWindow_) and .reposeStatus
+ *                    (from checkReposeStatus_) when applicable
  */
-function aggregateEmpDays_(days, numero, rulesMap) {
+function aggregateEmpDays_(days, numero, rulesMap, permisos) {
   const rules = (rulesMap && rulesMap[numero]) || {};
   const skipEntrada = rules.skipEntradaRetardos === true;
   const skipComida = rules.skipComidaRetardos === true;
   const workDays = Array.isArray(rules.workDays) ? rules.workDays : null;
+  const hoursPerDay = (rules.hoursPerDay) || DEFAULT_HOURS_PER_DAY;
+
+  // Index permisos by date for fast suppression lookup
+  const permisosByDate = {};
+  (permisos || []).forEach(p => {
+    if (!p.fechaPermiso) return;
+    if (!permisosByDate[p.fechaPermiso]) permisosByDate[p.fechaPermiso] = [];
+    permisosByDate[p.fechaPermiso].push(p);
+  });
 
   let diasTrabajados = 0;
   let diasDescanso = 0;
   let faltasRaw = 0;
+  let faltasPermisoCubierto = 0;
   const retardos = [];
 
   days.forEach(d => {
-    // For employees with fixed schedules (e.g. Louicarlo M-V), force non-workdays
-    // to count as descanso regardless of what the checador shows. Prevents Saturday
-    // from being a phantom falta.
     if (workDays && workDays.indexOf(d.DiaSemana) === -1) {
       diasDescanso++;
       return;
@@ -603,38 +850,98 @@ function aggregateEmpDays_(days, numero, rulesMap) {
       diasDescanso++;
       return;
     }
+
+    const fecha = formatDateStr(d.Fecha);
+    const permisosToday = permisosByDate[fecha] || [];
+
     if (d.IsFalta === true || d.IsFalta === 'TRUE') {
-      faltasRaw++;
+      // If a full-day permiso (>=6h) covers it → FaltasPermisoCubierto, not FaltasRaw
+      const fullDay = permisosToday.find(p => (parseFloat(p.horasAusente) || 0) >= 6);
+      if (fullDay) faltasPermisoCubierto++;
+      else         faltasRaw++;
       return;
     }
     diasTrabajados++;
 
+    // If there's a permiso today, suppress retardos (it's authorized lateness)
+    if (permisosToday.length > 0) return;
+
     if (!skipEntrada) {
       const entMin = parseInt(d.RetEntrada_min) || 0;
       if (entMin > NB_ENTRADA_RETARDO_MIN) {
-        retardos.push({ kind: 'entrada', min: entMin, fecha: formatDateStr(d.Fecha), dia: d.DiaSemana });
+        retardos.push({ kind: 'entrada', min: entMin, fecha: fecha, dia: d.DiaSemana });
       }
     }
     if (!skipComida) {
       const comMin = parseInt(d.RetComida_min) || 0;
       if (comMin > NB_COMIDA_RETARDO_MIN) {
-        retardos.push({ kind: 'comida', min: comMin, fecha: formatDateStr(d.Fecha), dia: d.DiaSemana });
+        retardos.push({ kind: 'comida', min: comMin, fecha: fecha, dia: d.DiaSemana });
       }
     }
   });
 
-  const retardosDetalle = retardos.length
-    ? 'Retardos (' + retardos.length + '): ' + retardos.map(r => r.dia + ' ' + (r.kind === 'entrada' ? 'entrada' : 'regreso comida') + ' ' + r.min + 'm').join(' · ')
-    : '';
+  // ── Compute HNT contributions from permisos and build display lines ─────
+  let hntFromPermisos = 0;          // Reponer=No or pure deduction
+  let hntFromShortfall = 0;          // Reponer=Sí but window ended without full repose
+  const permisoLines = [];
 
-  // Hours per falta day for accountant deduction (per-employee, default 8)
-  const hoursPerDay = (rules.hoursPerDay) || DEFAULT_HOURS_PER_DAY;
-  const horasNoTrabajadas = faltasRaw * hoursPerDay;
+  (permisos || []).sort((a, b) => String(a.fechaPermiso).localeCompare(String(b.fechaPermiso)));
+  (permisos || []).forEach(p => {
+    if (!p.fechaPermiso) return;
+    const dateShort = p.fechaPermiso.slice(5).replace('-', '/');  // MM/DD
+    const asunto = (p.asunto || []).join('/') || 'Permiso';
+    const hrs = parseFloat(p.horasAusente) || 0;
+    const reponer = p.reponer === 'Si';
+
+    if (!reponer) {
+      hntFromPermisos += hrs;
+      permisoLines.push('🗓 ' + dateShort + ' ' + asunto + ' ' + hrs + 'h · descontar ' + hrs + 'h');
+      return;
+    }
+
+    // Reponer=Sí: needs auto-verification via Saldo (or fallback for noChecador employees)
+    if (rules.noChecador) {
+      permisoLines.push('🗓 ' + dateShort + ' ' + asunto + ' ' + hrs + 'h · reponiendo (sin checador)');
+      return;
+    }
+
+    if (!p.reposeWindow || !p.reposeStatus) {
+      // Couldn't compute (no método de reponer specified) → treat as not reposed
+      hntFromPermisos += hrs;
+      permisoLines.push('🗓 ' + dateShort + ' ' + asunto + ' ' + hrs + 'h · ⚠️ sin método de reponer · descontar ' + hrs + 'h');
+      return;
+    }
+
+    const st = p.reposeStatus;
+    const reposedHrs = (st.reposedMin / 60).toFixed(1);
+    if (st.complete) {
+      permisoLines.push('🗓 ' + dateShort + ' ' + asunto + ' ' + hrs + 'h · ✅ reposeado ' + reposedHrs + 'h');
+    } else if (st.windowOver) {
+      const shortHrs = +(st.shortfallMin / 60).toFixed(2);
+      hntFromShortfall += shortHrs;
+      permisoLines.push('🗓 ' + dateShort + ' ' + asunto + ' ' + hrs + 'h · ⚠️ falta reponer ' + shortHrs + 'h · descontar ' + shortHrs + 'h');
+    } else {
+      permisoLines.push('🗓 ' + dateShort + ' ' + asunto + ' ' + hrs + 'h · reponiendo (' + reposedHrs + '/' + hrs + 'h, hasta ' + p.reposeWindow.endDate.slice(5) + ')');
+    }
+  });
+
+  // ── Build combined RetardosDetalle (retardos + permisos) ────────────────
+  const retardoLines = retardos.map(r => r.dia + ' ' + (r.kind === 'entrada' ? 'entrada' : 'regreso comida') + ' ' + r.min + 'm');
+  let retardosDetalle = '';
+  if (retardoLines.length) {
+    retardosDetalle = 'Retardos (' + retardoLines.length + '): ' + retardoLines.join(' · ');
+  }
+  if (permisoLines.length) {
+    retardosDetalle = (retardosDetalle ? retardosDetalle + '\n' : '') + permisoLines.join('\n');
+  }
+
+  const horasNoTrabajadas = faltasRaw * hoursPerDay + hntFromPermisos + hntFromShortfall;
 
   return {
     diasTrabajados: diasTrabajados,
     diasDescanso: diasDescanso,
     faltasRaw: faltasRaw,
+    faltasPermisoCubierto: faltasPermisoCubierto,
     retardos: retardos.length,
     retardosDetalle: retardosDetalle,
     horasNoTrabajadas: horasNoTrabajadas

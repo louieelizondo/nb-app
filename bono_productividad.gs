@@ -119,6 +119,12 @@ function notionPropValue_(page, propName) {
       return prop.checkbox === true;
     case 'date':
       return prop.date ? prop.date.start : null;
+    case 'relation':
+      return (prop.relation || []).map(o => o.id);
+    case 'created_by':
+      return prop.created_by ? prop.created_by.id : null;
+    case 'created_time':
+      return prop.created_time || null;
     case 'formula':
       const f = prop.formula || {};
       return f.number !== undefined ? f.number : (f.string !== undefined ? f.string : (f.boolean !== undefined ? f.boolean : null));
