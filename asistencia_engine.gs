@@ -269,15 +269,14 @@ function saveAsistenciaRaw(records, sourceFile) {
   const headers = data[0];
   const idIdx = headers.indexOf('ID');
 
-  // Build existing-row map
   const existingMap = {};
   for (let r = 1; r < data.length; r++) {
-    existingMap[String(data[r][idIdx])] = r + 1;  // 1-indexed
+    existingMap[String(data[r][idIdx])] = r + 1;
   }
 
-  const now = new Date();
-  const nowIso = now.toISOString();
-  let inserted = 0, updated = 0;
+  const nowIso = new Date().toISOString();
+  const inserts = [];                    // 2D array, batch-appended
+  const updates = [];                    // [{ rowNum, rowArr }]
 
   records.forEach(rec => {
     const id = rec.numero + '_' + rec.fecha;
@@ -300,17 +299,35 @@ function saveAsistenciaRaw(records, sourceFile) {
       'SourceFile': sourceFile || ''
     };
     const rowArr = ASISTENCIA_RAW_HEADERS.map(h => rowDict[h] != null ? rowDict[h] : '');
-
-    if (existingMap[id]) {
-      sheet.getRange(existingMap[id], 1, 1, rowArr.length).setValues([rowArr]);
-      updated++;
-    } else {
-      sheet.appendRow(rowArr);
-      inserted++;
-    }
+    if (existingMap[id]) updates.push({ rowNum: existingMap[id], rowArr: rowArr });
+    else                 inserts.push(rowArr);
   });
+
+  // Batch updates: group contiguous rowNums into a single setValues call
+  if (updates.length) {
+    updates.sort((a, b) => a.rowNum - b.rowNum);
+    let i = 0;
+    while (i < updates.length) {
+      const start = updates[i].rowNum;
+      const batch = [updates[i].rowArr];
+      let j = i + 1;
+      while (j < updates.length && updates[j].rowNum === updates[j-1].rowNum + 1) {
+        batch.push(updates[j].rowArr);
+        j++;
+      }
+      sheet.getRange(start, 1, batch.length, ASISTENCIA_RAW_HEADERS.length).setValues(batch);
+      i = j;
+    }
+  }
+
+  // Batch all inserts in one append
+  if (inserts.length) {
+    const startRow = sheet.getLastRow() + 1;
+    sheet.getRange(startRow, 1, inserts.length, ASISTENCIA_RAW_HEADERS.length).setValues(inserts);
+  }
+
   SpreadsheetApp.flush();
-  return { ok: true, inserted: inserted, updated: updated, total: records.length };
+  return { ok: true, inserted: inserts.length, updated: updates.length, total: records.length };
 }
 
 
@@ -379,10 +396,9 @@ function recomputeSemanal(weekStart, weekEnd, sourceFile) {
     Logger.log('Permisos fetch failed (continuing without): ' + e.message);
   }
 
-  // Read RAW once for Saldo-based repose verification
-  const allRaw = sheetToObjects(ASISTENCIA_RAW_TAB, ASISTENCIA_RAW_HEADERS);
+  // Reuse rawRows already loaded above (don't re-read the entire sheet)
   const rawByNumero = {};
-  allRaw.forEach(r => {
+  rawRows.forEach(r => {
     const n = parseInt(r.NumeroColab);
     if (!n) return;
     if (!rawByNumero[n]) rawByNumero[n] = [];
@@ -413,6 +429,10 @@ function recomputeSemanal(weekStart, weekEnd, sourceFile) {
     });
     return result;
   };
+
+  // Batch all SEMANAL writes — collect first, flush at the end
+  const semInserts = [];               // 2D array, all appended together
+  const semUpdates = [];               // [{ rowNum, rowArr }] full-row replacements
 
   Object.keys(byEmpleado).forEach(numStr => {
     const emp = byEmpleado[numStr];
@@ -467,11 +487,8 @@ function recomputeSemanal(weekStart, weekEnd, sourceFile) {
     };
     const rowArr = ASISTENCIA_SEMANAL_HEADERS.map(h => rowDict[h] != null ? rowDict[h] : '');
 
-    if (existing._row) {
-      semanalSheet.getRange(existing._row, 1, 1, rowArr.length).setValues([rowArr]);
-    } else {
-      semanalSheet.appendRow(rowArr);
-    }
+    if (existing._row) semUpdates.push({ rowNum: existing._row, rowArr: rowArr });
+    else               semInserts.push(rowArr);
     computedCount++;
   });
 
@@ -532,9 +549,30 @@ function recomputeSemanal(weekStart, weekEnd, sourceFile) {
       'SourceFile': sourceFile || ''
     };
     const rowArr = ASISTENCIA_SEMANAL_HEADERS.map(h => rowDict[h] != null ? rowDict[h] : '');
-    semanalSheet.appendRow(rowArr);
+    semInserts.push(rowArr);
     computedCount++;
   });
+
+  // ── Flush batched writes (huge speedup vs per-row appendRow / setValues) ─
+  if (semUpdates.length) {
+    semUpdates.sort((a, b) => a.rowNum - b.rowNum);
+    let i = 0;
+    while (i < semUpdates.length) {
+      const start = semUpdates[i].rowNum;
+      const batch = [semUpdates[i].rowArr];
+      let j = i + 1;
+      while (j < semUpdates.length && semUpdates[j].rowNum === semUpdates[j-1].rowNum + 1) {
+        batch.push(semUpdates[j].rowArr);
+        j++;
+      }
+      semanalSheet.getRange(start, 1, batch.length, ASISTENCIA_SEMANAL_HEADERS.length).setValues(batch);
+      i = j;
+    }
+  }
+  if (semInserts.length) {
+    const startRow = semanalSheet.getLastRow() + 1;
+    semanalSheet.getRange(startRow, 1, semInserts.length, ASISTENCIA_SEMANAL_HEADERS.length).setValues(semInserts);
+  }
 
   SpreadsheetApp.flush();
   return { ok: true, computed: computedCount, weekStart: weekStart, weekEnd: weekEnd };
