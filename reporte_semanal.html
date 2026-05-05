@@ -84,7 +84,17 @@
     .sem-table input[type=text] { width: 100%; padding: 4px 6px;
                                    border: 1px solid #d4cabd; border-radius: 6px;
                                    font-size: 12px; font-family: inherit; }
+    .sem-table textarea { width: 100%; min-width: 220px; padding: 6px 8px;
+                           border: 1px solid #d4cabd; border-radius: 6px;
+                           font-size: 12px; font-family: inherit;
+                           resize: none; overflow: hidden; line-height: 1.4; }
     .sem-table input[type=checkbox] { width: 18px; height: 18px; cursor: pointer; }
+    .sem-table td.colaborador-cell { min-width: 220px; max-width: 280px; white-space: normal; }
+    .info-icon { display: inline-block; margin-left: 4px; padding: 1px 6px;
+                 border-radius: 999px; background: #fff3cd; color: #856404;
+                 font-size: 10px; cursor: help; user-select: none;
+                 border: 1px solid #ffe082; vertical-align: middle; }
+    .info-icon:hover { background: #ffe082; }
 
     .pill { display: inline-block; padding: 2px 8px; border-radius: 999px;
             font-size: 11px; font-weight: 600; }
@@ -366,6 +376,13 @@ function titleCase(s) {
   return String(s).toLowerCase().split(/\s+/).map(w => w ? w[0].toUpperCase() + w.slice(1) : w).join(' ').trim();
 }
 
+function escapeAttr(s) {
+  return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+}
+function escapeHtml(s) {
+  return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
 function renderSemTable(rows) {
   const tbody = document.getElementById('sem-tbody');
   tbody.innerHTML = '';
@@ -375,27 +392,39 @@ function renderSemTable(rows) {
     if ((parseInt(r.FaltasReal) || 0) > 0) tr.classList.add('has-falta');
     const punt = r.Puntualidad === true || r.Puntualidad === '__YES__';
     const asis = r.Asistencia === true || r.Asistencia === '__YES__';
-    const nombreTitleCase = titleCase(r.Nombre || '');
-    const primerosDosNombres = nombreTitleCase.split(' ').slice(0, 2).join(' ');
+    const nombreCompleto = titleCase(r.Nombre || '');
+    const detalle = r.RetardosDetalle || '';
+    const detalleClean = detalle.replace(/^Retardos\s*\(\d+\):\s*/i, '');  // strip "Retardos (N):" prefix for tooltip
+    const retardosCount = parseInt(r.Retardos) || 0;
+
     tr.innerHTML = `
       <td>${r.NumeroColab || ''}</td>
-      <td><strong>${primerosDosNombres}</strong>
-          <div style="font-size:10px; color:#7a6b5d; line-height:1.3;">${(r.RetardosDetalle || '')}</div></td>
+      <td class="colaborador-cell"><strong>${escapeHtml(nombreCompleto)}</strong></td>
       <td class="num">${r.DiasTrabajados || 0}</td>
       <td class="num"><span class="pill gray">${r.FaltasRaw || 0}</span></td>
       <td class="num"><input type="number" min="0" max="6" data-idx="${idx}" data-field="FaltasReal" value="${r.FaltasReal != null ? r.FaltasReal : (r.FaltasRaw || 0)}"></td>
       <td class="num"><input type="number" min="0" max="6" data-idx="${idx}" data-field="FaltasJustificadas" value="${r.FaltasJustificadas || 0}"></td>
-      <td class="num">${r.Retardos || 0}</td>
+      <td class="num">
+        <input type="number" min="0" data-idx="${idx}" data-field="Retardos" value="${retardosCount}">
+        ${detalleClean ? `<span class="info-icon" title="${escapeAttr(detalleClean)}">ⓘ</span>` : ''}
+      </td>
       <td class="num"><input type="number" min="0" step="0.5" data-idx="${idx}" data-field="HorasNoTrabajadas" value="${r.HorasNoTrabajadas || 0}"></td>
       <td>${punt ? '<span class="pill green">✓</span>' : '<span class="pill red">✗</span>'}</td>
       <td>${asis ? '<span class="pill green">✓</span>' : '<span class="pill red">✗</span>'}</td>
-      <td><input type="text" data-idx="${idx}" data-field="Ajustes" value="${(r.Ajustes || '').replace(/"/g, '&quot;')}"></td>
+      <td><textarea data-idx="${idx}" data-field="Ajustes" rows="1" oninput="autoGrowTextarea(this)">${escapeHtml(r.Ajustes || '')}</textarea></td>
       <td><button data-idx="${idx}" class="save-btn" style="font-size:11px; padding:6px 10px;">Guardar</button></td>
     `;
     tbody.appendChild(tr);
   });
 
+  // Auto-size textareas to content
+  tbody.querySelectorAll('textarea').forEach(t => autoGrowTextarea(t));
   tbody.querySelectorAll('.save-btn').forEach(b => b.addEventListener('click', e => saveSemRow(parseInt(e.target.dataset.idx))));
+}
+
+function autoGrowTextarea(el) {
+  el.style.height = 'auto';
+  el.style.height = Math.max(28, el.scrollHeight) + 'px';
 }
 
 async function saveSemRow(idx) {
@@ -408,7 +437,7 @@ async function saveSemRow(idx) {
     if (!f) return;
     if (el.type === 'number') updates[f] = parseFloat(el.value) || 0;
     else if (el.type === 'checkbox') updates[f] = el.checked;
-    else updates[f] = el.value;
+    else updates[f] = el.value;  // works for both input[type=text] and textarea
   });
   setStatus('loading', 'Guardando ' + (r.Nombre || '').split(' ')[0] + '...');
   try {
@@ -417,6 +446,8 @@ async function saveSemRow(idx) {
     if (!data.ok) throw new Error(data.error);
     setStatus('saved', '✅ Guardado ' + (r.Nombre || '').split(' ')[0]);
     Object.assign(currentRows[idx], updates);
+    // Refresh the row's badges (Punt/Asis are recomputed backend-side after edits)
+    await loadCurrentWeek();
   } catch (err) {
     setStatus('error', 'Error');
     alert('Error: ' + err.message);

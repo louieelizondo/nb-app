@@ -825,7 +825,10 @@ function resetSemanalEmpleadoTodas(numero) {
 }
 
 
-/** Update one SEMANAL row's manual fields (after parsing locks/classifications). */
+/** Update one SEMANAL row's manual fields (after parsing locks/classifications).
+ *  Recomputes Puntualidad / Asistencia / FaltasInjustificadas after the edit so
+ *  badges stay consistent with what's been saved.
+ */
 function updateSemanaRow(body) {
   const id = body.id;
   if (!id) throw new Error('ID requerido');
@@ -841,11 +844,29 @@ function updateSemanaRow(body) {
         const ci = headers.indexOf(k);
         if (ci >= 0) sheet.getRange(r + 1, ci + 1).setValue(body[k]);
       });
-      // Bump LastComputedAt
-      const lcIdx = headers.indexOf('LastComputedAt');
-      if (lcIdx >= 0) sheet.getRange(r + 1, lcIdx + 1).setValue(new Date().toISOString());
+
+      // Re-read the row and recompute derived fields
+      const rowData = sheet.getRange(r + 1, 1, 1, headers.length).getValues()[0];
+      const get = (name) => rowData[headers.indexOf(name)];
+      const retardos    = parseInt(get('Retardos'))           || 0;
+      const faltasReal  = parseInt(get('FaltasReal'))         || 0;
+      const faltasJust  = parseInt(get('FaltasJustificadas')) || 0;
+      const faltasInjust = Math.max(0, faltasReal - faltasJust);
+
+      const newPunt = retardos <= 1 && faltasReal === 0;
+      const newAsis = faltasReal === 0;
+
+      const setIf = (name, val) => {
+        const ci = headers.indexOf(name);
+        if (ci >= 0) sheet.getRange(r + 1, ci + 1).setValue(val);
+      };
+      setIf('FaltasInjustificadas', faltasInjust);
+      setIf('Puntualidad', newPunt);
+      setIf('Asistencia', newAsis);
+      setIf('LastComputedAt', new Date().toISOString());
+
       SpreadsheetApp.flush();
-      return { ok: true };
+      return { ok: true, puntualidad: newPunt, asistencia: newAsis, faltasInjustificadas: faltasInjust };
     }
   }
   throw new Error('Row no encontrada: ' + id);
