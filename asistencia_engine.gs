@@ -66,28 +66,16 @@ const ASISTENCIA_SEMANAL_HEADERS = [
 const NB_ENTRADA_RETARDO_MIN = 4;       // Entrada > 4 min late = retardo
 const NB_COMIDA_RETARDO_MIN = 3;        // Regreso comida > 3 min late = retardo
 
-// Per-employee rule overrides
-const EMPLEADO_RULES = {
-  // Louicarlo: 9am-5pm L-V con 30min comida adentro (7.5 hrs efectivos). No trabaja Sábado.
-  // Retardos perdonados (trusted, trabaja también desde casa).
-  48: {
-    skipEntradaRetardos: true,
-    skipComidaRetardos: true,
-    expectedDaysPerWeek: 5,
-    hoursPerDay: 7.5,
-    workDays: ['Lun','Mar','Mié','Jue','Vie']  // Sat/Sun = descanso, never falta
-  },
-  // Enrique González Pando — Granja. No usa checador. Inject default-perfect (6 días Mon-Sat).
-  // Louie override en UI si hay algo que reportar.
-  65: {
-    noChecador: true,
-    expectedDaysPerWeek: 6,
-    hoursPerDay: 7.5,         // 8-4 con 30min comida adentro
-    workDays: ['Lun','Mar','Mié','Jue','Vie','Sáb'],
-    nombre: 'Enrique González Pando'
-  }
-};
+// Employee schedule rules are now driven from Notion Colaboradores Activos.
+// Each colaborador has 4 properties that drive engine behavior:
+//   • Usa Checador        (checkbox) → false = inject default-perfect, no xlsx parsing
+//   • Días Trabaja        (multi-select Lun..Dom) → workDays + expectedDaysPerWeek
+//   • Horas/Día           (number) → hoursPerDay (used for HorasNoTrabajadas calc)
+//   • Retardos Perdonados (checkbox) → skip both entrada + comida retardo flags
+// See getEmpleadoRulesFromNotion_() below.
 const DEFAULT_HOURS_PER_DAY = 8;
+const EMPLEADO_RULES_CACHE_KEY = 'asistencia_empleado_rules_v1';
+const EMPLEADO_RULES_CACHE_TTL = 600;  // 10 minutes
 
 const DIAS_SP = { 0: 'Lun', 1: 'Mar', 2: 'Mié', 3: 'Jue', 4: 'Vie', 5: 'Sáb', 6: 'Dom' };
 
@@ -378,6 +366,9 @@ function recomputeSemanal(weekStart, weekEnd, sourceFile) {
   const now = new Date().toISOString();
   let computedCount = 0;
 
+  // Fetch employee rules from Notion once for the whole recompute (cached 10min)
+  const rulesMap = getEmpleadoRulesFromNotion_();
+
   Object.keys(byEmpleado).forEach(numStr => {
     const emp = byEmpleado[numStr];
     const id = emp.numero + '_' + weekStart;
@@ -386,7 +377,7 @@ function recomputeSemanal(weekStart, weekEnd, sourceFile) {
     // If row is locked, skip the recompute (preserve manual values)
     if (existing.Locked === true || existing.Locked === '__YES__') {
       // Still update DiasTrabajados (factual) if it changed
-      const aggLocked = aggregateEmpDays_(emp.days, emp.numero);
+      const aggLocked = aggregateEmpDays_(emp.days, emp.numero, rulesMap);
       if (existing.DiasTrabajados !== aggLocked.diasTrabajados) {
         const rowNum = existing._row;
         const colDT = semHeaders.indexOf('DiasTrabajados') + 1;
@@ -395,7 +386,7 @@ function recomputeSemanal(weekStart, weekEnd, sourceFile) {
       return;
     }
 
-    const agg = aggregateEmpDays_(emp.days, emp.numero);
+    const agg = aggregateEmpDays_(emp.days, emp.numero, rulesMap);
 
     // Build SEMANAL row
     const rowDict = {
@@ -440,8 +431,8 @@ function recomputeSemanal(weekStart, weekEnd, sourceFile) {
   // ── Inject noChecador employees (e.g. Enrique en Granja) ─────────────────
   // They never appear in the xlsx, so we add a default-perfect row and let
   // Louie override via Faltas Reales / Ajustes if something happened that week.
-  Object.keys(EMPLEADO_RULES).forEach(numStr => {
-    const rules = EMPLEADO_RULES[numStr];
+  Object.keys(rulesMap).forEach(numStr => {
+    const rules = rulesMap[numStr];
     if (!rules.noChecador) return;
     const numero = parseInt(numStr);
     const id = numero + '_' + weekStart;
@@ -466,7 +457,7 @@ function recomputeSemanal(weekStart, weekEnd, sourceFile) {
       'HorasNoTrabajadas': 0,
       'Puntualidad': true,
       'Asistencia': true,
-      'Ajustes': '(sin checador — Granja)',
+      'Ajustes': '(sin checador)',
       'Locked': false,
       'LastComputedAt': now,
       'SourceFile': sourceFile || ''
@@ -481,10 +472,71 @@ function recomputeSemanal(weekStart, weekEnd, sourceFile) {
 }
 
 /**
+ * Returns map { numero: { nombre, noChecador, workDays, expectedDaysPerWeek,
+ * hoursPerDay, skipEntradaRetardos, skipComidaRetardos } } built from Notion
+ * Colaboradores Activos. Cached for 10 minutes via CacheService.
+ *
+ * Properties read from Notion:
+ *   • "Usa Checador"        (checkbox)
+ *   • "Días Trabaja"        (multi-select)
+ *   • "Horas/Día"           (number)
+ *   • "Retardos Perdonados" (checkbox)
+ *   • "Nombre"              (title)
+ *   • "Número Colab."       (number)
+ *
+ * Requires bono_productividad.gs to be in the same Apps Script project (provides
+ * notionFetch_, notionQueryAll_, notionPropValue_, NOTION_DS_COLABORADORES_ACTIVOS).
+ */
+function getEmpleadoRulesFromNotion_() {
+  const cache = CacheService.getScriptCache();
+  const cached = cache.get(EMPLEADO_RULES_CACHE_KEY);
+  if (cached) {
+    try { return JSON.parse(cached); } catch (e) { /* fall through */ }
+  }
+
+  const filter = { property: 'Estado ', select: { equals: 'Activo' } };
+  const pages = notionQueryAll_(NOTION_DS_COLABORADORES_ACTIVOS, filter);
+
+  const byNumero = {};
+  pages.forEach(page => {
+    const numero = notionPropValue_(page, 'Número Colab.');
+    if (numero == null) return;
+
+    const nombre = notionPropValue_(page, 'Nombre') || '';
+    const usaChecador = notionPropValue_(page, 'Usa Checador');
+    const diasTrabaja = notionPropValue_(page, 'Días Trabaja') || [];
+    const hoursPerDay = notionPropValue_(page, 'Horas/Día');
+    const retardosPerdonados = notionPropValue_(page, 'Retardos Perdonados') === true;
+
+    byNumero[parseInt(numero)] = {
+      nombre: String(nombre).trim(),
+      noChecador: usaChecador === false,
+      workDays: Array.isArray(diasTrabaja) ? diasTrabaja : [],
+      expectedDaysPerWeek: Array.isArray(diasTrabaja) && diasTrabaja.length ? diasTrabaja.length : 6,
+      hoursPerDay: (typeof hoursPerDay === 'number' && hoursPerDay > 0) ? hoursPerDay : DEFAULT_HOURS_PER_DAY,
+      skipEntradaRetardos: retardosPerdonados,
+      skipComidaRetardos: retardosPerdonados
+    };
+  });
+
+  cache.put(EMPLEADO_RULES_CACHE_KEY, JSON.stringify(byNumero), EMPLEADO_RULES_CACHE_TTL);
+  return byNumero;
+}
+
+/** Force-refresh the empleado rules cache. Call this from the editor after changing Notion. */
+function refreshEmpleadoRules() {
+  CacheService.getScriptCache().remove(EMPLEADO_RULES_CACHE_KEY);
+  const rules = getEmpleadoRulesFromNotion_();
+  Logger.log('Refreshed ' + Object.keys(rules).length + ' empleado rules');
+  return rules;
+}
+
+
+/**
  * Aggregate one employee's days for a week. Applies NB rules + per-employee overrides.
  */
-function aggregateEmpDays_(days, numero) {
-  const rules = EMPLEADO_RULES[numero] || {};
+function aggregateEmpDays_(days, numero, rulesMap) {
+  const rules = (rulesMap && rulesMap[numero]) || {};
   const skipEntrada = rules.skipEntradaRetardos === true;
   const skipComida = rules.skipComidaRetardos === true;
   const workDays = Array.isArray(rules.workDays) ? rules.workDays : null;
