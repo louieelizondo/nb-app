@@ -381,6 +381,18 @@ function exportExcel() {
       alignment: { horizontal: 'center', vertical: 'center', wrapText: true },
       border: { top: BORDER_THIN, bottom: BORDER_THIN, left: BORDER_THIN, right: BORDER_THIN }
     },
+    bonoYes: {                                // bono qualifies → green ✓
+      font: { bold: true, sz: 13, name: 'Calibri', color: { rgb: '155724' } },
+      fill: { fgColor: { rgb: 'D4EDDA' } },
+      alignment: { horizontal: 'center', vertical: 'center' },
+      border: { top: BORDER_THIN, bottom: BORDER_THIN, left: BORDER_THIN, right: BORDER_THIN }
+    },
+    bonoNo: {                                 // bono fails → red ✗
+      font: { bold: true, sz: 13, name: 'Calibri', color: { rgb: '721C24' } },
+      fill: { fgColor: { rgb: 'F8D7DA' } },
+      alignment: { horizontal: 'center', vertical: 'center' },
+      border: { top: BORDER_THIN, bottom: BORDER_THIN, left: BORDER_THIN, right: BORDER_THIN }
+    },
     text: {
       font: { sz: 11, name: 'Calibri', color: { rgb: '2D2319' } },
       alignment: { vertical: 'center' },
@@ -438,9 +450,9 @@ function exportExcel() {
   aoa.push(['Nómina Semanal NB']);
   aoa.push(['Semana ' + weekLabel]);
   aoa.push([]);
-  aoa.push(['#', 'Colaborador', 'Días\nTrab.', 'Faltas\nReales', 'Justif.\n(Comp.)', 'Inj.', 'Retardos', 'Hrs\nDeducir', 'Notas / Ajustes']);
+  aoa.push(['#', 'Colaborador', 'Días\nTrab.', 'Faltas\nReales', 'Justif.\n(Comp.)', 'Inj.', 'Retardos', 'Hrs\nDeducir', 'Punt', 'Asis', 'Notas / Ajustes']);
 
-  const totals = { days: 0, real: 0, just: 0, inj: 0, ret: 0, hnt: 0 };
+  const totals = { days: 0, real: 0, just: 0, inj: 0, ret: 0, hnt: 0, punt: 0, asis: 0 };
 
   currentRows.forEach(r => {
     const days = parseInt(r.DiasTrabajados) || 0;
@@ -449,22 +461,29 @@ function exportExcel() {
     const inj  = Math.max(0, real - just);
     const ret  = parseInt(r.Retardos) || 0;
     const hnt  = parseFloat(r.HorasNoTrabajadas) || 0;
+    const punt = (r.Puntualidad === true || r.Puntualidad === '__YES__');
+    const asis = (r.Asistencia  === true || r.Asistencia  === '__YES__');
     const ajustes = r.Ajustes || '';
     const detalle = r.RetardosDetalle || '';
     const notas = [ajustes, detalle].filter(Boolean).join('\n');
 
     totals.days += days; totals.real += real; totals.just += just;
     totals.inj  += inj;  totals.ret  += ret;  totals.hnt  += hnt;
+    if (punt) totals.punt++;
+    if (asis) totals.asis++;
 
     aoa.push([
       r.NumeroColab || '',
       titleCase(r.Nombre || ''),
-      days, real, just, inj, ret, hnt, notas
+      days, real, just, inj, ret, hnt,
+      punt ? '✓' : '✗',
+      asis ? '✓' : '✗',
+      notas
     ]);
   });
 
   aoa.push([]);
-  aoa.push(['', 'TOTAL', totals.days, totals.real, totals.just, totals.inj, totals.ret, +totals.hnt.toFixed(2), '']);
+  aoa.push(['', 'TOTAL', totals.days, totals.real, totals.just, totals.inj, totals.ret, +totals.hnt.toFixed(2), totals.punt + '/' + currentRows.length, totals.asis + '/' + currentRows.length, '']);
 
   const ws = XLSX.utils.aoa_to_sheet(aoa);
 
@@ -478,6 +497,8 @@ function exportExcel() {
     { wch: 7 },   // Inj
     { wch: 10 },  // Retardos
     { wch: 11 },  // Hrs Deducir
+    { wch: 7 },   // Punt
+    { wch: 7 },   // Asis
     { wch: 75 }   // Notas
   ];
 
@@ -509,8 +530,8 @@ function exportExcel() {
   // Title + subtitle
   setStyle(0, 0, STYLE.title);
   setStyle(1, 0, STYLE.subtitle);
-  // Header row (col 0..8)
-  for (let c = 0; c <= 8; c++) setStyle(headerRowIdx, c, STYLE.header);
+  // Header row (col 0..10)
+  for (let c = 0; c <= 10; c++) setStyle(headerRowIdx, c, STYLE.header);
 
   // Data rows
   for (let i = 0; i < currentRows.length; i++) {
@@ -520,29 +541,33 @@ function exportExcel() {
     const inj  = row[5] || 0;
     const ret  = row[6] || 0;
     const hnt  = row[7] || 0;
+    const punt = row[8] === '✓';
+    const asis = row[9] === '✓';
     const hasFalta = real > 0;
 
-    setStyle(dataStart + i, 0, hasFalta ? STYLE.rowHasFalta : STYLE.num);     // #
+    setStyle(dataStart + i, 0, hasFalta ? STYLE.rowHasFalta : STYLE.num);      // #
     setStyle(dataStart + i, 1, hasFalta ? STYLE.rowHasFalta : STYLE.nameCell); // Nombre
-    setStyle(dataStart + i, 2, STYLE.num);                                     // Días
-    setStyle(dataStart + i, 3, real > 0 ? STYLE.numHighlight : STYLE.num);     // Faltas Reales
-    setStyle(dataStart + i, 4, just > 0 ? STYLE.numJust      : STYLE.num);     // Justif
-    setStyle(dataStart + i, 5, inj  > 0 ? STYLE.numHighlight : STYLE.num);     // Inj
-    setStyle(dataStart + i, 6, ret  > 0 ? STYLE.numHighlight : STYLE.num);     // Retardos
-    setStyle(dataStart + i, 7, hnt  > 0 ? STYLE.numHighlight : STYLE.num);     // Hrs Deducir
-    setStyle(dataStart + i, 8, STYLE.notas);                                   // Notas
+    setStyle(dataStart + i, 2, STYLE.num);                                      // Días
+    setStyle(dataStart + i, 3, real > 0 ? STYLE.numHighlight : STYLE.num);      // Faltas Reales
+    setStyle(dataStart + i, 4, just > 0 ? STYLE.numJust      : STYLE.num);      // Justif
+    setStyle(dataStart + i, 5, inj  > 0 ? STYLE.numHighlight : STYLE.num);      // Inj
+    setStyle(dataStart + i, 6, ret  > 0 ? STYLE.numHighlight : STYLE.num);      // Retardos
+    setStyle(dataStart + i, 7, hnt  > 0 ? STYLE.numHighlight : STYLE.num);      // Hrs Deducir
+    setStyle(dataStart + i, 8, punt ? STYLE.bonoYes : STYLE.bonoNo);            // Punt
+    setStyle(dataStart + i, 9, asis ? STYLE.bonoYes : STYLE.bonoNo);            // Asis
+    setStyle(dataStart + i, 10, STYLE.notas);                                   // Notas
   }
 
   // TOTAL row
   const totalRowIdx = dataStart + currentRows.length + 1;
   setStyle(totalRowIdx, 0, STYLE.totalLabel);
   setStyle(totalRowIdx, 1, STYLE.totalLabel);
-  for (let c = 2; c <= 8; c++) setStyle(totalRowIdx, c, STYLE.totalNum);
+  for (let c = 2; c <= 10; c++) setStyle(totalRowIdx, c, STYLE.totalNum);
 
-  // ── Title merges ──────────────────────────────────────────────────────
+  // ── Title merges (now spanning 11 columns) ────────────────────────────
   ws['!merges'] = [
-    { s: { r: 0, c: 0 }, e: { r: 0, c: 8 } },
-    { s: { r: 1, c: 0 }, e: { r: 1, c: 8 } }
+    { s: { r: 0, c: 0 }, e: { r: 0, c: 10 } },
+    { s: { r: 1, c: 0 }, e: { r: 1, c: 10 } }
   ];
 
   // ── Freeze headers ────────────────────────────────────────────────────
