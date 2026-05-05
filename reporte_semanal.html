@@ -93,6 +93,8 @@
     .sem-table .nombre-line { font-size: 13px; }
     .sem-table .apellido-line { font-size: 12px; color: #5a4f44; margin-top: 2px; }
     .sem-table td.retardos-cell { white-space: nowrap; }
+    .sem-table .retardos-wrap { display: inline-flex; align-items: center; gap: 4px; justify-content: flex-end; }
+    .sem-table .info-spacer { display: inline-block; width: 18px; height: 18px; flex-shrink: 0; }
     .sem-table td.ajustes-cell { min-width: 240px; }
     .sem-table .ajustes-row { display: flex; gap: 8px; align-items: flex-start; }
     .sem-table .ajustes-row textarea { flex: 1; min-width: 0; }
@@ -454,8 +456,12 @@ function renderSemTable(rows) {
       <td class="num"><input type="number" min="0" max="6" data-idx="${idx}" data-field="FaltasReal" value="${r.FaltasReal != null ? r.FaltasReal : (r.FaltasRaw || 0)}"></td>
       <td class="num"><input type="number" min="0" max="6" data-idx="${idx}" data-field="FaltasJustificadas" value="${r.FaltasJustificadas || 0}"></td>
       <td class="num retardos-cell">
-        <input type="number" min="0" data-idx="${idx}" data-field="Retardos" value="${retardosCount}">
-        ${detalleClean ? `<span class="info-icon" data-tooltip="${escapeAttr(detalleClean)}">i</span>` : ''}
+        <div class="retardos-wrap">
+          <input type="number" min="0" data-idx="${idx}" data-field="Retardos" value="${retardosCount}">
+          ${detalleClean
+            ? `<span class="info-icon" data-tooltip="${escapeAttr(detalleClean)}">i</span>`
+            : `<span class="info-spacer"></span>`}
+        </div>
       </td>
       <td class="num"><input type="number" min="0" step="0.5" data-idx="${idx}" data-field="HorasNoTrabajadas" value="${r.HorasNoTrabajadas || 0}"></td>
       <td>${punt ? '<span class="pill green">✓</span>' : '<span class="pill red">✗</span>'}</td>
