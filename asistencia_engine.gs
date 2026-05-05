@@ -436,7 +436,16 @@ function recomputeSemanal(weekStart, weekEnd, sourceFile) {
     if (!rules.noChecador) return;
     const numero = parseInt(numStr);
     const id = numero + '_' + weekStart;
-    if (existingSem[id]) return;  // already present (was injected on a prior run, manual edits live there)
+    if (existingSem[id]) {
+      // Row exists — keep manual edits, but update Nombre if Notion has a fresher version.
+      const existingNombre = String(existingSem[id].Nombre || '').trim();
+      const notionNombre = String(rules.nombre || '').trim();
+      if (notionNombre && notionNombre !== existingNombre) {
+        const colNombre = semHeaders.indexOf('Nombre') + 1;
+        semanalSheet.getRange(existingSem[id]._row, colNombre).setValue(notionNombre);
+      }
+      return;
+    }
 
     const expectedDays = rules.expectedDaysPerWeek || 6;
     const rowDict = {
