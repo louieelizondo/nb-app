@@ -84,12 +84,19 @@
     .sem-table input[type=text] { width: 100%; padding: 4px 6px;
                                    border: 1px solid #d4cabd; border-radius: 6px;
                                    font-size: 12px; font-family: inherit; }
-    .sem-table textarea { width: 100%; min-width: 220px; padding: 6px 8px;
+    .sem-table textarea { width: 100%; padding: 6px 8px;
                            border: 1px solid #d4cabd; border-radius: 6px;
                            font-size: 12px; font-family: inherit;
                            resize: none; overflow: hidden; line-height: 1.4; }
     .sem-table input[type=checkbox] { width: 18px; height: 18px; cursor: pointer; }
-    .sem-table td.colaborador-cell { min-width: 220px; max-width: 280px; white-space: normal; }
+    .sem-table td.colaborador-cell { min-width: 180px; max-width: 240px; white-space: normal; line-height: 1.3; }
+    .sem-table .nombre-line { font-size: 13px; }
+    .sem-table .apellido-line { font-size: 12px; color: #5a4f44; margin-top: 2px; }
+    .sem-table td.retardos-cell { white-space: nowrap; }
+    .sem-table td.ajustes-cell { min-width: 240px; }
+    .sem-table .ajustes-row { display: flex; gap: 8px; align-items: flex-start; }
+    .sem-table .ajustes-row textarea { flex: 1; min-width: 0; }
+    .sem-table .ajustes-row .save-btn { flex-shrink: 0; font-size: 11px; padding: 6px 10px; align-self: stretch; }
     .info-icon { display: inline-flex; align-items: center; justify-content: center;
                  width: 18px; height: 18px; margin-left: 6px; border-radius: 50%;
                  background: #fff3cd; color: #856404; font-size: 11px;
@@ -105,16 +112,16 @@
       transform: translateX(-50%);
       background: #2d2319;
       color: #f5f0eb;
-      padding: 8px 12px;
+      padding: 10px 14px;
       border-radius: 8px;
       font-size: 12px;
       font-style: normal;
       font-weight: 500;
-      white-space: normal;
+      white-space: pre-line;     /* respects \n in data-tooltip → one retardo per line */
       width: max-content;
       max-width: 280px;
       text-align: left;
-      line-height: 1.4;
+      line-height: 1.5;
       opacity: 0;
       pointer-events: none;
       transition: opacity 0.15s;
@@ -218,7 +225,6 @@
             <th>Punt</th>
             <th>Asis</th>
             <th>Notas / Ajustes</th>
-            <th></th>
           </tr>
         </thead>
         <tbody id="sem-tbody"></tbody>
@@ -410,6 +416,17 @@ function escapeHtml(s) {
   return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
+function splitNombre(fullName) {
+  const parts = titleCase(fullName).split(' ').filter(Boolean);
+  const n = parts.length;
+  // Convention: 4+ names = 2 nombres + (n-2) apellidos. 1-3 names = 1 nombre + rest.
+  const firstCount = n >= 4 ? 2 : 1;
+  return {
+    nombres:   parts.slice(0, firstCount).join(' '),
+    apellidos: parts.slice(firstCount).join(' ')
+  };
+}
+
 function renderSemTable(rows) {
   const tbody = document.getElementById('sem-tbody');
   tbody.innerHTML = '';
@@ -419,27 +436,36 @@ function renderSemTable(rows) {
     if ((parseInt(r.FaltasReal) || 0) > 0) tr.classList.add('has-falta');
     const punt = r.Puntualidad === true || r.Puntualidad === '__YES__';
     const asis = r.Asistencia === true || r.Asistencia === '__YES__';
-    const nombreCompleto = titleCase(r.Nombre || '');
+    const { nombres, apellidos } = splitNombre(r.Nombre || '');
     const detalle = r.RetardosDetalle || '';
-    const detalleClean = detalle.replace(/^Retardos\s*\(\d+\):\s*/i, '');  // strip "Retardos (N):" prefix for tooltip
+    const detalleClean = detalle
+      .replace(/^Retardos\s*\(\d+\):\s*/i, '')   // strip "Retardos (N):" prefix
+      .replace(/\s*·\s*/g, '\n');                 // each retardo on its own line
     const retardosCount = parseInt(r.Retardos) || 0;
 
     tr.innerHTML = `
       <td>${r.NumeroColab || ''}</td>
-      <td class="colaborador-cell"><strong>${escapeHtml(nombreCompleto)}</strong></td>
+      <td class="colaborador-cell">
+        <div class="nombre-line"><strong>${escapeHtml(nombres)}</strong></div>
+        ${apellidos ? `<div class="apellido-line">${escapeHtml(apellidos)}</div>` : ''}
+      </td>
       <td class="num">${r.DiasTrabajados || 0}</td>
       <td class="num"><span class="pill gray">${r.FaltasRaw || 0}</span></td>
       <td class="num"><input type="number" min="0" max="6" data-idx="${idx}" data-field="FaltasReal" value="${r.FaltasReal != null ? r.FaltasReal : (r.FaltasRaw || 0)}"></td>
       <td class="num"><input type="number" min="0" max="6" data-idx="${idx}" data-field="FaltasJustificadas" value="${r.FaltasJustificadas || 0}"></td>
-      <td class="num">
+      <td class="num retardos-cell">
         <input type="number" min="0" data-idx="${idx}" data-field="Retardos" value="${retardosCount}">
-        ${detalleClean ? `<span class="info-icon" data-tooltip="${escapeAttr(detalleClean)}" title="${escapeAttr(detalleClean)}">i</span>` : ''}
+        ${detalleClean ? `<span class="info-icon" data-tooltip="${escapeAttr(detalleClean)}">i</span>` : ''}
       </td>
       <td class="num"><input type="number" min="0" step="0.5" data-idx="${idx}" data-field="HorasNoTrabajadas" value="${r.HorasNoTrabajadas || 0}"></td>
       <td>${punt ? '<span class="pill green">✓</span>' : '<span class="pill red">✗</span>'}</td>
       <td>${asis ? '<span class="pill green">✓</span>' : '<span class="pill red">✗</span>'}</td>
-      <td><textarea data-idx="${idx}" data-field="Ajustes" rows="1" oninput="autoGrowTextarea(this)">${escapeHtml(r.Ajustes || '')}</textarea></td>
-      <td><button data-idx="${idx}" class="save-btn" style="font-size:11px; padding:6px 10px;">Guardar</button></td>
+      <td class="ajustes-cell">
+        <div class="ajustes-row">
+          <textarea data-idx="${idx}" data-field="Ajustes" rows="1" oninput="autoGrowTextarea(this)">${escapeHtml(r.Ajustes || '')}</textarea>
+          <button data-idx="${idx}" class="save-btn">Guardar</button>
+        </div>
+      </td>
     `;
     tbody.appendChild(tr);
   });
