@@ -398,11 +398,11 @@ function recomputeSemanal(weekStart, weekEnd, sourceFile) {
     const result = [];
     all.forEach(p => {
       const decorated = Object.assign({}, p);
+      decoratePermisoActuals_(decorated, colabRaw);  // sets effective ausente from checador, +overCapNoRepose
       decorated.reposeWindow = computeReposeWindow_(decorated, rules.workDays);
       decorated.reposeStatus = decorated.reposeWindow
         ? checkReposeStatus_(decorated, colabRaw, todayStr)
         : null;
-      // Include if: permiso date is in this week, OR repose window ends in this week and there's a shortfall
       const inWeek = decorated.fechaPermiso >= weekStart && decorated.fechaPermiso <= weekEnd;
       const reposeEndsThisWeek = decorated.reposeWindow
         && decorated.reposeWindow.endDate >= weekStart
@@ -666,15 +666,61 @@ function inferDailyReposeMin_(comoReponer) {
 }
 
 /**
- * Computes the repose window for a permiso.
- * Returns { startDate, endDate, daysNeeded, dailyMin, totalMin } or null if can't auto-compute.
+ * Returns the actual ausente time (in minutes) for a colaborador on a given date,
+ * based on checador data. The checador is the source of truth — the form's
+ * "Tiempo total ausente" is just an estimate.
  *
- * Repose starts the day after the permiso. Walks forward through workDays only.
+ * Logic:
+ *   • IsFalta=true → full day = ALaborar_min (or DEFAULT_HOURS_PER_DAY * 60)
+ *   • Saldo_min negative → abs(Saldo) is the deficit, that's the actual ausente
+ *   • Saldo >= 0 → no actual ausente (worked all expected hours)
+ */
+function getActualAusenteMin_(rawForColab, dateStr) {
+  for (let i = 0; i < (rawForColab || []).length; i++) {
+    const r = rawForColab[i];
+    if (formatDateStr(r.Fecha) !== dateStr) continue;
+    if (r.IsFalta === true || r.IsFalta === 'TRUE') {
+      return parseInt(r.ALaborar_min) || (DEFAULT_HOURS_PER_DAY * 60);
+    }
+    const saldo = parseInt(r.Saldo_min) || 0;
+    return saldo < 0 ? Math.abs(saldo) : 0;
+  }
+  return null;  // no record for that date — can't determine
+}
+
+const PERMISO_REPOSE_CAP_MIN = 240;  // > 4 hours = no repose option, direct HNT
+
+/**
+ * Decorates a permiso with checador-truth ausente time and routing decision.
+ * Adds: actualAusenteMin, effectiveAusenteMin, overCapNoRepose (boolean).
+ *
+ * Rules per NB policy:
+ *   • Use actual checador ausente time (form is just an estimate)
+ *   • If actual > 4h (240 min) → no repose option, deduct full time as HNT
+ *   • Otherwise → permiso governs, repose for actual time owed
+ */
+function decoratePermisoActuals_(permiso, rawForColab) {
+  const actualMin = getActualAusenteMin_(rawForColab, permiso.fechaPermiso);
+  const formMin = (parseFloat(permiso.horasAusente) || 0) * 60;
+  // If checador hasn't been uploaded yet for that date, fall back to form value
+  const effectiveMin = actualMin != null ? actualMin : formMin;
+  const overCap = effectiveMin > PERMISO_REPOSE_CAP_MIN;
+  permiso.actualAusenteMin = actualMin;
+  permiso.formAusenteMin = formMin;
+  permiso.effectiveAusenteMin = effectiveMin;
+  permiso.overCapNoRepose = overCap;
+  return permiso;
+}
+
+/**
+ * Computes the repose window for a permiso (using effectiveAusenteMin from checador).
+ * Returns { startDate, endDate, daysNeeded, dailyMin, totalMin } or null.
  */
 function computeReposeWindow_(permiso, workDays) {
+  if (permiso.overCapNoRepose) return null;  // > 4h: no repose, just deduct
   const dailyMin = inferDailyReposeMin_(permiso.comoReponer);
   if (!dailyMin || !permiso.fechaPermiso) return null;
-  const totalMin = (parseFloat(permiso.horasAusente) || 0) * 60;
+  const totalMin = permiso.effectiveAusenteMin || 0;
   if (totalMin <= 0) return null;
   const daysNeeded = Math.ceil(totalMin / dailyMin);
 
@@ -682,7 +728,7 @@ function computeReposeWindow_(permiso, workDays) {
   (Array.isArray(workDays) ? workDays : ['Lun','Mar','Mié','Jue','Vie','Sáb']).forEach(d => workDaysSet[d] = true);
 
   const start = new Date(permiso.fechaPermiso + 'T00:00:00');
-  start.setDate(start.getDate() + 1);  // skip the permiso day itself
+  start.setDate(start.getDate() + 1);
   const startStr = formatDateStr(start);
 
   let dayCount = 0;
@@ -701,27 +747,58 @@ function computeReposeWindow_(permiso, workDays) {
 }
 
 /**
- * Checks how much of a permiso has been reposed by analyzing Saldo in RAW.
- * Sums positive Saldo across the repose window (entered early or stayed late = reposing).
+ * Checks repose with strict per-day cap (NB policy: "mismo tiempo cada día",
+ * no carry-forward — preserves the lunch break / consistent pattern).
  *
- * Returns { reposedMin, expectedMin, shortfallMin, complete, windowOver }
- * windowOver = true if today >= reposeWindow.endDate (so any shortfall should be deducted now)
+ * For each work day in the window:
+ *   • Expected: dailyMin
+ *   • Reposed today = min(positive Saldo, dailyMin)  ← capped
+ *   • Shortage today = max(0, expected - reposed)
+ *
+ * Returns { reposedMin, expectedMin, shortfallMin, complete, windowOver,
+ *           daysReposed, daysShort, perDay (array) }
  */
 function checkReposeStatus_(permiso, rawForColab, todayStr) {
   if (!permiso.reposeWindow) return null;
-  const { startDate, endDate, totalMin } = permiso.reposeWindow;
-  let reposedMin = 0;
-  rawForColab.forEach(r => {
-    const fecha = formatDateStr(r.Fecha);
-    if (fecha >= startDate && fecha <= endDate) {
-      const saldo = parseInt(r.Saldo_min) || 0;
-      if (saldo > 0) reposedMin += saldo;
-    }
+  const { startDate, endDate, dailyMin, totalMin } = permiso.reposeWindow;
+  const dayMap = {};
+  (rawForColab || []).forEach(r => {
+    dayMap[formatDateStr(r.Fecha)] = r;
   });
+
+  let reposedMin = 0;
+  let daysReposed = 0;
+  const daysShort = [];
+  const perDay = [];
+
+  // Walk dates in the window
+  const cursor = new Date(startDate + 'T00:00:00');
+  const end = new Date(endDate + 'T00:00:00');
+  while (cursor <= end) {
+    const fecha = formatDateStr(cursor);
+    const r = dayMap[fecha];
+    if (r) {
+      const saldo = parseInt(r.Saldo_min) || 0;
+      const reposedToday = Math.max(0, Math.min(saldo, dailyMin));
+      reposedMin += reposedToday;
+      if (reposedToday >= dailyMin) daysReposed++;
+      else daysShort.push({ fecha: fecha, expected: dailyMin, reposed: reposedToday });
+      perDay.push({ fecha: fecha, expected: dailyMin, reposed: reposedToday });
+    }
+    cursor.setDate(cursor.getDate() + 1);
+  }
+
   const shortfallMin = Math.max(0, totalMin - reposedMin);
-  const complete = reposedMin >= totalMin;
-  const windowOver = todayStr >= endDate;
-  return { reposedMin, expectedMin: totalMin, shortfallMin, complete, windowOver };
+  return {
+    reposedMin: reposedMin,
+    expectedMin: totalMin,
+    shortfallMin: shortfallMin,
+    complete: reposedMin >= totalMin,
+    windowOver: todayStr >= endDate,
+    daysReposed: daysReposed,
+    daysShort: daysShort,
+    perDay: perDay
+  };
 }
 
 /**
@@ -883,47 +960,72 @@ function aggregateEmpDays_(days, numero, rulesMap, permisos) {
   });
 
   // ── Compute HNT contributions from permisos and build display lines ─────
-  let hntFromPermisos = 0;          // Reponer=No or pure deduction
-  let hntFromShortfall = 0;          // Reponer=Sí but window ended without full repose
+  let hntFromPermisos = 0;
+  let hntFromShortfall = 0;
   const permisoLines = [];
 
+  const fmtHrs = (mins) => +(mins / 60).toFixed(2);
   (permisos || []).sort((a, b) => String(a.fechaPermiso).localeCompare(String(b.fechaPermiso)));
   (permisos || []).forEach(p => {
     if (!p.fechaPermiso) return;
-    const dateShort = p.fechaPermiso.slice(5).replace('-', '/');  // MM/DD
+    const dateShort = p.fechaPermiso.slice(5).replace('-', '/');
     const asunto = (p.asunto || []).join('/') || 'Permiso';
-    const hrs = parseFloat(p.horasAusente) || 0;
+    const formHrs = parseFloat(p.horasAusente) || 0;
+    const actualHrs = p.actualAusenteMin != null ? fmtHrs(p.actualAusenteMin) : null;
+    const effectiveHrs = fmtHrs(p.effectiveAusenteMin || 0);
     const reponer = p.reponer === 'Si';
 
+    // Header: "🗓 04/27 Legal · form 2.5h, real 2.55h"
+    let hdr = '🗓 ' + dateShort + ' ' + asunto + ' ' + formHrs + 'h';
+    if (actualHrs != null && Math.abs(actualHrs - formHrs) >= 0.05) {
+      hdr += ' (real ' + actualHrs + 'h)';
+    }
+
+    // Case 1: > 4h actual → no repose, full HNT
+    if (p.overCapNoRepose) {
+      hntFromPermisos += effectiveHrs;
+      permisoLines.push(hdr + ' · ❌ excede 4h, descontar ' + effectiveHrs + 'h completo');
+      return;
+    }
+
+    // Case 2: Reponer=No → direct deduction
     if (!reponer) {
-      hntFromPermisos += hrs;
-      permisoLines.push('🗓 ' + dateShort + ' ' + asunto + ' ' + hrs + 'h · descontar ' + hrs + 'h');
+      hntFromPermisos += effectiveHrs;
+      permisoLines.push(hdr + ' · descontar ' + effectiveHrs + 'h');
       return;
     }
 
-    // Reponer=Sí: needs auto-verification via Saldo (or fallback for noChecador employees)
+    // Case 3: noChecador employee (no auto-verify)
     if (rules.noChecador) {
-      permisoLines.push('🗓 ' + dateShort + ' ' + asunto + ' ' + hrs + 'h · reponiendo (sin checador)');
+      permisoLines.push(hdr + ' · reponiendo (sin checador)');
       return;
     }
 
+    // Case 4: Reponer=Sí, no método chosen
     if (!p.reposeWindow || !p.reposeStatus) {
-      // Couldn't compute (no método de reponer specified) → treat as not reposed
-      hntFromPermisos += hrs;
-      permisoLines.push('🗓 ' + dateShort + ' ' + asunto + ' ' + hrs + 'h · ⚠️ sin método de reponer · descontar ' + hrs + 'h');
+      hntFromPermisos += effectiveHrs;
+      permisoLines.push(hdr + ' · ⚠️ sin método de reponer · descontar ' + effectiveHrs + 'h');
       return;
     }
 
     const st = p.reposeStatus;
-    const reposedHrs = (st.reposedMin / 60).toFixed(1);
+    const reposedHrs = fmtHrs(st.reposedMin);
+    const expectedHrs = fmtHrs(st.expectedMin);
+
     if (st.complete) {
-      permisoLines.push('🗓 ' + dateShort + ' ' + asunto + ' ' + hrs + 'h · ✅ reposeado ' + reposedHrs + 'h');
+      permisoLines.push(hdr + ' · ✅ reposeado ' + reposedHrs + 'h');
     } else if (st.windowOver) {
-      const shortHrs = +(st.shortfallMin / 60).toFixed(2);
+      // Window ended with shortfall — alert + deduct on this nómina
+      const shortHrs = fmtHrs(st.shortfallMin);
       hntFromShortfall += shortHrs;
-      permisoLines.push('🗓 ' + dateShort + ' ' + asunto + ' ' + hrs + 'h · ⚠️ falta reponer ' + shortHrs + 'h · descontar ' + shortHrs + 'h');
+      const shortDays = (st.daysShort || []).map(d => d.fecha.slice(5)).join(', ');
+      permisoLines.push(hdr + ' · ⚠️ falta reponer ' + shortHrs + 'h · descontar ' + shortHrs + 'h');
+      if (shortDays) permisoLines.push('   no pagó: ' + shortDays);
     } else {
-      permisoLines.push('🗓 ' + dateShort + ' ' + asunto + ' ' + hrs + 'h · reponiendo (' + reposedHrs + '/' + hrs + 'h, hasta ' + p.reposeWindow.endDate.slice(5) + ')');
+      // In progress
+      const sd = (st.daysShort || []).map(d => d.fecha.slice(5));
+      permisoLines.push(hdr + ' · reponiendo ' + reposedHrs + '/' + expectedHrs + 'h, hasta ' + p.reposeWindow.endDate.slice(5));
+      if (sd.length) permisoLines.push('   ⚠️ falta pagó: ' + sd.join(', '));
     }
   });
 
