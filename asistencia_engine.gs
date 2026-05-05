@@ -750,9 +750,30 @@ function decoratePermisoActuals_(permiso, rawForColab) {
   return permiso;
 }
 
+/** Returns 'YYYY-MM-DD' shifted by N days, using UTC math (no timezone surprises). */
+function addDaysStr_(yyyymmdd, n) {
+  const parts = String(yyyymmdd).split('-');
+  const y = parseInt(parts[0]), m = parseInt(parts[1]), d = parseInt(parts[2]);
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  dt.setUTCDate(dt.getUTCDate() + n);
+  return dt.getUTCFullYear() + '-' +
+    String(dt.getUTCMonth() + 1).padStart(2, '0') + '-' +
+    String(dt.getUTCDate()).padStart(2, '0');
+}
+
+/** Day-of-week (0=Mon..6=Sun) for a 'YYYY-MM-DD' string, using UTC. */
+function dayOfWeekStr_(yyyymmdd) {
+  const parts = String(yyyymmdd).split('-');
+  const y = parseInt(parts[0]), m = parseInt(parts[1]), d = parseInt(parts[2]);
+  const js = new Date(Date.UTC(y, m - 1, d)).getUTCDay();
+  return js === 0 ? 6 : js - 1;
+}
+
 /**
  * Computes the repose window for a permiso (using effectiveAusenteMin from checador).
  * Returns { startDate, endDate, daysNeeded, dailyMin, totalMin } or null.
+ *
+ * Walks dates as YYYY-MM-DD strings (no Date object timezone shifting).
  */
 function computeReposeWindow_(permiso, workDays) {
   if (permiso.overCapNoRepose) return null;  // > 4h: no repose, just deduct
@@ -765,21 +786,19 @@ function computeReposeWindow_(permiso, workDays) {
   const workDaysSet = {};
   (Array.isArray(workDays) ? workDays : ['Lun','Mar','Mié','Jue','Vie','Sáb']).forEach(d => workDaysSet[d] = true);
 
-  const start = new Date(permiso.fechaPermiso + 'T00:00:00');
-  start.setDate(start.getDate() + 1);
-  const startStr = formatDateStr(start);
+  const startStr = addDaysStr_(permiso.fechaPermiso, 1);  // day after permiso
 
   let dayCount = 0;
   let endStr = startStr;
-  const cursor = new Date(start);
+  let currentStr = startStr;
   for (let safety = 0; safety < 90; safety++) {
-    const dia = DIAS_SP[dayOfWeek_(formatDateStr(cursor))];
+    const dia = DIAS_SP[dayOfWeekStr_(currentStr)];
     if (workDaysSet[dia]) {
       dayCount++;
-      endStr = formatDateStr(cursor);
+      endStr = currentStr;
       if (dayCount >= daysNeeded) break;
     }
-    cursor.setDate(cursor.getDate() + 1);
+    currentStr = addDaysStr_(currentStr, 1);
   }
   return { startDate: startStr, endDate: endStr, daysNeeded: daysNeeded, dailyMin: dailyMin, totalMin: totalMin };
 }
@@ -809,21 +828,19 @@ function checkReposeStatus_(permiso, rawForColab, todayStr) {
   const daysShort = [];
   const perDay = [];
 
-  // Walk dates in the window
-  const cursor = new Date(startDate + 'T00:00:00');
-  const end = new Date(endDate + 'T00:00:00');
-  while (cursor <= end) {
-    const fecha = formatDateStr(cursor);
-    const r = dayMap[fecha];
+  // Walk dates as strings (avoid Date object timezone surprises)
+  let currentStr = startDate;
+  while (currentStr <= endDate) {
+    const r = dayMap[currentStr];
     if (r) {
       const saldo = parseInt(r.Saldo_min) || 0;
       const reposedToday = Math.max(0, Math.min(saldo, dailyMin));
       reposedMin += reposedToday;
       if (reposedToday >= dailyMin) daysReposed++;
-      else daysShort.push({ fecha: fecha, expected: dailyMin, reposed: reposedToday });
-      perDay.push({ fecha: fecha, expected: dailyMin, reposed: reposedToday });
+      else daysShort.push({ fecha: currentStr, expected: dailyMin, reposed: reposedToday });
+      perDay.push({ fecha: currentStr, expected: dailyMin, reposed: reposedToday });
     }
-    cursor.setDate(cursor.getDate() + 1);
+    currentStr = addDaysStr_(currentStr, 1);
   }
 
   const shortfallMin = Math.max(0, totalMin - reposedMin);
