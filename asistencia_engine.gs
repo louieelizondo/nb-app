@@ -443,19 +443,21 @@ function recomputeSemanal(weekStart, weekEnd, sourceFile) {
       'DiasTrabajados': agg.diasTrabajados,
       'DiasDescanso': agg.diasDescanso,
       'FaltasRaw': agg.faltasRaw,
+      // FaltasReal + FaltasJustificadas are user-input (preserved across recomputes).
+      // FaltasInjustificadas + HorasNoTrabajadas are derived (always recomputed) so
+      // permiso shortfalls and Real-Just deltas always reflect current state.
       'FaltasReal': existing.FaltasReal != null && existing.FaltasReal !== ''
         ? existing.FaltasReal
         : agg.faltasRaw,
       'FaltasJustificadas': existing.FaltasJustificadas || 0,
-      'FaltasInjustificadas': existing.FaltasInjustificadas != null && existing.FaltasInjustificadas !== ''
-        ? existing.FaltasInjustificadas
-        : agg.faltasRaw,
-      'FaltasPermisoCubierto': agg.faltasPermisoCubierto != null ? agg.faltasPermisoCubierto : (existing.FaltasPermisoCubierto || 0),
+      'FaltasInjustificadas': Math.max(0,
+        (parseInt(existing.FaltasReal != null && existing.FaltasReal !== '' ? existing.FaltasReal : agg.faltasRaw) || 0) -
+        (parseInt(existing.FaltasJustificadas || 0) || 0)
+      ),
+      'FaltasPermisoCubierto': agg.faltasPermisoCubierto || 0,
       'Retardos': agg.retardos,
       'RetardosDetalle': agg.retardosDetalle,
-      'HorasNoTrabajadas': existing.HorasNoTrabajadas != null && existing.HorasNoTrabajadas !== ''
-        ? existing.HorasNoTrabajadas
-        : agg.horasNoTrabajadas,
+      'HorasNoTrabajadas': agg.horasNoTrabajadas,
       'Puntualidad': agg.retardos <= 1 && agg.faltasRaw === 0,
       'Asistencia': agg.faltasRaw === 0,
       'Ajustes': existing.Ajustes || '',  // libre — manual notes only, no auto-fill
