@@ -243,7 +243,7 @@
   <div class="card" id="results-card" style="display:none">
     <h2 class="results-header">
       <span>3. Resultados de la semana</span>
-      <button id="btn-share" class="secondary share-btn">📤 Compartir resumen</button>
+      <button id="btn-share" class="secondary share-btn">📥 Descargar Excel</button>
     </h2>
     <div class="alert info">
       <strong>Cómo clasificar una falta:</strong> deja <em>Faltas Reales</em> (todas cuentan, incluso permisos),
@@ -355,67 +355,84 @@ function setStatusWeek(start, end, empCount) {
   empEl.textContent = empCount != null ? '· ' + empCount + ' colaboradores' : '';
 }
 
-// ─── Compartir resumen ─────────────────────────────────────────────────────
-function buildSummaryText() {
-  if (!currentWeek || !currentRows.length) return '';
+// ─── Exportar a Excel para contador ────────────────────────────────────────
+function exportExcel() {
+  if (!currentWeek || !currentRows.length) return;
   const months = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
   const fmtSp = (s) => { const [y,m,d] = s.split('-').map(Number); return d + ' ' + months[m-1]; };
-  const lines = [];
-  lines.push('*Nómina Semanal NB*');
-  lines.push(fmtSp(currentWeek.start) + ' → ' + fmtSp(currentWeek.end) + ' ' + currentWeek.start.slice(0,4));
-  lines.push('━━━━━━━━━━━━━━━━━');
-  lines.push('');
+  const weekLabel = fmtSp(currentWeek.start) + ' → ' + fmtSp(currentWeek.end) + ' ' + currentWeek.start.slice(0,4);
 
-  let totalHnt = 0;
-  let totalFaltas = 0;
-  let totalRetardos = 0;
+  // Build the worksheet (array of arrays)
+  const aoa = [];
+  aoa.push(['Nómina Semanal NB']);
+  aoa.push(['Semana: ' + weekLabel]);
+  aoa.push([]);
+  aoa.push(['#', 'Colaborador', 'Días Trab.', 'Faltas Reales', 'Justificadas', 'Injustificadas', 'Retardos', 'Hrs Deducir', 'Notas / Ajustes']);
+
+  const totals = { days: 0, real: 0, just: 0, inj: 0, ret: 0, hnt: 0 };
+
   currentRows.forEach(r => {
-    const days = r.DiasTrabajados || 0;
+    const days = parseInt(r.DiasTrabajados) || 0;
     const real = parseInt(r.FaltasReal) || 0;
     const just = parseInt(r.FaltasJustificadas) || 0;
-    const inj = Math.max(0, real - just);
-    const ret = parseInt(r.Retardos) || 0;
-    const hnt = parseFloat(r.HorasNoTrabajadas) || 0;
-    totalHnt += hnt;
-    totalFaltas += real;
-    totalRetardos += ret;
+    const inj  = Math.max(0, real - just);
+    const ret  = parseInt(r.Retardos) || 0;
+    const hnt  = parseFloat(r.HorasNoTrabajadas) || 0;
+    const ajustes = r.Ajustes || '';
+    const detalle = r.RetardosDetalle || '';
+    const notas = [ajustes, detalle].filter(Boolean).join('\n');
 
-    let faltaStr;
-    if (real === 0) faltaStr = '0 faltas';
-    else if (inj === 0) faltaStr = real + ' falta' + (real > 1 ? 's' : '') + ' just.';
-    else if (just === 0) faltaStr = real + ' falta' + (real > 1 ? 's' : '') + ' inj.';
-    else faltaStr = real + ' falt. (' + just + 'j/' + inj + 'i)';
+    totals.days += days;
+    totals.real += real;
+    totals.just += just;
+    totals.inj  += inj;
+    totals.ret  += ret;
+    totals.hnt  += hnt;
 
-    const nombre = titleCase(r.Nombre || '');
-    lines.push('*#' + (r.NumeroColab || '') + ' ' + nombre + '*');
-    lines.push(days + 'd · ' + faltaStr + ' · ' + ret + ' retardo' + (ret !== 1 ? 's' : '') + ' · HNT: ' + hnt + 'h');
-    lines.push('');
+    aoa.push([
+      r.NumeroColab || '',
+      titleCase(r.Nombre || ''),
+      days, real, just, inj, ret, hnt, notas
+    ]);
   });
 
-  lines.push('━━━━━━━━━━━━━━━━━');
-  lines.push('Empleados: ' + currentRows.length);
-  lines.push('Total faltas: ' + totalFaltas);
-  lines.push('Total retardos: ' + totalRetardos);
-  lines.push('*Total HNT a deducir: ' + totalHnt.toFixed(2) + 'h*');
-  return lines.join('\n');
-}
+  aoa.push([]);
+  aoa.push(['', 'TOTAL', totals.days, totals.real, totals.just, totals.inj, totals.ret, totals.hnt, '']);
 
-async function shareSummary() {
-  const text = buildSummaryText();
-  if (!text) return;
-  // Native share on mobile (WhatsApp shows up); clipboard fallback otherwise
-  if (navigator.share) {
-    try { await navigator.share({ title: 'Nómina Semanal NB', text: text }); }
-    catch (e) { /* user cancelled — no-op */ }
-    return;
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+
+  // Column widths (chars)
+  ws['!cols'] = [
+    { wch: 5 },   // #
+    { wch: 32 },  // Colaborador
+    { wch: 11 },  // Días Trab
+    { wch: 14 },  // Faltas Reales
+    { wch: 13 },  // Justificadas
+    { wch: 14 },  // Injustificadas
+    { wch: 10 },  // Retardos
+    { wch: 12 },  // Hrs Deducir
+    { wch: 70 }   // Notas
+  ];
+
+  // Make notes column wrap text
+  const range = XLSX.utils.decode_range(ws['!ref']);
+  for (let R = range.s.r; R <= range.e.r; ++R) {
+    const cell = ws[XLSX.utils.encode_cell({ r: R, c: 8 })];
+    if (cell) cell.s = { alignment: { wrapText: true, vertical: 'top' } };
   }
-  try {
-    await navigator.clipboard.writeText(text);
-    setStatus('saved', 'Resumen copiado al portapapeles');
-  } catch (e) {
-    // Last-resort fallback: dump in an alert
-    alert('Copia este resumen:\n\n' + text);
-  }
+
+  // Merge title rows across columns
+  ws['!merges'] = [
+    { s: { r: 0, c: 0 }, e: { r: 0, c: 8 } },
+    { s: { r: 1, c: 0 }, e: { r: 1, c: 8 } }
+  ];
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Nómina');
+
+  const filename = 'nomina_' + currentWeek.start + '_a_' + currentWeek.end + '.xlsx';
+  XLSX.writeFile(wb, filename);
+  setStatus('saved', '📥 Excel descargado');
 }
 
 // ─── File upload ───────────────────────────────────────────────────────────
@@ -638,7 +655,7 @@ document.addEventListener('DOMContentLoaded', () => {
   populateWeekSelect();
   document.getElementById('btn-load').addEventListener('click', loadCurrentWeek);
   document.getElementById('btn-upload').addEventListener('click', uploadXlsx);
-  document.getElementById('btn-share').addEventListener('click', shareSummary);
+  document.getElementById('btn-share').addEventListener('click', exportExcel);
   document.getElementById('week-select').addEventListener('change', loadCurrentWeek);
   document.getElementById('btn-prev').addEventListener('click', () => {
     const sel = document.getElementById('week-select');
