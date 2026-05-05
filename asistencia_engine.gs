@@ -540,6 +540,42 @@ function refreshEmpleadoRules() {
   return rules;
 }
 
+/**
+ * One-shot helper: walk every SEMANAL row and overwrite Nombre from Notion
+ * for any employee where it differs. Useful after changing a name in
+ * Colaboradores Activos (e.g. completing "Enrique" → "Enrique González Pando").
+ *
+ * Run from the editor: select syncNombresFromNotion → Ejecutar.
+ * Logs how many rows it updated.
+ */
+function syncNombresFromNotion() {
+  refreshEmpleadoRules();  // ensure cache is fresh
+  const rules = getEmpleadoRulesFromNotion_();
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(ASISTENCIA_SEMANAL_TAB);
+  if (!sheet) return { ok: false, error: 'SEMANAL sheet not found' };
+  const data = sheet.getDataRange().getValues();
+  const headers = data[0];
+  const numIdx = headers.indexOf('NumeroColab');
+  const nomIdx = headers.indexOf('Nombre');
+  if (numIdx < 0 || nomIdx < 0) return { ok: false, error: 'Headers not found' };
+
+  let updated = 0;
+  for (let r = 1; r < data.length; r++) {
+    const numero = parseInt(data[r][numIdx]);
+    const rule = rules[numero];
+    if (!rule || !rule.nombre) continue;
+    const current = String(data[r][nomIdx] || '').trim();
+    const target  = String(rule.nombre).trim();
+    if (current !== target) {
+      sheet.getRange(r + 1, nomIdx + 1).setValue(target);
+      updated++;
+    }
+  }
+  SpreadsheetApp.flush();
+  Logger.log('Sync nombres: updated ' + updated + ' rows');
+  return { ok: true, updated: updated };
+}
+
 
 /**
  * Aggregate one employee's days for a week. Applies NB rules + per-employee overrides.
