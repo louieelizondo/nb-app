@@ -6,7 +6,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="stylesheet" href="nb-brand.css">
   <title>NB · Reporte Semanal de Asistencia</title>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -355,19 +355,90 @@ function setStatusWeek(start, end, empCount) {
   empEl.textContent = empCount != null ? '· ' + empCount + ' colaboradores' : '';
 }
 
-// ─── Exportar a Excel para contador ────────────────────────────────────────
+// ─── Exportar a Excel para contador (con estilos) ──────────────────────────
 function exportExcel() {
   if (!currentWeek || !currentRows.length) return;
   const months = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
   const fmtSp = (s) => { const [y,m,d] = s.split('-').map(Number); return d + ' ' + months[m-1]; };
   const weekLabel = fmtSp(currentWeek.start) + ' → ' + fmtSp(currentWeek.end) + ' ' + currentWeek.start.slice(0,4);
 
-  // Build the worksheet (array of arrays)
+  // ── Style presets (mirror the web UI palette) ─────────────────────────
+  const BORDER_THIN = { style: 'thin', color: { rgb: 'D4CABD' } };
+  const STYLE = {
+    title: {
+      font: { bold: true, sz: 18, color: { rgb: 'FFFFFF' }, name: 'Calibri' },
+      fill: { fgColor: { rgb: '2E7D32' } },
+      alignment: { horizontal: 'center', vertical: 'center' }
+    },
+    subtitle: {
+      font: { bold: true, sz: 13, color: { rgb: '2D2319' }, name: 'Calibri' },
+      fill: { fgColor: { rgb: 'F0EBE4' } },
+      alignment: { horizontal: 'center', vertical: 'center' }
+    },
+    header: {
+      font: { bold: true, sz: 11, color: { rgb: 'FFFFFF' }, name: 'Calibri' },
+      fill: { fgColor: { rgb: '388E3C' } },
+      alignment: { horizontal: 'center', vertical: 'center', wrapText: true },
+      border: { top: BORDER_THIN, bottom: BORDER_THIN, left: BORDER_THIN, right: BORDER_THIN }
+    },
+    text: {
+      font: { sz: 11, name: 'Calibri', color: { rgb: '2D2319' } },
+      alignment: { vertical: 'center' },
+      border: { top: BORDER_THIN, bottom: BORDER_THIN, left: BORDER_THIN, right: BORDER_THIN }
+    },
+    nameCell: {
+      font: { bold: true, sz: 11, name: 'Calibri', color: { rgb: '2D2319' } },
+      alignment: { vertical: 'center' },
+      border: { top: BORDER_THIN, bottom: BORDER_THIN, left: BORDER_THIN, right: BORDER_THIN }
+    },
+    num: {
+      font: { sz: 11, name: 'Calibri', color: { rgb: '2D2319' } },
+      alignment: { horizontal: 'center', vertical: 'center' },
+      border: { top: BORDER_THIN, bottom: BORDER_THIN, left: BORDER_THIN, right: BORDER_THIN }
+    },
+    numHighlight: {                           // any falta/retardo/HNT > 0 → red tint
+      font: { bold: true, sz: 11, name: 'Calibri', color: { rgb: '721C24' } },
+      fill: { fgColor: { rgb: 'F8D7DA' } },
+      alignment: { horizontal: 'center', vertical: 'center' },
+      border: { top: BORDER_THIN, bottom: BORDER_THIN, left: BORDER_THIN, right: BORDER_THIN }
+    },
+    numJust: {                                // justificadas → yellow tint
+      font: { bold: true, sz: 11, name: 'Calibri', color: { rgb: '856404' } },
+      fill: { fgColor: { rgb: 'FFF3CD' } },
+      alignment: { horizontal: 'center', vertical: 'center' },
+      border: { top: BORDER_THIN, bottom: BORDER_THIN, left: BORDER_THIN, right: BORDER_THIN }
+    },
+    notas: {
+      font: { sz: 9, name: 'Calibri', color: { rgb: '5A4F44' } },
+      alignment: { wrapText: true, vertical: 'top', horizontal: 'left' },
+      border: { top: BORDER_THIN, bottom: BORDER_THIN, left: BORDER_THIN, right: BORDER_THIN }
+    },
+    rowHasFalta: {                            // tint name/days when row has a real falta
+      font: { bold: true, sz: 11, name: 'Calibri', color: { rgb: '721C24' } },
+      fill: { fgColor: { rgb: 'FEF5F5' } },
+      alignment: { vertical: 'center' },
+      border: { top: BORDER_THIN, bottom: BORDER_THIN, left: BORDER_THIN, right: BORDER_THIN }
+    },
+    totalLabel: {
+      font: { bold: true, sz: 12, color: { rgb: '2D2319' }, name: 'Calibri' },
+      fill: { fgColor: { rgb: 'E0D8CF' } },
+      alignment: { horizontal: 'right', vertical: 'center' },
+      border: { top: { style: 'medium', color: { rgb: '2D2319' } }, bottom: BORDER_THIN, left: BORDER_THIN, right: BORDER_THIN }
+    },
+    totalNum: {
+      font: { bold: true, sz: 12, color: { rgb: '2D2319' }, name: 'Calibri' },
+      fill: { fgColor: { rgb: 'E0D8CF' } },
+      alignment: { horizontal: 'center', vertical: 'center' },
+      border: { top: { style: 'medium', color: { rgb: '2D2319' } }, bottom: BORDER_THIN, left: BORDER_THIN, right: BORDER_THIN }
+    }
+  };
+
+  // ── Build data ────────────────────────────────────────────────────────
   const aoa = [];
   aoa.push(['Nómina Semanal NB']);
-  aoa.push(['Semana: ' + weekLabel]);
+  aoa.push(['Semana ' + weekLabel]);
   aoa.push([]);
-  aoa.push(['#', 'Colaborador', 'Días Trab.', 'Faltas Reales', 'Justificadas', 'Injustificadas', 'Retardos', 'Hrs Deducir', 'Notas / Ajustes']);
+  aoa.push(['#', 'Colaborador', 'Días\nTrab.', 'Faltas\nReales', 'Justif.\n(Comp.)', 'Inj.', 'Retardos', 'Hrs\nDeducir', 'Notas / Ajustes']);
 
   const totals = { days: 0, real: 0, just: 0, inj: 0, ret: 0, hnt: 0 };
 
@@ -382,12 +453,8 @@ function exportExcel() {
     const detalle = r.RetardosDetalle || '';
     const notas = [ajustes, detalle].filter(Boolean).join('\n');
 
-    totals.days += days;
-    totals.real += real;
-    totals.just += just;
-    totals.inj  += inj;
-    totals.ret  += ret;
-    totals.hnt  += hnt;
+    totals.days += days; totals.real += real; totals.just += just;
+    totals.inj  += inj;  totals.ret  += ret;  totals.hnt  += hnt;
 
     aoa.push([
       r.NumeroColab || '',
@@ -397,35 +464,89 @@ function exportExcel() {
   });
 
   aoa.push([]);
-  aoa.push(['', 'TOTAL', totals.days, totals.real, totals.just, totals.inj, totals.ret, totals.hnt, '']);
+  aoa.push(['', 'TOTAL', totals.days, totals.real, totals.just, totals.inj, totals.ret, +totals.hnt.toFixed(2), '']);
 
   const ws = XLSX.utils.aoa_to_sheet(aoa);
 
-  // Column widths (chars)
+  // ── Column widths ─────────────────────────────────────────────────────
   ws['!cols'] = [
     { wch: 5 },   // #
     { wch: 32 },  // Colaborador
-    { wch: 11 },  // Días Trab
-    { wch: 14 },  // Faltas Reales
-    { wch: 13 },  // Justificadas
-    { wch: 14 },  // Injustificadas
+    { wch: 9 },   // Días
+    { wch: 10 },  // Faltas Reales
+    { wch: 11 },  // Justif
+    { wch: 7 },   // Inj
     { wch: 10 },  // Retardos
-    { wch: 12 },  // Hrs Deducir
-    { wch: 70 }   // Notas
+    { wch: 11 },  // Hrs Deducir
+    { wch: 75 }   // Notas
   ];
 
-  // Make notes column wrap text
-  const range = XLSX.utils.decode_range(ws['!ref']);
-  for (let R = range.s.r; R <= range.e.r; ++R) {
-    const cell = ws[XLSX.utils.encode_cell({ r: R, c: 8 })];
-    if (cell) cell.s = { alignment: { wrapText: true, vertical: 'top' } };
+  // ── Row heights ───────────────────────────────────────────────────────
+  ws['!rows'] = [
+    { hpt: 32 },  // Title
+    { hpt: 22 },  // Subtitle
+    { hpt: 6 },   // spacer
+    { hpt: 36 }   // Header
+  ];
+  // Data rows: dynamic. We'll set tall rows for those with notes.
+  const headerRowIdx = 3;
+  const dataStart = 4;
+  for (let i = 0; i < currentRows.length; i++) {
+    const r = currentRows[i];
+    const detalle = (r.RetardosDetalle || '');
+    const ajustes = (r.Ajustes || '');
+    const lines = (detalle + '\n' + ajustes).split('\n').filter(Boolean).length;
+    const hpt = Math.max(22, Math.min(140, lines * 14 + 6));
+    ws['!rows'][dataStart + i] = { hpt: hpt };
   }
 
-  // Merge title rows across columns
+  // ── Apply styles cell-by-cell ────────────────────────────────────────
+  const setStyle = (r, c, style) => {
+    const ref = XLSX.utils.encode_cell({ r: r, c: c });
+    if (!ws[ref]) ws[ref] = { v: '', t: 's' };
+    ws[ref].s = style;
+  };
+  // Title + subtitle
+  setStyle(0, 0, STYLE.title);
+  setStyle(1, 0, STYLE.subtitle);
+  // Header row (col 0..8)
+  for (let c = 0; c <= 8; c++) setStyle(headerRowIdx, c, STYLE.header);
+
+  // Data rows
+  for (let i = 0; i < currentRows.length; i++) {
+    const row = aoa[dataStart + i];
+    const real = row[3] || 0;
+    const just = row[4] || 0;
+    const inj  = row[5] || 0;
+    const ret  = row[6] || 0;
+    const hnt  = row[7] || 0;
+    const hasFalta = real > 0;
+
+    setStyle(dataStart + i, 0, hasFalta ? STYLE.rowHasFalta : STYLE.num);     // #
+    setStyle(dataStart + i, 1, hasFalta ? STYLE.rowHasFalta : STYLE.nameCell); // Nombre
+    setStyle(dataStart + i, 2, STYLE.num);                                     // Días
+    setStyle(dataStart + i, 3, real > 0 ? STYLE.numHighlight : STYLE.num);     // Faltas Reales
+    setStyle(dataStart + i, 4, just > 0 ? STYLE.numJust      : STYLE.num);     // Justif
+    setStyle(dataStart + i, 5, inj  > 0 ? STYLE.numHighlight : STYLE.num);     // Inj
+    setStyle(dataStart + i, 6, ret  > 0 ? STYLE.numHighlight : STYLE.num);     // Retardos
+    setStyle(dataStart + i, 7, hnt  > 0 ? STYLE.numHighlight : STYLE.num);     // Hrs Deducir
+    setStyle(dataStart + i, 8, STYLE.notas);                                   // Notas
+  }
+
+  // TOTAL row
+  const totalRowIdx = dataStart + currentRows.length + 1;
+  setStyle(totalRowIdx, 0, STYLE.totalLabel);
+  setStyle(totalRowIdx, 1, STYLE.totalLabel);
+  for (let c = 2; c <= 8; c++) setStyle(totalRowIdx, c, STYLE.totalNum);
+
+  // ── Title merges ──────────────────────────────────────────────────────
   ws['!merges'] = [
     { s: { r: 0, c: 0 }, e: { r: 0, c: 8 } },
     { s: { r: 1, c: 0 }, e: { r: 1, c: 8 } }
   ];
+
+  // ── Freeze headers ────────────────────────────────────────────────────
+  ws['!freeze'] = { xSplit: 0, ySplit: 4 };
 
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Nómina');
