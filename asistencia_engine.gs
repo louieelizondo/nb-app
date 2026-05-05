@@ -180,9 +180,13 @@ function parseFechaCell_(cell) {
 }
 
 function isDescansoCell_(row) {
-  // DESCANSO appears in all data cells (cols 3-9). Check col 3 or col 7.
+  // DESCANSO and INHÁBIL (paid holiday) both = no work expected that day.
+  // Both appear in all data cells (cols 3-9).
   for (let c = 3; c <= 9; c++) {
-    if (typeof row[c] === 'string' && row[c].trim() === 'DESCANSO') return true;
+    if (typeof row[c] === 'string') {
+      const s = row[c].trim();
+      if (s === 'DESCANSO' || s === 'INHÁBIL') return true;
+    }
   }
   return false;
 }
@@ -804,16 +808,17 @@ function computeReposeWindow_(permiso, workDays) {
 }
 
 /**
- * Checks repose with strict per-day cap (NB policy: "mismo tiempo cada día",
- * no carry-forward — preserves the lunch break / consistent pattern).
+ * Checks repose with carry-forward credit (Option C).
  *
- * For each work day in the window:
- *   • Expected: dailyMin
- *   • Reposed today = min(positive Saldo, dailyMin)  ← capped
- *   • Shortage today = max(0, expected - reposed)
+ * Each work day expects dailyMin. Saldo for that day = positive Saldo_min from
+ * checador. Running balance = sum(paid - expected) across work days.
+ * Final balance >= 0 → complete. Else shortfall = -balance.
+ *
+ * INHÁBIL / DESCANSO days within the window are skipped (no expected, no paid).
  *
  * Returns { reposedMin, expectedMin, shortfallMin, complete, windowOver,
- *           daysReposed, daysShort, perDay (array) }
+ *           runningBalance, perDay (array of { fecha, expected, paid, balance,
+ *           status, lunchSkipped }) }
  */
 function checkReposeStatus_(permiso, rawForColab, todayStr) {
   if (!permiso.reposeWindow) return null;
@@ -823,35 +828,48 @@ function checkReposeStatus_(permiso, rawForColab, todayStr) {
     dayMap[formatDateStr(r.Fecha)] = r;
   });
 
-  let reposedMin = 0;
-  let daysReposed = 0;
-  const daysShort = [];
+  let totalReposed = 0;
+  let balance = 0;            // running: paid - expected per work day
   const perDay = [];
 
-  // Walk dates as strings (avoid Date object timezone surprises)
   let currentStr = startDate;
   while (currentStr <= endDate) {
     const r = dayMap[currentStr];
-    if (r) {
+    if (!r) {
+      // No checador row for this date — treat as missing data
+      perDay.push({ fecha: currentStr, expected: 0, paid: 0, balance: balance, status: 'sin-datos' });
+      currentStr = addDaysStr_(currentStr, 1);
+      continue;
+    }
+    const isOff = (r.IsDescanso === true || r.IsDescanso === 'TRUE');
+    if (isOff) {
+      perDay.push({ fecha: currentStr, expected: 0, paid: 0, balance: balance, status: 'descanso' });
+    } else {
       const saldo = parseInt(r.Saldo_min) || 0;
-      const reposedToday = Math.max(0, Math.min(saldo, dailyMin));
-      reposedMin += reposedToday;
-      if (reposedToday >= dailyMin) daysReposed++;
-      else daysShort.push({ fecha: currentStr, expected: dailyMin, reposed: reposedToday });
-      perDay.push({ fecha: currentStr, expected: dailyMin, reposed: reposedToday });
+      const paidToday = Math.max(0, saldo);
+      balance += (paidToday - dailyMin);
+      totalReposed += paidToday;
+      const status = paidToday >= dailyMin ? 'ok' : (paidToday > 0 ? 'partial' : 'missed');
+      perDay.push({
+        fecha: currentStr,
+        expected: dailyMin,
+        paid: paidToday,
+        balance: balance,
+        status: status,
+        lunchSkipped: paidToday > dailyMin * 1.5
+      });
     }
     currentStr = addDaysStr_(currentStr, 1);
   }
 
-  const shortfallMin = Math.max(0, totalMin - reposedMin);
+  const shortfallMin = Math.max(0, totalMin - totalReposed);
   return {
-    reposedMin: reposedMin,
+    reposedMin: totalReposed,
     expectedMin: totalMin,
     shortfallMin: shortfallMin,
-    complete: reposedMin >= totalMin,
+    complete: totalReposed >= totalMin,
     windowOver: todayStr >= endDate,
-    daysReposed: daysReposed,
-    daysShort: daysShort,
+    runningBalance: balance,
     perDay: perDay
   };
 }
@@ -1067,21 +1085,31 @@ function aggregateEmpDays_(days, numero, rulesMap, permisos) {
     const reposedHrs = fmtHrs(st.reposedMin);
     const expectedHrs = fmtHrs(st.expectedMin);
 
+    // Header line
     if (st.complete) {
       permisoLines.push(hdr + ' · ✅ reposeado ' + reposedHrs + 'h');
     } else if (st.windowOver) {
-      // Window ended with shortfall — alert + deduct on this nómina
       const shortHrs = fmtHrs(st.shortfallMin);
       hntFromShortfall += shortHrs;
-      const shortDays = (st.daysShort || []).map(d => d.fecha.slice(5)).join(', ');
       permisoLines.push(hdr + ' · ⚠️ falta reponer ' + shortHrs + 'h · descontar ' + shortHrs + 'h');
-      if (shortDays) permisoLines.push('   no pagó: ' + shortDays);
     } else {
-      // In progress
-      const sd = (st.daysShort || []).map(d => d.fecha.slice(5));
-      permisoLines.push(hdr + ' · reponiendo ' + reposedHrs + '/' + expectedHrs + 'h, hasta ' + p.reposeWindow.endDate.slice(5));
-      if (sd.length) permisoLines.push('   ⚠️ falta pagó: ' + sd.join(', '));
+      permisoLines.push(hdr + ' · reponiendo ' + reposedHrs + '/' + expectedHrs + 'h hasta ' + p.reposeWindow.endDate.slice(5));
     }
+
+    // Daily breakdown — one line per day with paid amount and status icon
+    const statusIcons = { ok: '✓', partial: '~', missed: '✗', descanso: '—', 'sin-datos': '?' };
+    (st.perDay || []).forEach(d => {
+      const icon = statusIcons[d.status] || '·';
+      const dateShort2 = d.fecha.slice(5);  // MM-DD
+      if (d.status === 'descanso') {
+        permisoLines.push('   ' + dateShort2 + ': descanso/inhábil ' + icon);
+      } else if (d.status === 'sin-datos') {
+        permisoLines.push('   ' + dateShort2 + ': sin datos ' + icon);
+      } else {
+        const lunchTag = d.lunchSkipped ? ' (saltó comida)' : '';
+        permisoLines.push('   ' + dateShort2 + ': pagó ' + d.paid + 'm de ' + d.expected + 'm ' + icon + lunchTag);
+      }
+    });
   });
 
   // ── Build combined RetardosDetalle (retardos + permisos) ────────────────
