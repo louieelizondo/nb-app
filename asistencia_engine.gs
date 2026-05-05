@@ -77,14 +77,14 @@ const EMPLEADO_RULES = {
     hoursPerDay: 7.5,
     workDays: ['Lun','Mar','Mié','Jue','Vie']  // Sat/Sun = descanso, never falta
   },
-  // Enrique — Granja. No usa checador. Inject default-perfect (6 días Mon-Sat).
+  // Enrique González Pando — Granja. No usa checador. Inject default-perfect (6 días Mon-Sat).
   // Louie override en UI si hay algo que reportar.
   65: {
     noChecador: true,
     expectedDaysPerWeek: 6,
     hoursPerDay: 7.5,         // 8-4 con 30min comida adentro
     workDays: ['Lun','Mar','Mié','Jue','Vie','Sáb'],
-    nombre: 'Enrique'         // TODO: completa con apellido
+    nombre: 'Enrique González Pando'
   }
 };
 const DEFAULT_HOURS_PER_DAY = 8;
