@@ -693,6 +693,33 @@ function refreshPermisos() {
   return list;
 }
 
+/**
+ * Debug helper — runs recomputeSemanal for week 24-30 abr with caches cleared,
+ * then logs Eduardo's resulting SEMANAL row. Used to verify the permiso engine
+ * is producing correct output without relying on the deployed API version.
+ */
+function _debugRecomputeEduardo() {
+  CacheService.getScriptCache().remove(PERMISOS_CACHE_KEY);
+  CacheService.getScriptCache().remove(EMPLEADO_RULES_CACHE_KEY);
+  const result = recomputeSemanal('2026-04-24', '2026-04-30', 'debug');
+  Logger.log('Recompute result: ' + JSON.stringify(result));
+
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(ASISTENCIA_SEMANAL_TAB);
+  const data = sheet.getDataRange().getValues();
+  const headers = data[0];
+  const numIdx = headers.indexOf('NumeroColab');
+  const iniIdx = headers.indexOf('SemanaInicio');
+  for (let r = 1; r < data.length; r++) {
+    if (parseInt(data[r][numIdx]) === 69 && formatDateStr(data[r][iniIdx]) === '2026-04-24') {
+      const row = {};
+      headers.forEach((h, i) => row[h] = data[r][i]);
+      Logger.log('Eduardo row: ' + JSON.stringify(row, null, 2));
+      return;
+    }
+  }
+  Logger.log('Eduardo row not found');
+}
+
 /** Maps "¿Cómo vas a reponer?" array to total minutes/day to be reposed. */
 function inferDailyReposeMin_(comoReponer) {
   if (!Array.isArray(comoReponer)) return 0;
