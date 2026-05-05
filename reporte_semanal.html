@@ -23,6 +23,39 @@
     .topbar-sub { font-size: 12px; opacity: 0.75; margin-top: 1px; }
     .topbar a { color: white; text-decoration: none; opacity: 0.85; font-size: 13px; margin-left: auto; }
     .topbar a:hover { opacity: 1; }
+
+    /* Sticky status bar — always visible while scrolling */
+    .status-bar {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      background: white;
+      border-bottom: 2px solid #e0d8cf;
+      padding: 10px 24px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      font-size: 13px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+      transition: background 0.2s, border-color 0.2s;
+    }
+    .status-bar.loading { background: #fff3cd; border-bottom-color: #ffc107; }
+    .status-bar.saved   { background: #d4edda; border-bottom-color: #28a745; }
+    .status-bar.error   { background: #f8d7da; border-bottom-color: #dc3545; }
+    .status-bar.idle    { background: white; }
+    .sb-info { display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0; flex-wrap: wrap; }
+    .sb-week-icon { font-size: 16px; flex-shrink: 0; }
+    .sb-week { font-weight: 700; color: #2d2319; }
+    .sb-empleados { color: #7a6b5d; }
+    .sb-state { font-weight: 600; flex-shrink: 0; }
+    .status-bar.idle .sb-state    { color: #7a6b5d; }
+    .status-bar.loading .sb-state { color: #856404; }
+    .status-bar.saved .sb-state   { color: #155724; }
+    .status-bar.error .sb-state   { color: #c00; }
+
+    .results-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+    .share-btn { font-size: 12px; padding: 8px 14px; }
+
     .container { max-width: 1400px; margin: 0 auto; padding: 24px 24px 100px; }
 
     .card { background: white; border-radius: 16px; padding: 24px;
@@ -153,6 +186,8 @@
       .card { padding: 16px; }
       .sem-table { font-size: 11px; }
       .sem-table th, .sem-table td { padding: 6px 4px; }
+      .status-bar { padding: 8px 14px; font-size: 12px; gap: 10px; }
+      .sb-empleados { display: none; }
     }
   </style>
 </head>
@@ -167,27 +202,19 @@
   <a href="index.html">← Centro</a>
 </div>
 
+<div class="status-bar idle" id="status-bar">
+  <div class="sb-info">
+    <span class="sb-week-icon">📅</span>
+    <span class="sb-week" id="sb-week">—</span>
+    <span class="sb-empleados" id="sb-empleados"></span>
+  </div>
+  <span class="sb-state" id="sb-state">Listo</span>
+</div>
+
 <div class="container">
 
   <div class="card">
-    <h2>1. Selecciona semana
-      <span id="status-pill" class="status-pill idle">Listo</span>
-    </h2>
-    <div class="week-row">
-      <label>Semana (Vie–Jue):</label>
-      <select id="week-select"></select>
-      <button class="secondary" id="btn-prev">◀ Anterior</button>
-      <button class="secondary" id="btn-next">Siguiente ▶</button>
-    </div>
-    <div id="period-meta" class="meta-strip" style="display:none">
-      <div><label>Inicio (Vie)</label><span id="meta-inicio">—</span></div>
-      <div><label>Fin (Jue)</label><span id="meta-fin">—</span></div>
-      <div><label>Empleados</label><span id="meta-empleados">—</span></div>
-    </div>
-  </div>
-
-  <div class="card">
-    <h2>2. Sube el xlsx del reloj checador</h2>
+    <h2>1. Sube el xlsx del reloj checador</h2>
     <div class="alert info">
       Exporta del reloj checador con el rango <strong>Vie → Mié</strong> (pre-nómina) o <strong>Vie → Jue</strong> (final).
       El sistema parsea, lo guarda en <code>ASISTENCIA_RAW</code>, y recalcula la semana automáticamente.
@@ -203,8 +230,21 @@
     </div>
   </div>
 
+  <div class="card">
+    <h2>2. Selecciona semana</h2>
+    <div class="week-row">
+      <label>Semana (Vie–Jue):</label>
+      <select id="week-select"></select>
+      <button class="secondary" id="btn-prev">◀ Anterior</button>
+      <button class="secondary" id="btn-next">Siguiente ▶</button>
+    </div>
+  </div>
+
   <div class="card" id="results-card" style="display:none">
-    <h2>3. Resultados de la semana</h2>
+    <h2 class="results-header">
+      <span>3. Resultados de la semana</span>
+      <button id="btn-share" class="secondary share-btn">📤 Compartir resumen</button>
+    </h2>
     <div class="alert info">
       <strong>Cómo clasificar una falta:</strong> deja <em>Faltas Reales</em> (todas cuentan, incluso permisos),
       y si la falta tiene comprobante médico también pon el conteo en <em>Justificadas</em>.
@@ -287,11 +327,95 @@ function populateWeekSelect() {
   });
 }
 
-// ─── Status ────────────────────────────────────────────────────────────────
+// ─── Status bar (sticky) ───────────────────────────────────────────────────
 function setStatus(state, text) {
-  const p = document.getElementById('status-pill');
-  p.className = 'status-pill ' + state;
-  p.textContent = text;
+  const bar = document.getElementById('status-bar');
+  bar.className = 'status-bar ' + state;
+  document.getElementById('sb-state').textContent = text;
+  // If state shows a transient success/error, fade back to idle after 3s
+  if (state === 'saved' || state === 'error') {
+    clearTimeout(setStatus._timer);
+    setStatus._timer = setTimeout(() => {
+      const cur = document.getElementById('status-bar');
+      if (cur.classList.contains(state)) {
+        cur.className = 'status-bar idle';
+        document.getElementById('sb-state').textContent = 'Listo';
+      }
+    }, 3000);
+  }
+}
+function setStatusWeek(start, end, empCount) {
+  const months = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+  const fmt = (s) => {
+    const [y,m,d] = s.split('-').map(Number);
+    return d + ' ' + months[m-1];
+  };
+  document.getElementById('sb-week').textContent = fmt(start) + ' → ' + fmt(end) + ' ' + start.slice(0,4);
+  const empEl = document.getElementById('sb-empleados');
+  empEl.textContent = empCount != null ? '· ' + empCount + ' colaboradores' : '';
+}
+
+// ─── Compartir resumen ─────────────────────────────────────────────────────
+function buildSummaryText() {
+  if (!currentWeek || !currentRows.length) return '';
+  const months = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+  const fmtSp = (s) => { const [y,m,d] = s.split('-').map(Number); return d + ' ' + months[m-1]; };
+  const lines = [];
+  lines.push('*Nómina Semanal NB*');
+  lines.push(fmtSp(currentWeek.start) + ' → ' + fmtSp(currentWeek.end) + ' ' + currentWeek.start.slice(0,4));
+  lines.push('━━━━━━━━━━━━━━━━━');
+  lines.push('');
+
+  let totalHnt = 0;
+  let totalFaltas = 0;
+  let totalRetardos = 0;
+  currentRows.forEach(r => {
+    const days = r.DiasTrabajados || 0;
+    const real = parseInt(r.FaltasReal) || 0;
+    const just = parseInt(r.FaltasJustificadas) || 0;
+    const inj = Math.max(0, real - just);
+    const ret = parseInt(r.Retardos) || 0;
+    const hnt = parseFloat(r.HorasNoTrabajadas) || 0;
+    totalHnt += hnt;
+    totalFaltas += real;
+    totalRetardos += ret;
+
+    let faltaStr;
+    if (real === 0) faltaStr = '0 faltas';
+    else if (inj === 0) faltaStr = real + ' falta' + (real > 1 ? 's' : '') + ' just.';
+    else if (just === 0) faltaStr = real + ' falta' + (real > 1 ? 's' : '') + ' inj.';
+    else faltaStr = real + ' falt. (' + just + 'j/' + inj + 'i)';
+
+    const nombre = titleCase(r.Nombre || '');
+    lines.push('*#' + (r.NumeroColab || '') + ' ' + nombre + '*');
+    lines.push(days + 'd · ' + faltaStr + ' · ' + ret + ' retardo' + (ret !== 1 ? 's' : '') + ' · HNT: ' + hnt + 'h');
+    lines.push('');
+  });
+
+  lines.push('━━━━━━━━━━━━━━━━━');
+  lines.push('Empleados: ' + currentRows.length);
+  lines.push('Total faltas: ' + totalFaltas);
+  lines.push('Total retardos: ' + totalRetardos);
+  lines.push('*Total HNT a deducir: ' + totalHnt.toFixed(2) + 'h*');
+  return lines.join('\n');
+}
+
+async function shareSummary() {
+  const text = buildSummaryText();
+  if (!text) return;
+  // Native share on mobile (WhatsApp shows up); clipboard fallback otherwise
+  if (navigator.share) {
+    try { await navigator.share({ title: 'Nómina Semanal NB', text: text }); }
+    catch (e) { /* user cancelled — no-op */ }
+    return;
+  }
+  try {
+    await navigator.clipboard.writeText(text);
+    setStatus('saved', 'Resumen copiado al portapapeles');
+  } catch (e) {
+    // Last-resort fallback: dump in an alert
+    alert('Copia este resumen:\n\n' + text);
+  }
 }
 
 // ─── File upload ───────────────────────────────────────────────────────────
@@ -386,10 +510,7 @@ async function loadCurrentWeek() {
     if (!data.ok) throw new Error(data.error || 'Error');
 
     currentRows = data.rows || [];
-    document.getElementById('meta-inicio').textContent = start;
-    document.getElementById('meta-fin').textContent = end;
-    document.getElementById('meta-empleados').textContent = currentRows.length;
-    document.getElementById('period-meta').style.display = 'flex';
+    setStatusWeek(start, end, currentRows.length);
 
     if (currentRows.length === 0) {
       document.getElementById('results-card').style.display = 'none';
@@ -517,6 +638,7 @@ document.addEventListener('DOMContentLoaded', () => {
   populateWeekSelect();
   document.getElementById('btn-load').addEventListener('click', loadCurrentWeek);
   document.getElementById('btn-upload').addEventListener('click', uploadXlsx);
+  document.getElementById('btn-share').addEventListener('click', shareSummary);
   document.getElementById('week-select').addEventListener('change', loadCurrentWeek);
   document.getElementById('btn-prev').addEventListener('click', () => {
     const sel = document.getElementById('week-select');
