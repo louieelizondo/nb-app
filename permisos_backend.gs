@@ -25,30 +25,36 @@
  */
 
 // ─── Constants ────────────────────────────────────────────────────────────
+// PERMISOS table holds BOTH Permiso and Vacacion records (Tipo column).
+// For Permiso: Fecha_Permiso = day of absence, Fecha_Fin = same day.
+// For Vacacion: Fecha_Permiso = start, Fecha_Fin = end (inclusive range).
 const PERMISOS_TAB = 'PERMISOS';
 const PERMISOS_HEADERS = [
-  'ID',                  // PRM{timestamp}
+  'ID',                  // PRM{timestamp} for permisos, VAC{timestamp} for vacaciones
+  'Tipo',                // Permiso | Vacacion
   'Fecha_Solicitud',     // ISO datetime when form submitted
-  'NumeroColab',         // number → maps to Colaboradores Activos
+  'NumeroColab',         // number → maps to Colaboradores
   'Nombre',              // string snapshot at submit
   'Email_Empleado',      // optional, for confirmations
-  'Fecha_Permiso',       // YYYY-MM-DD day of absence
-  'Horario_Ausente',     // e.g. "08:00 - 12:00" (built from time pickers)
-  'Horas_Ausente',       // computed from time pickers, max 8
-  'Asunto',              // Personal | Médico | Legal | Educativo (single)
-  'Descripcion',         // brief description from form (now required)
-  'Reponer',             // "Sí" | "No" | ""
-  'Como_Reponer',        // comma-joined methods
-  'Fecha_Final_Pagado',  // YYYY-MM-DD (auto-calc on form, editable by admin)
-  'Comprobante_URL',     // Drive shareable URL — uploaded by admin AFTER decision
+  'Fecha_Permiso',       // YYYY-MM-DD — start day for both types
+  'Fecha_Fin',           // YYYY-MM-DD — end day; same as Fecha_Permiso for Permiso
+  'Dias_Vacacion',       // count of vacation days (only set for Vacacion)
+  'Horario_Ausente',     // e.g. "08:00 - 12:00" (only Permiso)
+  'Horas_Ausente',       // hours (only Permiso)
+  'Asunto',              // Permiso: Personal/Médico/Legal/Educativo · Vacacion: Vacaciones
+  'Descripcion',         // brief description from form (required)
+  'Reponer',             // "Sí" | "No" | "" (only Permiso)
+  'Como_Reponer',        // comma-joined methods (only Permiso)
+  'Fecha_Final_Pagado',  // YYYY-MM-DD repose end (only Permiso)
+  'Comprobante_URL',     // Drive URL — admin uploads after decision (Permiso only)
   'Respuesta',           // Pendiente | Aprobado | Rechazado | Cancelado
   'Aprobado_Por',        // admin email
   'Fecha_Decision',      // YYYY-MM-DD when status flipped
   'Notas_Admin',         // optional rejection/cancellation reason
   // ── Engine writeback (populated by recomputeSemanal) ──
-  'Real_Ausente_Min',    // actual minutes ausente per checador
-  'Repose_Status',       // pending | completo | shortfall | over_cap_no_repose | not_required
-  'Repose_Detail',       // text breakdown e.g. "28 abr: pagó 30m de 30m ✓\n29 abr: ..."
+  'Real_Ausente_Min',    // actual minutes ausente per checador (Permiso)
+  'Repose_Status',       // pending | completo | shortfall | over_cap_no_repose | not_required (Permiso)
+  'Repose_Detail',       // text breakdown (Permiso)
   'Computed_At'          // timestamp of last engine writeback
 ];
 
@@ -79,8 +85,8 @@ function setupPermisosSheet() {
   }
   sheet.setFrozenRows(1);
 
-  // Set reasonable column widths
-  const widths = [140, 130, 60, 180, 200, 100, 130, 70, 90, 250, 60, 220, 110, 220, 100, 220, 110, 220, 110, 130, 320, 130];
+  // Set reasonable column widths (matches PERMISOS_HEADERS in order)
+  const widths = [140, 90, 130, 60, 180, 200, 100, 100, 70, 130, 70, 110, 250, 60, 220, 110, 220, 110, 220, 110, 220, 110, 130, 320, 130];
   widths.forEach((w, i) => sheet.setColumnWidth(i + 1, w));
 
   Logger.log('PERMISOS sheet ready · ' + PERMISOS_HEADERS.length + ' columns');
@@ -118,11 +124,14 @@ function submitPermiso(body) {
   // Build row in canonical PERMISOS_HEADERS order
   const row = buildPermisoRow_({
     ID: id,
+    Tipo: 'Permiso',
     Fecha_Solicitud: ahora,
     NumeroColab: parseInt(p.numeroColab) || '',
     Nombre: String(p.nombre || '').trim(),
     Email_Empleado: String(p.email || '').trim().toLowerCase(),
     Fecha_Permiso: String(p.fechaPermiso || ''),
+    Fecha_Fin: String(p.fechaPermiso || ''),  // Permiso: same day
+    Dias_Vacacion: '',
     Horario_Ausente: String(p.horarioAusente || ''),
     Horas_Ausente: parseFloat(p.horasAusente) || 0,
     Asunto: String(p.asunto || ''),
@@ -168,6 +177,384 @@ function submitPermiso(body) {
  */
 function buildPermisoRow_(obj) {
   return PERMISOS_HEADERS.map(h => obj[h] != null ? obj[h] : '');
+}
+
+// ─── Public: submit vacation request ─────────────────────────────────────
+
+/**
+ * Body: { vacacion: { numeroColab, nombre, email?, fechaInicio, fechaFin,
+ *   diasVacacion, descripcion } }
+ *
+ * Workflow:
+ *   1. Validate range, employee exists in COLABORADORES
+ *   2. Check vacation balance (must have available or reserve-eligible days)
+ *   3. Detect overlaps with other employees' approved/pending requests (warning, not block)
+ *   4. Insert row, send confirmation email
+ */
+function submitVacacion(body) {
+  const v = body.vacacion || {};
+  if (!v.numeroColab || !v.nombre || !v.fechaInicio || !v.fechaFin) {
+    return { error: 'Faltan campos: numeroColab, nombre, fechaInicio, fechaFin' };
+  }
+  if (!v.descripcion || !String(v.descripcion).trim()) {
+    return { error: 'La descripción es requerida.' };
+  }
+  if (String(v.fechaFin) < String(v.fechaInicio)) {
+    return { error: 'La fecha de fin debe ser igual o después que la de inicio.' };
+  }
+  const dias = parseInt(v.diasVacacion) || countWorkDaysBetween_(v.fechaInicio, v.fechaFin);
+  if (dias < 1) return { error: 'El rango debe tener al menos 1 día.' };
+
+  // Validate balance
+  const bal = getVacacionBalance(v.numeroColab);
+  if (bal.error) return { error: 'No pude calcular tu balance: ' + bal.error };
+
+  // Determine which "anniversary year" this request falls into
+  const reqYear = anniversaryYearForDate_(bal.inicioLaboral, v.fechaInicio);
+  if (reqYear == null) {
+    return { error: 'Aún no aplicas a vacaciones — primera anualidad inicia el ' + bal.nextAnniversary + '.' };
+  }
+  if (reqYear === bal.currentAnniversaryYear) {
+    if (dias > bal.disponibles) {
+      return { error: `Solo tienes ${bal.disponibles} días disponibles en esta anualidad. Solicitaste ${dias}.` };
+    }
+  } else if (reqYear === bal.currentAnniversaryYear + 1) {
+    // Reservation territory — must be within 2 months of next anniversary
+    const today = new Date();
+    const nextAnniv = new Date(bal.nextAnniversary + 'T00:00:00');
+    const monthsUntil = (nextAnniv - today) / (1000*60*60*24*30.44);
+    if (monthsUntil > 2) {
+      return { error: `Tu próxima anualidad inicia el ${bal.nextAnniversary}. Solo puedes reservar hasta 2 meses antes.` };
+    }
+    if (dias > bal.proximaAnualidadDias) {
+      return { error: `En tu próxima anualidad tendrás ${bal.proximaAnualidadDias} días. Solicitaste ${dias}.` };
+    }
+  } else {
+    return { error: 'No puedes solicitar vacaciones tan adelantadas.' };
+  }
+
+  // Overlap detection (soft warning — caller decides to proceed via body.confirmedOverlap)
+  if (!body.confirmedOverlap) {
+    const overlaps = findVacacionOverlaps_(v.fechaInicio, v.fechaFin, parseInt(v.numeroColab));
+    if (overlaps.length) {
+      return {
+        warning: 'overlap',
+        overlaps: overlaps.map(o => ({
+          nombre: o.nombre, tipo: o.tipo, fechaInicio: o.fechaInicio, fechaFin: o.fechaFin,
+          respuesta: o.respuesta
+        }))
+      };
+    }
+  }
+
+  // Insert
+  const sheet = getOrCreateTab(PERMISOS_TAB, PERMISOS_HEADERS);
+  const id = 'VAC' + Date.now();
+  const ahora = formatDateStr(new Date());
+  const row = buildPermisoRow_({
+    ID: id,
+    Tipo: 'Vacacion',
+    Fecha_Solicitud: ahora,
+    NumeroColab: parseInt(v.numeroColab),
+    Nombre: String(v.nombre).trim(),
+    Email_Empleado: String(v.email || '').trim().toLowerCase(),
+    Fecha_Permiso: String(v.fechaInicio),
+    Fecha_Fin: String(v.fechaFin),
+    Dias_Vacacion: dias,
+    Horario_Ausente: '',
+    Horas_Ausente: '',
+    Asunto: 'Vacaciones',
+    Descripcion: String(v.descripcion).trim(),
+    Reponer: '',
+    Como_Reponer: '',
+    Fecha_Final_Pagado: '',
+    Comprobante_URL: '',
+    Respuesta: 'Pendiente',
+    Aprobado_Por: '',
+    Fecha_Decision: '',
+    Notas_Admin: '',
+    Real_Ausente_Min: '',
+    Repose_Status: '',
+    Repose_Detail: '',
+    Computed_At: ''
+  });
+  sheet.appendRow(row);
+  CacheService.getScriptCache().remove(PERMISOS_CACHE_KEY_SHEET);
+
+  // Confirmation email
+  if (v.email) {
+    try {
+      sendVacacionEmail_(v.email, 'submitted', {
+        id, nombre: v.nombre, fechaInicio: v.fechaInicio, fechaFin: v.fechaFin,
+        dias, descripcion: v.descripcion
+      });
+    } catch (err) {
+      Logger.log('VACACION_EMAIL_ERROR (submit): ' + err.message);
+    }
+  }
+  log('VACACION_SUBMIT', id + ' · ' + v.nombre + ' · ' + v.fechaInicio + '→' + v.fechaFin + ' (' + dias + 'd)');
+  return { ok: true, id };
+}
+
+// ─── Vacation balance calculator (LFT post-2023) ─────────────────────────
+
+/**
+ * Returns { numero, nombre, inicioLaboral, anosCompletos,
+ *   currentAnniversaryYear, anualidadInicio, anualidadFin, nextAnniversary,
+ *   diasEntitled, diasUsados, diasReservados, disponibles,
+ *   proximaAnualidadDias }
+ *
+ * For frontend display + submit validation.
+ */
+function getVacacionBalance(numeroColab) {
+  const num = parseInt(numeroColab);
+  if (!num) return { error: 'numeroColab inválido' };
+
+  const colabs = (typeof getColaboradoresFromSheet_ === 'function')
+    ? getColaboradoresFromSheet_() : {};
+  const c = colabs[num];
+  if (!c) return { error: 'Colaborador #' + num + ' no encontrado en COLABORADORES' };
+  if (!c.inicioLaboral) return { error: 'Falta Inicio_Laboral en COLABORADORES para #' + num };
+
+  const today = new Date(); today.setHours(0,0,0,0);
+  const inicio = new Date(c.inicioLaboral + 'T00:00:00');
+
+  // Years completed at today's date
+  let anos = today.getFullYear() - inicio.getFullYear();
+  const annivThisYear = new Date(today.getFullYear(), inicio.getMonth(), inicio.getDate());
+  if (today < annivThisYear) anos--;
+
+  if (anos < 1) {
+    // First year — no entitlement yet
+    const firstAnniv = new Date(inicio); firstAnniv.setFullYear(inicio.getFullYear() + 1);
+    return {
+      numero: num,
+      nombre: c.nombre,
+      inicioLaboral: c.inicioLaboral,
+      anosCompletos: 0,
+      currentAnniversaryYear: 0,
+      anualidadInicio: c.inicioLaboral,
+      anualidadFin: formatDateStr(firstAnniv),
+      nextAnniversary: formatDateStr(firstAnniv),
+      diasEntitled: 0,
+      diasUsados: 0,
+      diasReservados: 0,
+      disponibles: 0,
+      proximaAnualidadDias: lftDaysForYear_(1)
+    };
+  }
+
+  // Current anniversary year window: [inicio + anos years, inicio + (anos+1) years)
+  const anualidadInicio = new Date(inicio); anualidadInicio.setFullYear(inicio.getFullYear() + anos);
+  const anualidadFin = new Date(inicio); anualidadFin.setFullYear(inicio.getFullYear() + anos + 1);
+  const diasEntitled = lftDaysForYear_(anos);
+  const proximaAnualidadDias = lftDaysForYear_(anos + 1);
+
+  // Sum used + reserved from approved + pending vacation requests
+  const sheet = getOrCreateTab(PERMISOS_TAB, PERMISOS_HEADERS);
+  const data = sheet.getDataRange().getValues();
+  const headers = data[0];
+  const idx = (h) => headers.indexOf(h);
+  let usados = 0, reservados = 0;
+  for (let r = 1; r < data.length; r++) {
+    const row = data[r];
+    if (String(row[idx('Tipo')]) !== 'Vacacion') continue;
+    if (parseInt(row[idx('NumeroColab')]) !== num) continue;
+    const respuesta = String(row[idx('Respuesta')]);
+    if (respuesta === 'Rechazado' || respuesta === 'Cancelado') continue;
+    const dias = parseInt(row[idx('Dias_Vacacion')]) || 0;
+    const start = formatDateStr(row[idx('Fecha_Permiso')]);
+    if (!start) continue;
+    const startDate = new Date(start + 'T00:00:00');
+    if (startDate >= anualidadInicio && startDate < anualidadFin) {
+      usados += dias;
+    } else if (startDate >= anualidadFin) {
+      reservados += dias;
+    }
+  }
+
+  return {
+    numero: num,
+    nombre: c.nombre,
+    inicioLaboral: c.inicioLaboral,
+    anosCompletos: anos,
+    currentAnniversaryYear: anos,
+    anualidadInicio: formatDateStr(anualidadInicio),
+    anualidadFin: formatDateStr(anualidadFin),
+    nextAnniversary: formatDateStr(anualidadFin),
+    diasEntitled,
+    diasUsados: usados,
+    diasReservados: reservados,
+    disponibles: Math.max(0, diasEntitled - usados),
+    proximaAnualidadDias: proximaAnualidadDias
+  };
+}
+
+/**
+ * LFT post-2023 reform:
+ *   Year 1: 12, Year 2: 14, Year 3: 16, Year 4: 18, Year 5: 20
+ *   Years 6-10: 22, 11-15: 24, 16-20: 26, +2 every 5 years thereafter.
+ */
+function lftDaysForYear_(year) {
+  if (year < 1) return 0;
+  if (year === 1) return 12;
+  if (year === 2) return 14;
+  if (year === 3) return 16;
+  if (year === 4) return 18;
+  if (year === 5) return 20;
+  if (year <= 10) return 22;
+  if (year <= 15) return 24;
+  if (year <= 20) return 26;
+  if (year <= 25) return 28;
+  if (year <= 30) return 30;
+  return 32;  // capped reasonable upper bound
+}
+
+/** Returns the anniversary year index (0=before first anniv, 1=year-1 window, etc.) for a given absolute date, or null if before inicio. */
+function anniversaryYearForDate_(inicioLaboral, dateStr) {
+  if (!inicioLaboral) return null;
+  const inicio = new Date(inicioLaboral + 'T00:00:00');
+  const target = new Date(dateStr + 'T00:00:00');
+  if (target < inicio) return null;
+  let years = target.getFullYear() - inicio.getFullYear();
+  const annivThatYear = new Date(target.getFullYear(), inicio.getMonth(), inicio.getDate());
+  if (target < annivThatYear) years--;
+  return Math.max(0, years);
+}
+
+/** Counts work days (Mon-Sat per NB schedule) between two dates inclusive. */
+function countWorkDaysBetween_(startStr, endStr) {
+  const start = new Date(startStr + 'T00:00:00');
+  const end = new Date(endStr + 'T00:00:00');
+  let count = 0;
+  const cur = new Date(start);
+  while (cur <= end) {
+    if (cur.getDay() !== 0) count++;  // skip Sundays
+    cur.setDate(cur.getDate() + 1);
+  }
+  return count;
+}
+
+// ─── Overlap detection ────────────────────────────────────────────────────
+
+/**
+ * Returns array of {numeroColab, nombre, tipo, fechaInicio, fechaFin, respuesta}
+ * for OTHER employees with approved/pending absences overlapping the range.
+ */
+function findVacacionOverlaps_(startStr, endStr, excludeNumero) {
+  const sheet = getOrCreateTab(PERMISOS_TAB, PERMISOS_HEADERS);
+  const data = sheet.getDataRange().getValues();
+  const headers = data[0];
+  const idx = (h) => headers.indexOf(h);
+  const out = [];
+  for (let r = 1; r < data.length; r++) {
+    const row = data[r];
+    const num = parseInt(row[idx('NumeroColab')]);
+    if (num === excludeNumero) continue;
+    const respuesta = String(row[idx('Respuesta')]);
+    if (respuesta !== 'Aprobado' && respuesta !== 'Pendiente') continue;
+    const ini = formatDateStr(row[idx('Fecha_Permiso')]);
+    const fin = formatDateStr(row[idx('Fecha_Fin')]) || ini;
+    if (!ini) continue;
+    // Overlap if start <= other.fin AND end >= other.ini
+    if (startStr <= fin && endStr >= ini) {
+      out.push({
+        numeroColab: num,
+        nombre: String(row[idx('Nombre')] || ''),
+        tipo: String(row[idx('Tipo')] || 'Permiso'),
+        fechaInicio: ini,
+        fechaFin: fin,
+        respuesta: respuesta
+      });
+    }
+  }
+  return out;
+}
+
+// ─── Calendar feed ────────────────────────────────────────────────────────
+
+/**
+ * Returns all approved + pending absences in a date window for calendar rendering.
+ * Body params: { from?: 'YYYY-MM-DD', to?: 'YYYY-MM-DD' }
+ * Defaults to ±60 days from today.
+ */
+function getAusenciasCalendar(params) {
+  const today = new Date();
+  const from = (params && params.from) || formatDateStr(new Date(today.getFullYear(), today.getMonth() - 2, 1));
+  const to   = (params && params.to)   || formatDateStr(new Date(today.getFullYear(), today.getMonth() + 4, 0));
+
+  const sheet = getOrCreateTab(PERMISOS_TAB, PERMISOS_HEADERS);
+  const data = sheet.getDataRange().getValues();
+  const headers = data[0];
+  const idx = (h) => headers.indexOf(h);
+  const out = [];
+  for (let r = 1; r < data.length; r++) {
+    const row = data[r];
+    const respuesta = String(row[idx('Respuesta')]);
+    if (respuesta !== 'Aprobado' && respuesta !== 'Pendiente') continue;
+    const ini = formatDateStr(row[idx('Fecha_Permiso')]);
+    const fin = formatDateStr(row[idx('Fecha_Fin')]) || ini;
+    if (!ini) continue;
+    if (fin < from || ini > to) continue;
+    out.push({
+      id: String(row[idx('ID')]),
+      tipo: String(row[idx('Tipo')] || 'Permiso'),
+      numeroColab: parseInt(row[idx('NumeroColab')]) || null,
+      nombre: String(row[idx('Nombre')] || ''),
+      fechaInicio: ini,
+      fechaFin: fin,
+      diasVacacion: parseInt(row[idx('Dias_Vacacion')]) || null,
+      horarioAusente: String(row[idx('Horario_Ausente')] || ''),
+      asunto: String(row[idx('Asunto')] || ''),
+      respuesta: respuesta
+    });
+  }
+  out.sort((a, b) => String(a.fechaInicio).localeCompare(String(b.fechaInicio)));
+  return { ok: true, from, to, ausencias: out };
+}
+
+// ─── Vacation email ──────────────────────────────────────────────────────
+
+function sendVacacionEmail_(toEmail, type, data) {
+  if (!toEmail) return;
+  const subjects = {
+    submitted: 'Solicitud de vacaciones recibida',
+    approved:  '✓ Tus vacaciones fueron aprobadas',
+    rejected:  '✗ Tus vacaciones fueron rechazadas'
+  };
+  const subject = subjects[type] || 'Actualización de tus vacaciones';
+  const fmtDate = (s) => {
+    if (!s) return '—';
+    const m = String(s).match(/^(\d{4})-(\d{2})-(\d{2})/);
+    return m ? (m[3] + '/' + m[2] + '/' + m[1]) : s;
+  };
+  const colorBar = type === 'approved' ? '#2e7d32' : type === 'rejected' ? '#c62828' : '#1565c0';
+  const logoUrl = 'https://louieelizondo.github.io/nb-app/avocado-logo.png';
+  let intro = '';
+  if (type === 'submitted') intro = 'Recibimos tu solicitud de vacaciones. Pronto recibirás respuesta de Louie.';
+  if (type === 'approved')  intro = '¡Tus vacaciones fueron aprobadas! Aquí están los detalles confirmados. Disfruta el descanso.';
+  if (type === 'rejected')  intro = 'Tu solicitud de vacaciones fue rechazada.' + (data.notas ? ' Razón: ' + data.notas : '');
+
+  const html = `
+    <div style="font-family:-apple-system,Segoe UI,sans-serif;max-width:560px;margin:0 auto;color:#2d2319">
+      <div style="background:linear-gradient(135deg,#1a3a1a 0%,#2e6b2e 100%);color:white;padding:28px 24px 24px;border-radius:14px 14px 0 0;text-align:center">
+        <img src="${logoUrl}" alt="Natural Balance" style="width:72px;height:72px;display:block;margin:0 auto 10px;background:rgba(255,255,255,.95);padding:6px;border-radius:14px">
+        <h2 style="margin:0;font-size:18px;font-weight:700">${subject}</h2>
+      </div>
+      <div style="background:white;padding:26px;border-left:4px solid ${colorBar};border-radius:0 0 14px 14px;box-shadow:0 4px 16px rgba(0,0,0,.05)">
+        <p style="margin:0 0 16px;font-size:15px">Hola <strong>${data.nombre || ''}</strong>,</p>
+        <p style="margin:0 0 18px;font-size:14px;line-height:1.55">${intro}</p>
+        <table style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:8px">
+          <tr><td style="padding:7px 0;color:#998777;width:120px">Inicio</td><td><strong>${fmtDate(data.fechaInicio)}</strong></td></tr>
+          <tr><td style="padding:7px 0;color:#998777">Fin</td><td><strong>${fmtDate(data.fechaFin)}</strong></td></tr>
+          <tr><td style="padding:7px 0;color:#998777">Días</td><td>${data.dias}</td></tr>
+          ${data.descripcion ? `<tr><td style="padding:7px 0;color:#998777;vertical-align:top">Descripción</td><td>${data.descripcion}</td></tr>` : ''}
+        </table>
+        <p style="margin:24px 0 0;font-size:11px;color:#bbb;border-top:1px solid #f0ebe4;padding-top:14px">Natural Balance Club · Sistema de Permisos &amp; Vacaciones<br>Ref: ${data.id || ''}</p>
+      </div>
+    </div>
+  `;
+  GmailApp.sendEmail(toEmail, subject, '', { htmlBody: html, name: 'NB Vacaciones' });
 }
 
 // ─── Public: roster for the dropdown (no PII) ────────────────────────────
@@ -219,11 +606,14 @@ function listPermisos(params) {
     if (estadoFilter && respuesta !== estadoFilter) continue;
     out.push({
       id:                row[idx('ID')],
+      tipo:              String(row[idx('Tipo')] || 'Permiso'),
       fechaSolicitud:    formatDateStr(row[idx('Fecha_Solicitud')]),
       numeroColab:       parseInt(row[idx('NumeroColab')]) || null,
       nombre:            String(row[idx('Nombre')] || ''),
       email:             String(row[idx('Email_Empleado')] || ''),
       fechaPermiso:      formatDateStr(row[idx('Fecha_Permiso')]),
+      fechaFin:          formatDateStr(row[idx('Fecha_Fin')]) || formatDateStr(row[idx('Fecha_Permiso')]),
+      diasVacacion:      parseInt(row[idx('Dias_Vacacion')]) || null,
       horarioAusente:    String(row[idx('Horario_Ausente')] || ''),
       horasAusente:      parseFloat(row[idx('Horas_Ausente')]) || 0,
       asunto:            String(row[idx('Asunto')] || ''),
@@ -243,7 +633,7 @@ function listPermisos(params) {
       _row:              r + 1
     });
   }
-  // Sort by fechaPermiso DESC (most recent / upcoming permiso at top)
+  // Sort by fechaPermiso DESC (most recent / upcoming at top)
   out.sort((a, b) => String(b.fechaPermiso || '').localeCompare(String(a.fechaPermiso || '')));
   return { ok: true, permisos: out };
 }
@@ -292,18 +682,30 @@ function updatePermisoStatus(body) {
       }
       CacheService.getScriptCache().remove(PERMISOS_CACHE_KEY_SHEET);
 
-      // Best-effort decision email to employee
+      // Best-effort decision email to employee — pick template by Tipo
       const empEmail = String(data[r][headers.indexOf('Email_Empleado')] || '');
+      const tipo = String(data[r][headers.indexOf('Tipo')] || 'Permiso');
       if (empEmail) {
         try {
-          sendPermisoEmail_(empEmail, body.estado === 'Aprobado' ? 'approved' : 'rejected', {
-            id: body.id,
-            nombre: String(data[r][headers.indexOf('Nombre')] || ''),
-            fechaPermiso: formatDateStr(data[r][headers.indexOf('Fecha_Permiso')]),
-            horario: String(data[r][headers.indexOf('Horario_Ausente')] || ''),
-            asunto: String(data[r][headers.indexOf('Asunto')] || ''),
-            notas: body.notasAdmin || ''
-          });
+          if (tipo === 'Vacacion') {
+            sendVacacionEmail_(empEmail, body.estado === 'Aprobado' ? 'approved' : 'rejected', {
+              id: body.id,
+              nombre: String(data[r][headers.indexOf('Nombre')] || ''),
+              fechaInicio: formatDateStr(data[r][headers.indexOf('Fecha_Permiso')]),
+              fechaFin: formatDateStr(data[r][headers.indexOf('Fecha_Fin')]),
+              dias: parseInt(data[r][headers.indexOf('Dias_Vacacion')]) || 0,
+              notas: body.notasAdmin || ''
+            });
+          } else {
+            sendPermisoEmail_(empEmail, body.estado === 'Aprobado' ? 'approved' : 'rejected', {
+              id: body.id,
+              nombre: String(data[r][headers.indexOf('Nombre')] || ''),
+              fechaPermiso: formatDateStr(data[r][headers.indexOf('Fecha_Permiso')]),
+              horario: String(data[r][headers.indexOf('Horario_Ausente')] || ''),
+              asunto: String(data[r][headers.indexOf('Asunto')] || ''),
+              notas: body.notasAdmin || ''
+            });
+          }
         } catch (err) {
           Logger.log('PERMISO_EMAIL_ERROR (decision): ' + err.message);
         }
@@ -563,6 +965,10 @@ function getApprovedPermisosFromSheet_() {
   for (let r = 1; r < data.length; r++) {
     const row = data[r];
     if (String(row[idx('Respuesta')]) !== 'Aprobado') continue;
+    // Engine permiso pipeline only handles Tipo=Permiso (or unset, for legacy rows).
+    // Vacaciones are processed separately via getApprovedVacacionesFromSheet_.
+    const tipo = String(row[idx('Tipo')] || 'Permiso');
+    if (tipo !== 'Permiso') continue;
     const reponerRaw = String(row[idx('Reponer')] || '').trim();
     let reponerNorm = null;
     if (/^s[ií]$/i.test(reponerRaw)) reponerNorm = 'Si';
@@ -602,6 +1008,47 @@ function refreshPermisosSheet() {
   const list = getApprovedPermisosFromSheet_();
   Logger.log('Refreshed ' + list.length + ' permisos aprobados (sheet)');
   return list;
+}
+
+/**
+ * Returns approved vacation rows expanded to per-day records:
+ *   [{ id, numeroColab, nombre, fecha }, ...]
+ * Used by the engine to suppress falta detection on vacation days.
+ */
+function getApprovedVacacionDaysFromSheet_() {
+  const cache = CacheService.getScriptCache();
+  const cached = cache.get('asistencia_vacacion_days_v1');
+  if (cached) { try { return JSON.parse(cached); } catch (e) {} }
+
+  const sheet = getOrCreateTab(PERMISOS_TAB, PERMISOS_HEADERS);
+  const data = sheet.getDataRange().getValues();
+  if (data.length < 2) return [];
+  const headers = data[0];
+  const idx = (h) => headers.indexOf(h);
+
+  const out = [];
+  for (let r = 1; r < data.length; r++) {
+    const row = data[r];
+    if (String(row[idx('Tipo')]) !== 'Vacacion') continue;
+    if (String(row[idx('Respuesta')]) !== 'Aprobado') continue;
+    const id = String(row[idx('ID')]);
+    const numero = parseInt(row[idx('NumeroColab')]);
+    const nombre = String(row[idx('Nombre')] || '');
+    const ini = formatDateStr(row[idx('Fecha_Permiso')]);
+    const fin = formatDateStr(row[idx('Fecha_Fin')]) || ini;
+    if (!ini) continue;
+    // Expand range to per-day records (skip Sundays — NB closes)
+    const cur = new Date(ini + 'T00:00:00');
+    const end = new Date(fin + 'T00:00:00');
+    while (cur <= end) {
+      if (cur.getDay() !== 0) {
+        out.push({ id, numeroColab: numero, nombre, fecha: formatDateStr(cur) });
+      }
+      cur.setDate(cur.getDate() + 1);
+    }
+  }
+  cache.put('asistencia_vacacion_days_v1', JSON.stringify(out), 300);
+  return out;
 }
 
 // ─── One-time fix: shift mis-aligned migrated rows ───────────────────────

@@ -46,7 +46,8 @@ const ASISTENCIA_SEMANAL_HEADERS = [
   'SemanaFin',                  // Jue YYYY-MM-DD
   'DiasTrabajados',
   'DiasDescanso',
-  'FaltasRaw',                  // count of FALTA days from checador
+  'DiasVacacion',               // count of approved vacation days falling in this week
+  'FaltasRaw',                  // count of FALTA days from checador (excludes vacation)
   'FaltasReal',                 // after classification (manual override)
   'FaltasJustificadas',         // with comprobante
   'FaltasInjustificadas',
@@ -439,15 +440,26 @@ function recomputeSemanal(weekStart, weekEnd, sourceFile) {
   const semUpdates = [];               // [{ rowNum, rowArr }] full-row replacements
   const allPermisoAnalyses = [];       // collected for writeBackPermisoAnalysis_
 
+  // Build per-empleado vacation day set for this week (filter approved vacaciones)
+  const allVacacionDays = (typeof getApprovedVacacionDaysFromSheet_ === 'function')
+    ? getApprovedVacacionDaysFromSheet_() : [];
+  const vacByNumero = {};
+  allVacacionDays.forEach(v => {
+    if (v.fecha < weekStart || v.fecha > weekEnd) return;
+    if (!vacByNumero[v.numeroColab]) vacByNumero[v.numeroColab] = new Set();
+    vacByNumero[v.numeroColab].add(v.fecha);
+  });
+
   Object.keys(byEmpleado).forEach(numStr => {
     const emp = byEmpleado[numStr];
     const id = emp.numero + '_' + weekStart;
     const existing = existingSem[id] || {};
     const empPermisos = buildPermisosForWeek_(emp.numero);
+    const empVacSet = vacByNumero[emp.numero] || new Set();
 
     // If row is locked, skip the recompute (preserve manual values)
     if (existing.Locked === true || existing.Locked === '__YES__') {
-      const aggLocked = aggregateEmpDays_(emp.days, emp.numero, rulesMap, empPermisos);
+      const aggLocked = aggregateEmpDays_(emp.days, emp.numero, rulesMap, empPermisos, empVacSet);
       if (existing.DiasTrabajados !== aggLocked.diasTrabajados) {
         const rowNum = existing._row;
         const colDT = semHeaders.indexOf('DiasTrabajados') + 1;
@@ -457,7 +469,7 @@ function recomputeSemanal(weekStart, weekEnd, sourceFile) {
       return;
     }
 
-    const agg = aggregateEmpDays_(emp.days, emp.numero, rulesMap, empPermisos);
+    const agg = aggregateEmpDays_(emp.days, emp.numero, rulesMap, empPermisos, empVacSet);
     if (agg.permisoAnalyses) allPermisoAnalyses.push.apply(allPermisoAnalyses, agg.permisoAnalyses);
 
     // Build SEMANAL row
@@ -469,6 +481,7 @@ function recomputeSemanal(weekStart, weekEnd, sourceFile) {
       'SemanaFin': weekEnd,
       'DiasTrabajados': agg.diasTrabajados,
       'DiasDescanso': agg.diasDescanso,
+      'DiasVacacion': agg.diasVacacion || 0,
       'FaltasRaw': agg.faltasRaw,
       // FaltasReal + FaltasJustificadas are user-input (preserved across recomputes).
       // FaltasInjustificadas + HorasNoTrabajadas are derived (always recomputed) so
@@ -537,14 +550,16 @@ function recomputeSemanal(weekStart, weekEnd, sourceFile) {
     }, 0);
 
     const expectedDays = rules.expectedDaysPerWeek || 6;
+    const noCheckVacDays = (vacByNumero[numero] || new Set()).size;
     const rowDict = {
       'ID': id,
       'NumeroColab': numero,
       'Nombre': rules.nombre || ('Empleado #' + numero),
       'SemanaInicio': weekStart,
       'SemanaFin': weekEnd,
-      'DiasTrabajados': expectedDays,
+      'DiasTrabajados': Math.max(0, expectedDays - noCheckVacDays),
       'DiasDescanso': 7 - expectedDays,
+      'DiasVacacion': noCheckVacDays,
       'FaltasRaw': 0,
       'FaltasReal': 0,
       'FaltasJustificadas': 0,
@@ -624,10 +639,41 @@ function getEmpleadoRulesFromNotion_() {
     try { return JSON.parse(cached); } catch (e) { /* fall through */ }
   }
 
+  // Phase 2 (2026-05-06): try the COLABORADORES sheet first. Falls back to
+  // Notion automatically if the sheet is empty (during transition).
+  let byNumero = {};
+  try {
+    if (typeof getColaboradoresFromSheet_ === 'function') {
+      const sheetData = getColaboradoresFromSheet_();
+      if (sheetData && Object.keys(sheetData).length > 0) {
+        Object.keys(sheetData).forEach(numStr => {
+          const r = sheetData[numStr];
+          byNumero[parseInt(numStr)] = {
+            pageId: r.notionPageId || '',
+            nombre: r.nombre,
+            email: r.email || '',
+            inicioLaboral: r.inicioLaboral || '',
+            mesaPuesto: r.mesaPuesto || '',
+            noChecador: r.usaChecador === false,
+            workDays: Array.isArray(r.diasTrabaja) ? r.diasTrabaja : [],
+            expectedDaysPerWeek: Array.isArray(r.diasTrabaja) && r.diasTrabaja.length ? r.diasTrabaja.length : 6,
+            hoursPerDay: r.horasDia || DEFAULT_HOURS_PER_DAY,
+            skipEntradaRetardos: r.retardosPerdonados === true,
+            skipComidaRetardos: r.retardosPerdonados === true
+          };
+        });
+        cache.put(EMPLEADO_RULES_CACHE_KEY, JSON.stringify(byNumero), EMPLEADO_RULES_CACHE_TTL);
+        return byNumero;
+      }
+    }
+  } catch (e) {
+    Logger.log('Sheet read failed, falling back to Notion: ' + e.message);
+  }
+
+  // Fallback: original Notion read (transition mode, when sheet is empty)
   const filter = { property: 'Estado ', select: { equals: 'Activo' } };
   const pages = notionQueryAll_(NOTION_DS_COLABORADORES_ACTIVOS, filter);
 
-  const byNumero = {};
   pages.forEach(page => {
     const numero = notionPropValue_(page, 'Número Colab.');
     if (numero == null) return;
@@ -639,8 +685,11 @@ function getEmpleadoRulesFromNotion_() {
     const retardosPerdonados = notionPropValue_(page, 'Retardos Perdonados') === true;
 
     byNumero[parseInt(numero)] = {
-      pageId: page.id.replace(/-/g, ''),  // for permiso relation matching
+      pageId: page.id.replace(/-/g, ''),
       nombre: String(nombre).trim(),
+      email: '',
+      inicioLaboral: '',
+      mesaPuesto: '',
       noChecador: usaChecador === false,
       workDays: Array.isArray(diasTrabaja) ? diasTrabaja : [],
       expectedDaysPerWeek: Array.isArray(diasTrabaja) && diasTrabaja.length ? diasTrabaja.length : 6,
@@ -1017,7 +1066,7 @@ function syncNombresFromNotion() {
  *                    .reposeWindow (from computeReposeWindow_) and .reposeStatus
  *                    (from checkReposeStatus_) when applicable
  */
-function aggregateEmpDays_(days, numero, rulesMap, permisos) {
+function aggregateEmpDays_(days, numero, rulesMap, permisos, vacacionDaysSet) {
   const rules = (rulesMap && rulesMap[numero]) || {};
   const skipEntrada = rules.skipEntradaRetardos === true;
   const skipComida = rules.skipComidaRetardos === true;
@@ -1032,8 +1081,12 @@ function aggregateEmpDays_(days, numero, rulesMap, permisos) {
     permisosByDate[p.fechaPermiso].push(p);
   });
 
+  // Set of dates this employee is on approved vacation
+  const vacSet = vacacionDaysSet || new Set();
+
   let diasTrabajados = 0;
   let diasDescanso = 0;
+  let diasVacacion = 0;
   let faltasRaw = 0;
   let faltasPermisoCubierto = 0;
   let faltasJustificadasAuto = 0;  // bumped when a falta is covered by a permiso with comprobante + valid asunto
@@ -1058,6 +1111,12 @@ function aggregateEmpDays_(days, numero, rulesMap, permisos) {
 
     const fecha = formatDateStr(d.Fecha);
     const permisosToday = permisosByDate[fecha] || [];
+
+    // Vacation day takes precedence over everything — not a falta, not HNT, not a retardo trigger
+    if (vacSet.has(fecha)) {
+      diasVacacion++;
+      return;
+    }
 
     if (d.IsFalta === true || d.IsFalta === 'TRUE') {
       // If a full-day permiso (>=6h) covers it → FaltasPermisoCubierto, not FaltasRaw
@@ -1239,6 +1298,7 @@ function aggregateEmpDays_(days, numero, rulesMap, permisos) {
   return {
     diasTrabajados: diasTrabajados,
     diasDescanso: diasDescanso,
+    diasVacacion: diasVacacion,
     faltasRaw: faltasRaw,
     faltasPermisoCubierto: faltasPermisoCubierto,
     faltasJustificadasAuto: faltasJustificadasAuto,

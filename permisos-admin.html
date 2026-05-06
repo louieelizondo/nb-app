@@ -284,8 +284,12 @@
 
 <div class="hero">
   <div class="hero-logo"><img src="avocado-logo.png" alt="Natural Balance"></div>
-  <h1>Aprobar Permisos</h1>
+  <h1>Aprobar Permisos &amp; Vacaciones</h1>
   <p>Revisa, aprueba/rechaza, cancela o sube comprobantes</p>
+</div>
+
+<div style="max-width:980px;margin:0 auto 14px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap">
+  <a href="ausencias-calendario.html" style="padding:8px 16px;background:white;border-radius:10px;border:1px solid #d4cabe;color:#2e6b2e;text-decoration:none;font-size:13px;font-weight:600">📅 Ver calendario de ausencias</a>
 </div>
 
 <div id="content" style="display:none">
@@ -398,25 +402,29 @@ function render() {
   $('grid').innerHTML = list.map(p => {
     const cls = p.respuesta.toLowerCase();
     const cd = countdownFor(p.fechaPermiso);
+    const isVacacion = p.tipo === 'Vacacion';
 
-    // Action area depending on status
+    // Action area depending on status + type
     let actionsHTML = '';
     if (!userCanApprove) {
       actionsHTML = `<div class="permiso-actions" style="color:#998777;font-size:12px;font-style:italic">Sin permisos para tomar acciones — solo Louie puede.</div>`;
     } else if (p.respuesta === 'Pendiente') {
+      const dateInput = isVacacion ? '' : `<input type="date" id="ff-${p.id}" value="${p.fechaFinalPagado || ''}" title="Fecha final del tiempo pagado (editable)">`;
       actionsHTML = `
         <div class="permiso-actions">
-          <input type="date" id="ff-${p.id}" value="${p.fechaFinalPagado || ''}" title="Fecha final del tiempo pagado (editable)">
+          ${dateInput}
           <button class="btn approve" onclick="decide('${p.id}', 'Aprobado')">✓ Aprobar</button>
           <button class="btn reject"  onclick="decide('${p.id}', 'Rechazado')">✗ Rechazar</button>
           <button class="btn delete"  onclick="del('${p.id}')" title="Eliminar fila por completo">🗑</button>
         </div>`;
     } else if (p.respuesta === 'Aprobado') {
+      const compBtn = isVacacion ? '' : `
+          <button class="btn upload" onclick="pickComprobante('${p.id}')">${p.comprobanteUrl ? '↻ Reemplazar comprobante' : '📎 Subir comprobante'}</button>
+          <input type="file" id="cf-${p.id}" class="file-input-hidden" accept=".pdf,.jpg,.jpeg,.png" onchange="uploadComprobante('${p.id}', this)">`;
       actionsHTML = `
         <div class="permiso-actions">
-          <button class="btn upload" onclick="pickComprobante('${p.id}')">${p.comprobanteUrl ? '↻ Reemplazar comprobante' : '📎 Subir comprobante'}</button>
-          <input type="file" id="cf-${p.id}" class="file-input-hidden" accept=".pdf,.jpg,.jpeg,.png" onchange="uploadComprobante('${p.id}', this)">
-          <button class="btn cancel" onclick="cancelP('${p.id}')">Cancelar permiso</button>
+          ${compBtn}
+          <button class="btn cancel" onclick="cancelP('${p.id}')">Cancelar ${isVacacion ? 'vacación' : 'permiso'}</button>
           <button class="btn delete" onclick="del('${p.id}')" title="Eliminar fila por completo">🗑</button>
         </div>`;
     } else if (p.respuesta === 'Rechazado' || p.respuesta === 'Cancelado') {
@@ -426,9 +434,9 @@ function render() {
         </div>`;
     }
 
-    // Analysis section (real time counted)
+    // Analysis section (real time counted) — Permiso only
     let analysisHTML = '';
-    if (p.respuesta === 'Aprobado' && (p.realAusenteMin != null || p.reposeStatus)) {
+    if (!isVacacion && p.respuesta === 'Aprobado' && (p.realAusenteMin != null || p.reposeStatus)) {
       analysisHTML = `
         <div class="analysis">
           <div class="status-row">
@@ -439,20 +447,21 @@ function render() {
           </div>
           ${p.reposeDetail ? `<pre>${p.reposeDetail.replace(/&/g,'&amp;').replace(/</g,'&lt;')}</pre>` : ''}
         </div>`;
-    } else if (p.respuesta === 'Aprobado') {
+    } else if (!isVacacion && p.respuesta === 'Aprobado') {
       analysisHTML = `<div class="analysis" style="border-left-color:#ffa726"><strong>Análisis del checador:</strong> <span class="analysis-status-badge pending">Pendiente</span> <span style="color:#998777;font-size:11px;margin-left:8px">— Se computará la próxima vez que corras la nómina semanal de esa semana.</span></div>`;
     }
 
-    return `
-      <div class="permiso ${cls}">
-        <div class="permiso-header">
-          <h3>${p.nombre} <span style="font-size:12px;color:#998777;font-weight:500">#${p.numeroColab || '?'}</span></h3>
-          <div class="badges">
-            ${cd && (p.respuesta === 'Pendiente' || p.respuesta === 'Aprobado') ? `<span class="badge countdown ${cd.kind}">${cd.text}</span>` : ''}
-            <span class="badge ${cls}">${p.respuesta}</span>
-          </div>
-        </div>
-        <div class="permiso-body">
+    // Body fields differ by type
+    const bodyFields = isVacacion ? `
+          <div class="field"><label>Inicio</label><span class="value">${fmtDate(p.fechaPermiso)}</span></div>
+          <div class="field"><label>Fin</label><span class="value">${fmtDate(p.fechaFin)}</span></div>
+          <div class="field"><label>Días</label><span class="value">${p.diasVacacion || '—'}</span></div>
+          <div class="field"><label>Solicitado</label><span class="value">${fmtDate(p.fechaSolicitud)}</span></div>
+          ${p.email ? `<div class="field"><label>Email</label><span class="value" style="font-size:12px">${p.email}</span></div>` : ''}
+          ${p.descripcion ? `<div class="field" style="grid-column:1/-1"><label>Descripción</label><span class="value">${p.descripcion}</span></div>` : ''}
+          ${p.notasAdmin ? `<div class="field" style="grid-column:1/-1"><label>Notas admin</label><span class="value" style="color:#c62828">${p.notasAdmin}</span></div>` : ''}
+          ${p.aprobadoPor ? `<div class="field"><label>Decisión por</label><span class="value">${p.aprobadoPor} · ${fmtDate(p.fechaDecision)}</span></div>` : ''}
+    ` : `
           <div class="field"><label>Fecha permiso</label><span class="value">${fmtDate(p.fechaPermiso)}</span></div>
           <div class="field"><label>Horario</label><span class="value">${p.horarioAusente || '—'}</span></div>
           <div class="field"><label>Horas ausente</label><span class="value">${p.horasAusente}h</span></div>
@@ -465,6 +474,22 @@ function render() {
           ${p.comprobanteUrl ? `<div class="field" style="grid-column:1/-1"><label>Comprobante</label><a href="${p.comprobanteUrl}" target="_blank" class="comp-link">Ver archivo</a></div>` : ''}
           ${p.notasAdmin ? `<div class="field" style="grid-column:1/-1"><label>Notas admin</label><span class="value" style="color:#c62828">${p.notasAdmin}</span></div>` : ''}
           ${p.aprobadoPor ? `<div class="field"><label>Decisión por</label><span class="value">${p.aprobadoPor} · ${fmtDate(p.fechaDecision)}</span></div>` : ''}
+    `;
+
+    const tipoBadge = `<span class="badge" style="background:${isVacacion ? '#fff3e0' : '#e3f2fd'};color:${isVacacion ? '#bf360c' : '#0d47a1'}">${isVacacion ? '🏖 Vacación' : '⏱ Permiso'}</span>`;
+
+    return `
+      <div class="permiso ${cls}">
+        <div class="permiso-header">
+          <h3>${p.nombre} <span style="font-size:12px;color:#998777;font-weight:500">#${p.numeroColab || '?'}</span></h3>
+          <div class="badges">
+            ${tipoBadge}
+            ${cd && (p.respuesta === 'Pendiente' || p.respuesta === 'Aprobado') ? `<span class="badge countdown ${cd.kind}">${cd.text}</span>` : ''}
+            <span class="badge ${cls}">${p.respuesta}</span>
+          </div>
+        </div>
+        <div class="permiso-body">
+          ${bodyFields}
           ${analysisHTML}
         </div>
         ${actionsHTML}
