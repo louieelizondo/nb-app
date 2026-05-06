@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NB · Solicitar Permiso</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: linear-gradient(135deg, #faf6f1 0%, #f0ebe4 50%, #e8e0d8 100%);
+      color: #2d2319;
+      min-height: 100vh;
+      padding: 24px 16px 60px;
+    }
+    .hero {
+      background: linear-gradient(135deg, #1a3a1a 0%, #2e6b2e 50%, #3a7c3a 100%);
+      color: white;
+      padding: 32px 24px;
+      text-align: center;
+      border-radius: 18px;
+      max-width: 640px;
+      margin: 0 auto 24px;
+      box-shadow: 0 4px 16px rgba(0,0,0,.08);
+    }
+    .hero-logo {
+      width: 56px; height: 56px;
+      background: rgba(255,255,255,.95);
+      border-radius: 14px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 900;
+      color: #2e6b2e;
+      font-size: 22px;
+      margin-bottom: 12px;
+      box-shadow: 0 4px 16px rgba(0,0,0,.2);
+    }
+    .hero h1 { font-size: 22px; font-weight: 800; margin-bottom: 4px; }
+    .hero p { font-size: 13px; opacity: .85; }
+
+    .card {
+      background: white;
+      border-radius: 16px;
+      padding: 28px 24px;
+      max-width: 640px;
+      margin: 0 auto 16px;
+      box-shadow: 0 4px 20px rgba(0,0,0,.05);
+    }
+    h2 { font-size: 16px; font-weight: 700; margin-bottom: 16px; color: #1a3a1a; }
+
+    label {
+      display: block;
+      font-size: 12px;
+      font-weight: 600;
+      color: #5e4e3d;
+      margin-bottom: 6px;
+      margin-top: 14px;
+      letter-spacing: .3px;
+      text-transform: uppercase;
+    }
+    .req::after { content: " *"; color: #c62828; }
+
+    input, select, textarea {
+      width: 100%;
+      padding: 12px 14px;
+      border: 1px solid #d4cabe;
+      border-radius: 10px;
+      font-size: 15px;
+      font-family: inherit;
+      background: #fcfaf6;
+      color: #2d2319;
+      transition: border-color .15s, box-shadow .15s;
+    }
+    input:focus, select:focus, textarea:focus {
+      outline: none;
+      border-color: #2e6b2e;
+      box-shadow: 0 0 0 3px rgba(46,107,46,.12);
+      background: white;
+    }
+    textarea { resize: vertical; min-height: 80px; }
+    .hint { font-size: 11px; color: #998777; margin-top: 4px; }
+
+    .checkboxes {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      padding: 12px 14px;
+      border: 1px solid #d4cabe;
+      border-radius: 10px;
+      background: #fcfaf6;
+    }
+    .checkboxes label {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin: 0;
+      font-size: 14px;
+      font-weight: 500;
+      text-transform: none;
+      letter-spacing: 0;
+      color: #2d2319;
+      cursor: pointer;
+    }
+    .checkboxes input[type="checkbox"] {
+      width: auto;
+      margin: 0;
+      cursor: pointer;
+      accent-color: #2e6b2e;
+    }
+
+    .row-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+    @media(max-width: 500px) { .row-2 { grid-template-columns: 1fr; } }
+
+    button.submit {
+      width: 100%;
+      padding: 16px;
+      background: linear-gradient(135deg, #1a3a1a 0%, #2e6b2e 100%);
+      color: white;
+      border: none;
+      border-radius: 12px;
+      font-size: 16px;
+      font-weight: 700;
+      cursor: pointer;
+      margin-top: 22px;
+      box-shadow: 0 4px 12px rgba(46,107,46,.25);
+      transition: transform .1s, box-shadow .15s;
+    }
+    button.submit:hover { transform: translateY(-1px); box-shadow: 0 6px 18px rgba(46,107,46,.35); }
+    button.submit:disabled {
+      background: #999;
+      cursor: not-allowed;
+      transform: none;
+      box-shadow: none;
+    }
+
+    .alert {
+      padding: 14px 18px;
+      border-radius: 10px;
+      margin-bottom: 14px;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+    .alert.success {
+      background: #e8f5e9;
+      color: #1b5e20;
+      border-left: 4px solid #2e7d32;
+    }
+    .alert.error {
+      background: #ffebee;
+      color: #b71c1c;
+      border-left: 4px solid #c62828;
+    }
+    .alert.info {
+      background: #e3f2fd;
+      color: #0d47a1;
+      border-left: 4px solid #1976d2;
+    }
+
+    .reponer-block {
+      transition: max-height .25s ease, opacity .25s ease;
+      overflow: hidden;
+    }
+    .reponer-block.hidden { max-height: 0; opacity: 0; }
+
+    .file-input {
+      display: block;
+      padding: 16px;
+      border: 2px dashed #b8a890;
+      border-radius: 10px;
+      background: #fcfaf6;
+      text-align: center;
+      cursor: pointer;
+      font-size: 13px;
+      color: #5e4e3d;
+    }
+    .file-input input[type="file"] { display: none; }
+    .file-name { display: block; margin-top: 6px; font-size: 12px; color: #2e6b2e; font-weight: 600; }
+
+    footer { text-align: center; padding: 20px; font-size: 11px; color: #998777; }
+  </style>
+</head>
+<body>
+
+<div class="hero">
+  <div class="hero-logo">NB</div>
+  <h1>Solicitar Permiso</h1>
+  <p>Natural Balance Club · Llena tus datos para registrar un permiso</p>
+</div>
+
+<div id="msgArea"></div>
+
+<form id="permisoForm" class="card" autocomplete="off">
+  <h2>Datos del Permiso</h2>
+
+  <label class="req" for="numeroColab">Tu nombre</label>
+  <select id="numeroColab" required>
+    <option value="">Cargando colaboradores…</option>
+  </select>
+  <p class="hint">Si tu nombre no aparece, avísale a Louie.</p>
+
+  <label class="req" for="fechaPermiso">Fecha del permiso</label>
+  <input type="date" id="fechaPermiso" required>
+
+  <label class="req" for="horarioAusente">Horario que vas a estar ausente</label>
+  <input type="text" id="horarioAusente" placeholder="Ej: 8:00 - 12:00" required>
+
+  <label class="req" for="horasAusente">Tiempo total ausente (en horas)</label>
+  <input type="number" id="horasAusente" min="0.5" max="8" step="0.5" placeholder="4" required>
+  <p class="hint">1 día completo = 8 horas. Máximo 8.</p>
+
+  <label class="req" for="asunto">Asunto del permiso</label>
+  <select id="asunto" required>
+    <option value="">— Selecciona —</option>
+    <option value="Personal">Personal (no califica para reponer)</option>
+    <option value="Médico">Médico</option>
+    <option value="Legal">Legal</option>
+    <option value="Educativo">Educativo</option>
+  </select>
+
+  <label for="descripcion">Breve descripción</label>
+  <textarea id="descripcion" placeholder="Ej: Cita médica de control, audiencia legal, etc."></textarea>
+
+  <label class="req" for="reponer">¿Vas a reponer el tiempo ausente?</label>
+  <select id="reponer" required>
+    <option value="">— Selecciona —</option>
+    <option value="Sí">Sí</option>
+    <option value="No">No (se descontará el tiempo)</option>
+  </select>
+  <p class="hint">Solo Médico, Legal y Educativo pueden reponer. Personal siempre se descuenta.</p>
+
+  <div id="reponerBlock" class="reponer-block hidden">
+    <label>¿Cómo vas a reponer el tiempo? (puedes elegir varios)</label>
+    <div class="checkboxes">
+      <label><input type="checkbox" name="comoReponer" value="Entrada temprano 7:30am"> Entrada temprano 7:30am (30 min/día)</label>
+      <label><input type="checkbox" name="comoReponer" value="Entrada temprano 7:45am"> Entrada temprano 7:45am (15 min/día)</label>
+      <label><input type="checkbox" name="comoReponer" value="Descanso de 15min (Producción)"> Descanso de 15min (Producción)</label>
+      <label><input type="checkbox" name="comoReponer" value="Descanso de 30min (Mostrador)"> Descanso de 30min (Mostrador)</label>
+    </div>
+
+    <label for="fechaFinalPagado">Fecha final del tiempo pagado (auto-calculada, puedes editar)</label>
+    <input type="date" id="fechaFinalPagado">
+    <p class="hint">Se calcula automáticamente con tus horas ausentes y método de reposición.</p>
+  </div>
+
+  <label for="comprobante">Comprobante (opcional, médico/legal/educativo)</label>
+  <label class="file-input" for="comprobanteFile">
+    📎 Subir archivo (PDF, JPG, PNG)
+    <input type="file" id="comprobanteFile" accept=".pdf,.jpg,.jpeg,.png">
+    <span class="file-name" id="fileNameLabel"></span>
+  </label>
+
+  <button type="submit" class="submit" id="submitBtn">Enviar Solicitud</button>
+</form>
+
+<footer>Natural Balance Club · Sistema de Permisos</footer>
+
+<script>
+const API = 'https://script.google.com/macros/s/AKfycbxQ7BzFITQnxyndvo2q7Xa1-Sc-yX5S8JGRc1mIbd4ye0rSpN2I2qx1zAjzRqbPXNeL/exec';
+
+const $ = id => document.getElementById(id);
+const msgArea = $('msgArea');
+
+function showMsg(html, type) {
+  msgArea.innerHTML = `<div class="alert ${type}">${html}</div>`;
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+// ─── Load roster ──────────────────────────────────────────────
+async function loadRoster() {
+  try {
+    const resp = await fetch(API + '?action=list_colaboradores_for_permiso');
+    const data = await resp.json();
+    if (!data.ok) throw new Error(data.error || 'Error al cargar');
+    const sel = $('numeroColab');
+    sel.innerHTML = '<option value="">— Selecciona tu nombre —</option>';
+    data.roster.forEach(c => {
+      const opt = document.createElement('option');
+      opt.value = c.numero;
+      opt.textContent = c.nombre;
+      opt.dataset.nombre = c.nombre;
+      sel.appendChild(opt);
+    });
+  } catch (err) {
+    $('numeroColab').innerHTML = '<option value="">Error al cargar — recarga la página</option>';
+    showMsg('No pude cargar la lista de colaboradores. Intenta recargar.', 'error');
+  }
+}
+
+// ─── Conditional reponer block ───────────────────────────────
+$('reponer').addEventListener('change', e => {
+  const block = $('reponerBlock');
+  if (e.target.value === 'Sí') {
+    block.classList.remove('hidden');
+    block.style.maxHeight = block.scrollHeight + 'px';
+    recomputeFechaFinal();
+  } else {
+    block.classList.add('hidden');
+    block.style.maxHeight = 0;
+  }
+});
+
+// ─── Auto-calc Fecha Final Pagado ────────────────────────────
+function recomputeFechaFinal() {
+  const fecha = $('fechaPermiso').value;
+  const horas = parseFloat($('horasAusente').value);
+  const reponer = $('reponer').value;
+  if (reponer !== 'Sí' || !fecha || !horas) return;
+
+  // Get total minutes/day from selected methods
+  let dailyMin = 0;
+  document.querySelectorAll('input[name="comoReponer"]:checked').forEach(cb => {
+    const v = cb.value;
+    if (v.includes('7:30')) dailyMin += 30;
+    else if (v.includes('7:45')) dailyMin += 15;
+    else if (v.includes('15min')) dailyMin += 15;
+    else if (v.includes('30min')) dailyMin += 30;
+  });
+  if (!dailyMin) return;
+
+  const totalMin = horas * 60;
+  const days = Math.ceil(totalMin / dailyMin);
+
+  // Add `days` work days (skip Sunday) starting day after fecha
+  const start = new Date(fecha + 'T12:00:00');
+  let added = 0;
+  while (added < days) {
+    start.setDate(start.getDate() + 1);
+    if (start.getDay() !== 0) added++;  // skip Sundays (NB closes Sun)
+  }
+  $('fechaFinalPagado').value = start.toISOString().slice(0, 10);
+}
+
+['fechaPermiso', 'horasAusente'].forEach(id => $(id).addEventListener('change', recomputeFechaFinal));
+document.querySelectorAll('input[name="comoReponer"]').forEach(cb => {
+  cb.addEventListener('change', recomputeFechaFinal);
+});
+
+// ─── File picker label ───────────────────────────────────────
+$('comprobanteFile').addEventListener('change', e => {
+  const f = e.target.files[0];
+  $('fileNameLabel').textContent = f ? '✓ ' + f.name : '';
+});
+
+// ─── Convert file to base64 ──────────────────────────────────
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      // Strip "data:...;base64," prefix
+      const result = reader.result;
+      const idx = result.indexOf(',');
+      resolve(idx >= 0 ? result.slice(idx + 1) : result);
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+// ─── Submit ──────────────────────────────────────────────────
+$('permisoForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const btn = $('submitBtn');
+  const sel = $('numeroColab');
+  const nombre = sel.options[sel.selectedIndex]?.dataset.nombre || sel.options[sel.selectedIndex]?.textContent || '';
+
+  const comoReponer = Array.from(document.querySelectorAll('input[name="comoReponer"]:checked'))
+    .map(cb => cb.value);
+
+  const permiso = {
+    numeroColab: parseInt($('numeroColab').value),
+    nombre: nombre.trim(),
+    fechaPermiso: $('fechaPermiso').value,
+    horarioAusente: $('horarioAusente').value.trim(),
+    horasAusente: parseFloat($('horasAusente').value),
+    asunto: $('asunto').value,
+    descripcion: $('descripcion').value.trim(),
+    reponer: $('reponer').value,
+    comoReponer: comoReponer,
+    fechaFinalPagado: $('fechaFinalPagado').value
+  };
+
+  if (!permiso.numeroColab || !permiso.nombre) {
+    showMsg('Selecciona tu nombre.', 'error');
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = 'Enviando…';
+
+  let comprobanteBase64 = '';
+  let comprobanteFilename = '';
+  const file = $('comprobanteFile').files[0];
+  if (file) {
+    try {
+      comprobanteBase64 = await fileToBase64(file);
+      comprobanteFilename = file.name;
+    } catch (err) {
+      // Continue without comprobante if file read fails
+    }
+  }
+
+  try {
+    const resp = await fetch(API, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },  // avoid CORS preflight
+      body: JSON.stringify({
+        action: 'submit_permiso',
+        permiso: permiso,
+        comprobanteBase64: comprobanteBase64,
+        comprobanteFilename: comprobanteFilename
+      })
+    });
+    const data = await resp.json();
+    if (data.error) throw new Error(data.error);
+    if (!data.ok) throw new Error('Respuesta inesperada del servidor');
+
+    showMsg(
+      `<strong>✓ Permiso enviado.</strong><br>` +
+      `ID: ${data.id}<br>` +
+      `Louie revisará tu solicitud y recibirás respuesta. Por mientras, queda en estado <strong>Pendiente</strong>.`,
+      'success'
+    );
+    $('permisoForm').reset();
+    $('reponerBlock').classList.add('hidden');
+    $('fileNameLabel').textContent = '';
+  } catch (err) {
+    showMsg('No se pudo enviar: ' + err.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Enviar Solicitud';
+  }
+});
+
+// ─── Init ────────────────────────────────────────────────────
+loadRoster();
+</script>
+
+</body>
+</html>

@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NB · Aprobar Permisos</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: linear-gradient(135deg, #faf6f1 0%, #f0ebe4 50%, #e8e0d8 100%);
+      color: #2d2319;
+      min-height: 100vh;
+      padding: 20px 16px 60px;
+    }
+    .topbar {
+      max-width: 980px;
+      margin: 0 auto 18px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+    }
+    .topbar a { color: #2e6b2e; text-decoration: none; font-size: 13px; font-weight: 600; }
+    .topbar a:hover { text-decoration: underline; }
+
+    .hero {
+      background: linear-gradient(135deg, #1a3a1a 0%, #2e6b2e 50%, #3a7c3a 100%);
+      color: white;
+      padding: 28px 24px;
+      text-align: center;
+      border-radius: 18px;
+      max-width: 980px;
+      margin: 0 auto 20px;
+      box-shadow: 0 4px 16px rgba(0,0,0,.08);
+    }
+    .hero h1 { font-size: 22px; font-weight: 800; margin-bottom: 4px; }
+    .hero p { font-size: 13px; opacity: .85; }
+
+    .filter-bar {
+      max-width: 980px;
+      margin: 0 auto 16px;
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .chip {
+      padding: 8px 16px;
+      border-radius: 20px;
+      background: white;
+      border: 1px solid #d4cabe;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      color: #5e4e3d;
+      transition: all .15s;
+    }
+    .chip.active {
+      background: #1a3a1a;
+      color: white;
+      border-color: #1a3a1a;
+    }
+    .chip:hover:not(.active) { background: #f4ede4; }
+    .chip .count {
+      display: inline-block;
+      margin-left: 6px;
+      padding: 2px 8px;
+      background: rgba(0,0,0,.1);
+      border-radius: 10px;
+      font-size: 11px;
+    }
+    .chip.active .count { background: rgba(255,255,255,.25); }
+
+    .grid {
+      max-width: 980px;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 12px;
+    }
+
+    .permiso {
+      background: white;
+      border-radius: 14px;
+      padding: 18px 20px;
+      box-shadow: 0 2px 10px rgba(0,0,0,.04);
+      border-left: 4px solid #ffa726;
+    }
+    .permiso.aprobado { border-left-color: #2e7d32; opacity: .85; }
+    .permiso.rechazado { border-left-color: #c62828; opacity: .65; }
+
+    .permiso-header {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 10px;
+      flex-wrap: wrap;
+    }
+    .permiso-header h3 { font-size: 16px; font-weight: 700; color: #2d2319; }
+    .badge {
+      display: inline-block;
+      padding: 3px 10px;
+      border-radius: 12px;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .3px;
+    }
+    .badge.pendiente { background: #fff3e0; color: #e65100; }
+    .badge.aprobado { background: #e8f5e9; color: #1b5e20; }
+    .badge.rechazado { background: #ffebee; color: #b71c1c; }
+
+    .permiso-body {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 8px 16px;
+      font-size: 13px;
+      color: #5e4e3d;
+      margin-bottom: 12px;
+    }
+    .permiso-body .field { display: flex; flex-direction: column; }
+    .permiso-body label {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: .4px;
+      color: #998777;
+      text-transform: uppercase;
+      margin-bottom: 2px;
+    }
+    .permiso-body .value { color: #2d2319; font-weight: 500; }
+
+    .permiso-actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      padding-top: 12px;
+      border-top: 1px solid #f0ebe4;
+    }
+    .permiso-actions input[type="date"] {
+      padding: 6px 10px;
+      border: 1px solid #d4cabe;
+      border-radius: 8px;
+      font-size: 13px;
+      background: #fcfaf6;
+      flex: 1;
+      min-width: 130px;
+    }
+    .btn {
+      padding: 8px 14px;
+      border-radius: 8px;
+      border: none;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity .15s;
+    }
+    .btn:disabled { opacity: .5; cursor: not-allowed; }
+    .btn.approve { background: #2e7d32; color: white; }
+    .btn.reject { background: #c62828; color: white; }
+    .btn.approve:hover:not(:disabled) { background: #1b5e20; }
+    .btn.reject:hover:not(:disabled) { background: #8e0000; }
+
+    .empty, .loading {
+      max-width: 980px;
+      margin: 0 auto;
+      padding: 40px 20px;
+      text-align: center;
+      color: #998777;
+      font-size: 14px;
+    }
+    .empty.success { color: #2e7d32; }
+
+    .alert {
+      max-width: 980px;
+      margin: 0 auto 14px;
+      padding: 14px 18px;
+      border-radius: 10px;
+      font-size: 13px;
+    }
+    .alert.success { background: #e8f5e9; color: #1b5e20; border-left: 4px solid #2e7d32; }
+    .alert.error { background: #ffebee; color: #b71c1c; border-left: 4px solid #c62828; }
+
+    .comp-link {
+      display: inline-block;
+      margin-top: 4px;
+      padding: 4px 10px;
+      background: #e3f2fd;
+      color: #0d47a1;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 600;
+      text-decoration: none;
+    }
+    .comp-link:hover { background: #bbdefb; }
+
+    .no-perm {
+      max-width: 600px;
+      margin: 80px auto;
+      padding: 32px;
+      background: white;
+      border-radius: 16px;
+      text-align: center;
+      box-shadow: 0 4px 20px rgba(0,0,0,.05);
+    }
+    .no-perm h2 { color: #c62828; margin-bottom: 12px; }
+  </style>
+</head>
+<body>
+
+<div class="topbar">
+  <a href="index.html">← Volver al Centro de Finanzas</a>
+  <div id="userBadge"></div>
+</div>
+
+<div class="hero">
+  <h1>Aprobar Permisos</h1>
+  <p>Revisa y aprueba o rechaza solicitudes de permiso</p>
+</div>
+
+<div id="content" style="display:none">
+  <div id="msgArea"></div>
+
+  <div class="filter-bar">
+    <div class="chip active" data-filter="Pendiente">Pendientes <span class="count" id="cnt-Pendiente">0</span></div>
+    <div class="chip" data-filter="Aprobado">Aprobados <span class="count" id="cnt-Aprobado">0</span></div>
+    <div class="chip" data-filter="Rechazado">Rechazados <span class="count" id="cnt-Rechazado">0</span></div>
+    <div class="chip" data-filter="">Todos <span class="count" id="cnt-Todos">0</span></div>
+  </div>
+
+  <div id="grid" class="grid"></div>
+</div>
+
+<div id="noPermView" class="no-perm" style="display:none">
+  <h2>Sin acceso</h2>
+  <p>Tu cuenta no tiene permisos para aprobar permisos. Pídele a Louie que te dé acceso.</p>
+</div>
+
+<script src="nb_auth.js"></script>
+<script>
+const API = 'https://script.google.com/macros/s/AKfycbxQ7BzFITQnxyndvo2q7Xa1-Sc-yX5S8JGRc1mIbd4ye0rSpN2I2qx1zAjzRqbPXNeL/exec';
+
+const $ = id => document.getElementById(id);
+let allPermisos = [];
+let currentFilter = 'Pendiente';
+
+function showMsg(html, type, ttl) {
+  $('msgArea').innerHTML = `<div class="alert ${type}">${html}</div>`;
+  if (ttl) setTimeout(() => { $('msgArea').innerHTML = ''; }, ttl);
+}
+
+function canApprove(email) {
+  // Mirror backend canApprovePermisos_(); update both lists if you change it.
+  return ['le.nbclub@gmail.com'].includes(String(email || '').toLowerCase());
+}
+
+async function loadPermisos() {
+  $('grid').innerHTML = '<div class="loading">Cargando…</div>';
+  try {
+    const resp = await fetch(API + '?action=list_permisos');
+    const data = await resp.json();
+    if (!data.ok) throw new Error(data.error || 'Error al cargar');
+    allPermisos = data.permisos || [];
+    updateCounts();
+    render();
+  } catch (err) {
+    $('grid').innerHTML = `<div class="loading" style="color:#c62828">Error: ${err.message}</div>`;
+  }
+}
+
+function updateCounts() {
+  const counts = { Pendiente: 0, Aprobado: 0, Rechazado: 0 };
+  allPermisos.forEach(p => { if (counts[p.respuesta] != null) counts[p.respuesta]++; });
+  $('cnt-Pendiente').textContent = counts.Pendiente;
+  $('cnt-Aprobado').textContent = counts.Aprobado;
+  $('cnt-Rechazado').textContent = counts.Rechazado;
+  $('cnt-Todos').textContent = allPermisos.length;
+}
+
+function fmtDate(s) {
+  if (!s) return '—';
+  const m = String(s).match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!m) return s;
+  return `${m[3]}/${m[2]}/${m[1]}`;
+}
+
+function render() {
+  const list = currentFilter
+    ? allPermisos.filter(p => p.respuesta === currentFilter)
+    : allPermisos;
+
+  if (!list.length) {
+    $('grid').innerHTML = `<div class="empty success">✓ Nada por revisar en "${currentFilter || 'Todos'}"</div>`;
+    return;
+  }
+
+  const user = getNbAuthUser();
+  const userCanApprove = canApprove(user?.email);
+
+  $('grid').innerHTML = list.map(p => {
+    const cls = p.respuesta.toLowerCase();
+    return `
+      <div class="permiso ${cls}">
+        <div class="permiso-header">
+          <h3>${p.nombre} <span style="font-size:12px;color:#998777;font-weight:500">#${p.numeroColab || '?'}</span></h3>
+          <span class="badge ${cls}">${p.respuesta}</span>
+        </div>
+        <div class="permiso-body">
+          <div class="field"><label>Fecha permiso</label><span class="value">${fmtDate(p.fechaPermiso)}</span></div>
+          <div class="field"><label>Horario</label><span class="value">${p.horarioAusente || '—'}</span></div>
+          <div class="field"><label>Horas ausente</label><span class="value">${p.horasAusente}h</span></div>
+          <div class="field"><label>Asunto</label><span class="value">${p.asunto || '—'}</span></div>
+          <div class="field"><label>Reponer</label><span class="value">${p.reponer || '—'}</span></div>
+          <div class="field"><label>Solicitado</label><span class="value">${fmtDate(p.fechaSolicitud)}</span></div>
+          ${p.comoReponer ? `<div class="field" style="grid-column:1/-1"><label>Cómo reponer</label><span class="value">${p.comoReponer}</span></div>` : ''}
+          ${p.descripcion ? `<div class="field" style="grid-column:1/-1"><label>Descripción</label><span class="value">${p.descripcion}</span></div>` : ''}
+          ${p.comprobanteUrl ? `<div class="field" style="grid-column:1/-1"><label>Comprobante</label><a href="${p.comprobanteUrl}" target="_blank" class="comp-link">Ver archivo</a></div>` : ''}
+          ${p.notasAdmin ? `<div class="field" style="grid-column:1/-1"><label>Notas admin</label><span class="value" style="color:#c62828">${p.notasAdmin}</span></div>` : ''}
+          ${p.aprobadoPor ? `<div class="field"><label>Decisión por</label><span class="value">${p.aprobadoPor} · ${fmtDate(p.fechaDecision)}</span></div>` : ''}
+        </div>
+        ${p.respuesta === 'Pendiente' && userCanApprove ? `
+          <div class="permiso-actions">
+            <input type="date" id="ff-${p.id}" value="${p.fechaFinalPagado || ''}" title="Fecha final del tiempo pagado (editable)">
+            <button class="btn approve" onclick="decide('${p.id}', 'Aprobado')">✓ Aprobar</button>
+            <button class="btn reject"  onclick="decide('${p.id}', 'Rechazado')">✗ Rechazar</button>
+          </div>
+        ` : ''}
+        ${p.respuesta === 'Pendiente' && !userCanApprove ? `
+          <div class="permiso-actions" style="color:#998777;font-size:12px;font-style:italic">Sin permisos para aprobar — solo Louie puede.</div>
+        ` : ''}
+      </div>
+    `;
+  }).join('');
+}
+
+async function decide(id, estado) {
+  const user = getNbAuthUser();
+  if (!user) return;
+  const fechaFinal = $(`ff-${id}`)?.value || '';
+
+  let notas = '';
+  if (estado === 'Rechazado') {
+    notas = prompt('Razón del rechazo (opcional):') || '';
+  }
+
+  // Disable buttons while in flight
+  document.querySelectorAll('.btn').forEach(b => b.disabled = true);
+
+  try {
+    const resp = await fetch(API, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({
+        action: 'update_permiso_status',
+        id: id,
+        estado: estado,
+        email: user.email,
+        fechaFinalPagado: fechaFinal,
+        notasAdmin: notas
+      })
+    });
+    const data = await resp.json();
+    if (data.error) throw new Error(data.error);
+
+    showMsg(`✓ Permiso ${estado.toLowerCase()}.`, 'success', 3000);
+    await loadPermisos();
+  } catch (err) {
+    showMsg('Error: ' + err.message, 'error', 6000);
+  } finally {
+    document.querySelectorAll('.btn').forEach(b => b.disabled = false);
+  }
+}
+
+document.querySelectorAll('.chip').forEach(chip => {
+  chip.addEventListener('click', () => {
+    document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+    chip.classList.add('active');
+    currentFilter = chip.dataset.filter;
+    render();
+  });
+});
+
+// ─── Auth gate ──────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  requireNbAuth(() => {
+    const user = getNbAuthUser();
+    renderNbUserBadge('userBadge');
+    if (!canApprove(user?.email)) {
+      // User authed but doesn't have approver permissions — show no-perm view
+      // (they can still see the page exists, but not approve)
+      $('content').style.display = 'block';
+      // Allow read-only view
+      loadPermisos();
+    } else {
+      $('content').style.display = 'block';
+      loadPermisos();
+    }
+  });
+});
+</script>
+
+</body>
+</html>

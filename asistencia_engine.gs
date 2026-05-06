@@ -651,45 +651,38 @@ function getEmpleadoRulesFromNotion_() {
 //   - Repose en días consecutivos, mismo tiempo cada día
 //   - Métodos: entrada temprana 7:30/7:45 o reducir descanso 15/30 min
 
+// Notion DS_PERMISOS kept here for the one-time migration helper in
+// permisos_backend.gs (migrateAprilMayPermisosFromNotion). Engine no longer
+// queries Notion for permisos as of 2026-05-06 — sheet is the only source.
 const NOTION_DS_PERMISOS = '86d1a0bb-1660-44f0-970c-34bad0c6513a';
 const PERMISOS_CACHE_KEY = 'asistencia_permisos_v1';
 const PERMISOS_CACHE_TTL = 300;  // 5 min
 
-/** Fetches all Aprobado permisos. Returns array sorted by Fecha de permiso. Cached 5 min. */
+/**
+ * Fetches all Aprobado permisos from the PERMISOS sheet.
+ * (Sheet replaced Notion as the source of truth on 2026-05-06.
+ *  See permisos_backend.gs for sheet schema + migration helper.)
+ *
+ * Returns array sorted by Fecha_Permiso. Cached 5 min.
+ *
+ * Output shape (consumed by aggregateEmpDays_ and the repose engine):
+ *   {
+ *     id, fechaPermiso, nombreCompleto, colaboradorIds[],
+ *     numeroColab, horasAusente, horarioAusente, asunto[],
+ *     reponer ('Si'|'No'|null), comoReponer[], fechaFinalManual
+ *   }
+ */
 function getApprovedPermisos_() {
-  const cache = CacheService.getScriptCache();
-  const cached = cache.get(PERMISOS_CACHE_KEY);
-  if (cached) {
-    try { return JSON.parse(cached); } catch (e) { /* fall through */ }
-  }
-
-  const filter = { property: 'Respuesta', select: { equals: 'Aprobado' } };
-  const pages = notionQueryAll_(NOTION_DS_PERMISOS, filter, [
-    { property: 'Fecha de permiso', direction: 'ascending' }
-  ]);
-
-  const permisos = pages.map(page => ({
-    id: page.id,
-    fechaPermiso: notionPropValue_(page, 'Fecha de permiso'),
-    nombreCompleto: String(notionPropValue_(page, 'Nombre Completo ') || '').trim(),
-    colaboradorIds: notionPropValue_(page, 'Colaborador') || [],  // array of related page IDs
-    horasAusente: notionPropValue_(page, 'Tiempo total ausente (8 horas por día)') || 0,
-    horarioAusente: notionPropValue_(page, 'HORARIO AUSENTE') || '',
-    asunto: notionPropValue_(page, 'Asunto de permiso ') || [],
-    reponer: notionPropValue_(page, 'Vas a reponer el tiempo ausente?'),  // 'Si' | 'No' | null
-    comoReponer: notionPropValue_(page, '¿Cómo vas a reponer el tiempo?') || [],
-    fechaFinalManual: notionPropValue_(page, 'Fecha final de tiempo pagado')
-  }));
-
-  cache.put(PERMISOS_CACHE_KEY, JSON.stringify(permisos), PERMISOS_CACHE_TTL);
-  return permisos;
+  // Delegated to permisos_backend.gs which owns the sheet schema.
+  return getApprovedPermisosFromSheet_();
 }
 
-/** Force-clear the permisos cache. Run after changing data in Reporte de Permisos. */
+/** Force-clear the permisos cache. Run after editing data in PERMISOS sheet. */
 function refreshPermisos() {
   CacheService.getScriptCache().remove(PERMISOS_CACHE_KEY);
+  CacheService.getScriptCache().remove('asistencia_permisos_sheet_v1');
   const list = getApprovedPermisos_();
-  Logger.log('Refreshed ' + list.length + ' permisos aprobados');
+  Logger.log('Refreshed ' + list.length + ' permisos aprobados (sheet)');
   return list;
 }
 
@@ -917,10 +910,16 @@ function groupPermisosByNumero_(permisos, rulesMap) {
   const result = {};
   permisos.forEach(p => {
     let numero = null;
-    // Prefer relation match
-    for (let i = 0; i < (p.colaboradorIds || []).length; i++) {
-      const id = String(p.colaboradorIds[i]).replace(/-/g, '');
-      if (byPageId[id] != null) { numero = byPageId[id]; break; }
+    // Best: numero stored directly on the row (sheet rows have it)
+    if (p.numeroColab && rulesMap[String(p.numeroColab)]) {
+      numero = parseInt(p.numeroColab);
+    }
+    // Next: Notion relation match (legacy migrated rows w/o numero)
+    if (numero == null) {
+      for (let i = 0; i < (p.colaboradorIds || []).length; i++) {
+        const id = String(p.colaboradorIds[i]).replace(/-/g, '');
+        if (byPageId[id] != null) { numero = byPageId[id]; break; }
+      }
     }
     // Fallback: name match
     if (numero == null) {

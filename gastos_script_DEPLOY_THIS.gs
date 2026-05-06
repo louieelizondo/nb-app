@@ -107,6 +107,9 @@ function doGet(e) {
       case 'shopify_health':            return jsonResp(shopifyHealthCheck());
       // Inventory v2 (MATERIA PRIMA as single source)
       case 'list_inventory':            return jsonResp(listInventory());
+      // Permisos (sheet-based, replaces Notion DB)
+      case 'list_colaboradores_for_permiso': return jsonResp(listColaboradoresForPermiso());
+      case 'list_permisos':                  return jsonResp(listPermisos(e.parameter));
       default:              return jsonResp({ error: 'Unknown action: ' + action }, 400);
     }
   } catch(err) {
@@ -168,6 +171,9 @@ function doPost(e) {
       // Inventory v2 (MATERIA PRIMA as single source)
       case 'save_inventory_counts':    return jsonResp(saveInventoryCounts(body));
       case 'update_inv_field':         return jsonResp(updateInvField(body));
+      // Permisos (sheet-based, replaces Notion DB)
+      case 'submit_permiso':           return jsonResp(submitPermiso(body));
+      case 'update_permiso_status':    return jsonResp(updatePermisoStatus(body));
       default:                 return jsonResp({ error: 'Unknown action: ' + action }, 400);
     }
   } catch(err) {
