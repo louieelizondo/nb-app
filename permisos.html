@@ -24,18 +24,15 @@
       box-shadow: 0 4px 16px rgba(0,0,0,.08);
     }
     .hero-logo {
-      width: 56px; height: 56px;
+      width: 80px; height: 80px;
       background: rgba(255,255,255,.95);
-      border-radius: 14px;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      font-weight: 900;
-      color: #2e6b2e;
-      font-size: 22px;
+      border-radius: 18px;
+      padding: 6px;
+      display: inline-block;
       margin-bottom: 12px;
       box-shadow: 0 4px 16px rgba(0,0,0,.2);
     }
+    .hero-logo img { width: 100%; height: 100%; display: block; }
     .hero h1 { font-size: 22px; font-weight: 800; margin-bottom: 4px; }
     .hero p { font-size: 13px; opacity: .85; }
 
@@ -187,7 +184,7 @@
 <body>
 
 <div class="hero">
-  <div class="hero-logo">NB</div>
+  <div class="hero-logo"><img src="avocado-logo.png" alt="Natural Balance"></div>
   <h1>Solicitar Permiso</h1>
   <p>Natural Balance Club · Llena tus datos para registrar un permiso</p>
 </div>
@@ -255,7 +252,12 @@
     <p class="hint">Se calcula automáticamente con tus horas ausentes y método de reposición.</p>
   </div>
 
-  <p class="hint" style="margin-top:18px;background:#e3f2fd;padding:10px;border-radius:8px;color:#0d47a1">📌 Si después tienes comprobante (médico/legal/educativo), Louie lo subirá al sistema. No es necesario que lo entregues aquí.</p>
+  <div style="margin-top:20px;padding:14px 16px;background:#fff8e1;border-left:4px solid #f57f17;border-radius:8px;font-size:13px;line-height:1.5;color:#3e2723">
+    <strong style="color:#bf360c;display:block;margin-bottom:4px">📎 Comprobante — fecha límite miércoles EOD</strong>
+    Si tu permiso es <strong>médico, legal o educativo</strong>, debes entregarle el comprobante a Louie a más tardar el <strong>miércoles antes del cierre</strong>. Es <strong>tu responsabilidad</strong>.
+    <br><br>
+    <span style="color:#bf360c"><strong>Sin comprobante = no se justifica la falta y no aplica el reposo del tiempo pagado.</strong></span>
+  </div>
 
   <button type="submit" class="submit" id="submitBtn">Enviar Solicitud</button>
 </form>

@@ -438,25 +438,41 @@ function sendPermisoEmail_(toEmail, type, data) {
   let intro = '';
   if (type === 'submitted') intro = 'Recibimos tu solicitud de permiso. Pronto recibirás respuesta de Louie.';
   if (type === 'approved')  intro = '¡Tu permiso fue aprobado! Aquí están los detalles confirmados.';
-  if (type === 'rejected')  intro = 'Tu permiso fue rechazado. ' + (data.notas ? 'Razón: ' + data.notas : '');
+  if (type === 'rejected')  intro = 'Tu permiso fue rechazado.' + (data.notas ? ' Razón: ' + data.notas : '');
+
+  // Logo hosted on GitHub Pages alongside the apps
+  const logoUrl = 'https://louieelizondo.github.io/nb-app/avocado-logo.png';
+
+  // Comprobante urgency block — only for approved permisos with justifiable asunto
+  const justifiable = /m[eé]dico|legal|educativo/i.test(String(data.asunto || ''));
+  const showComprobanteBlock = type === 'approved' && justifiable;
+
+  const comprobanteBlock = showComprobanteBlock ? `
+    <div style="margin-top:20px;padding:16px 18px;background:#fff8e1;border-left:4px solid #f57f17;border-radius:8px;font-size:13px;line-height:1.5">
+      <strong style="color:#bf360c;display:block;margin-bottom:6px">📎 Comprobante requerido — fecha límite miércoles EOD</strong>
+      Es <strong>tu responsabilidad</strong> entregarle el comprobante (médico, legal o educativo) a Louie a más tardar el <strong>miércoles antes del cierre</strong>, para que pueda procesarse en la nómina del jueves por la mañana.
+      <br><br>
+      <span style="color:#bf360c"><strong>Sin comprobante = no se justifica la falta y no aplica el reposo del tiempo pagado.</strong></span>
+    </div>
+  ` : '';
 
   const html = `
     <div style="font-family:-apple-system,Segoe UI,sans-serif;max-width:560px;margin:0 auto;color:#2d2319">
-      <div style="background:linear-gradient(135deg,#1a3a1a 0%,#2e6b2e 100%);color:white;padding:24px;border-radius:14px 14px 0 0;text-align:center">
-        <div style="width:48px;height:48px;background:rgba(255,255,255,.95);border-radius:12px;display:inline-flex;align-items:center;justify-content:center;font-weight:900;color:#2e6b2e;font-size:20px;margin-bottom:8px">NB</div>
-        <h2 style="margin:0;font-size:18px">${subject}</h2>
+      <div style="background:linear-gradient(135deg,#1a3a1a 0%,#2e6b2e 100%);color:white;padding:28px 24px 24px;border-radius:14px 14px 0 0;text-align:center">
+        <img src="${logoUrl}" alt="Natural Balance" style="width:72px;height:72px;display:block;margin:0 auto 10px;background:rgba(255,255,255,.95);padding:6px;border-radius:14px">
+        <h2 style="margin:0;font-size:18px;font-weight:700">${subject}</h2>
       </div>
-      <div style="background:white;padding:24px;border-left:4px solid ${colorBar};border-radius:0 0 14px 14px;box-shadow:0 4px 16px rgba(0,0,0,.05)">
-        <p style="margin:0 0 18px;font-size:14px">Hola <strong>${data.nombre || ''}</strong>,</p>
-        <p style="margin:0 0 18px;font-size:14px;line-height:1.5">${intro}</p>
-        <table style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:16px">
-          <tr><td style="padding:6px 0;color:#998777;width:120px">ID</td><td><code>${data.id}</code></td></tr>
-          <tr><td style="padding:6px 0;color:#998777">Fecha permiso</td><td>${fmtDate(data.fechaPermiso)}</td></tr>
-          <tr><td style="padding:6px 0;color:#998777">Horario</td><td>${data.horario || '—'}</td></tr>
-          <tr><td style="padding:6px 0;color:#998777">Asunto</td><td>${data.asunto || '—'}</td></tr>
-          ${data.descripcion ? `<tr><td style="padding:6px 0;color:#998777;vertical-align:top">Descripción</td><td>${data.descripcion}</td></tr>` : ''}
+      <div style="background:white;padding:26px;border-left:4px solid ${colorBar};border-radius:0 0 14px 14px;box-shadow:0 4px 16px rgba(0,0,0,.05)">
+        <p style="margin:0 0 16px;font-size:15px">Hola <strong>${data.nombre || ''}</strong>,</p>
+        <p style="margin:0 0 18px;font-size:14px;line-height:1.55">${intro}</p>
+        <table style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:8px">
+          <tr><td style="padding:7px 0;color:#998777;width:120px">Fecha permiso</td><td><strong>${fmtDate(data.fechaPermiso)}</strong></td></tr>
+          <tr><td style="padding:7px 0;color:#998777">Horario</td><td>${data.horario || '—'}</td></tr>
+          <tr><td style="padding:7px 0;color:#998777">Asunto</td><td>${data.asunto || '—'}</td></tr>
+          ${data.descripcion ? `<tr><td style="padding:7px 0;color:#998777;vertical-align:top">Descripción</td><td>${data.descripcion}</td></tr>` : ''}
         </table>
-        <p style="margin:0;font-size:12px;color:#998777">Natural Balance Club · Sistema de Permisos</p>
+        ${comprobanteBlock}
+        <p style="margin:24px 0 0;font-size:11px;color:#bbb;border-top:1px solid #f0ebe4;padding-top:14px">Natural Balance Club · Sistema de Permisos<br>Ref: ${data.id || ''}</p>
       </div>
     </div>
   `;
@@ -586,6 +602,58 @@ function refreshPermisosSheet() {
   const list = getApprovedPermisosFromSheet_();
   Logger.log('Refreshed ' + list.length + ' permisos aprobados (sheet)');
   return list;
+}
+
+// ─── One-time fix: shift mis-aligned migrated rows ───────────────────────
+
+/**
+ * The first migration ran under the 17-col schema. The v2 schema inserted
+ * Email_Empleado as column E (5th), so old migrated rows have all their
+ * data after Nombre shifted one column to the LEFT (i.e. Fecha_Permiso
+ * value sits in Email_Empleado column).
+ *
+ * This function scans for that pattern (rows whose ID starts with "NOT"
+ * and whose Email_Empleado matches a date format) and shifts those rows
+ * right by 1 column starting at Email_Empleado. Idempotent — re-running
+ * does nothing once rows are aligned.
+ *
+ * Run once from the editor:
+ *   fixMigratedPermisoColumns()
+ */
+function fixMigratedPermisoColumns() {
+  const sheet = getOrCreateTab(PERMISOS_TAB, PERMISOS_HEADERS);
+  const lastCol = PERMISOS_HEADERS.length;
+  const data = sheet.getDataRange().getValues();
+  if (data.length < 2) return { ok: true, fixed: 0 };
+
+  const headers = data[0];
+  const idCol = headers.indexOf('ID');
+  const emailCol = headers.indexOf('Email_Empleado');  // 5th column (index 4)
+  const datePattern = /^\d{4}-\d{2}-\d{2}/;
+
+  let fixed = 0;
+  for (let r = 1; r < data.length; r++) {
+    const row = data[r];
+    const id = String(row[idCol] || '');
+    if (!id.startsWith('NOT')) continue;
+    const emailVal = String(row[emailCol] || '').trim();
+    // Detect: shifted rows have a date in Email_Empleado, not an email
+    if (!datePattern.test(emailVal)) continue;
+
+    // Build the corrected row: shift everything from Email_Empleado onwards
+    // right by 1, set Email_Empleado to empty, last column overflow = drop.
+    const newRow = row.slice();
+    for (let c = lastCol - 1; c > emailCol; c--) {
+      newRow[c] = row[c - 1];
+    }
+    newRow[emailCol] = '';
+
+    sheet.getRange(r + 1, 1, 1, lastCol).setValues([newRow]);
+    fixed++;
+  }
+  CacheService.getScriptCache().remove(PERMISOS_CACHE_KEY_SHEET);
+  Logger.log('Fixed ' + fixed + ' shifted rows');
+  return { ok: true, fixed: fixed };
 }
 
 // ─── Engine writeback ────────────────────────────────────────────────────

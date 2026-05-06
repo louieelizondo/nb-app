@@ -34,8 +34,31 @@
       margin: 0 auto 20px;
       box-shadow: 0 4px 16px rgba(0,0,0,.08);
     }
+    .hero-logo {
+      width: 64px; height: 64px;
+      background: rgba(255,255,255,.95);
+      border-radius: 14px;
+      padding: 5px;
+      display: inline-block;
+      margin-bottom: 10px;
+      box-shadow: 0 4px 14px rgba(0,0,0,.15);
+    }
+    .hero-logo img { width: 100%; height: 100%; display: block; }
     .hero h1 { font-size: 22px; font-weight: 800; margin-bottom: 4px; }
     .hero p { font-size: 13px; opacity: .85; }
+
+    .urgency-banner {
+      max-width: 980px;
+      margin: 0 auto 16px;
+      padding: 12px 16px;
+      background: #fff8e1;
+      border-left: 4px solid #f57f17;
+      border-radius: 10px;
+      font-size: 12.5px;
+      line-height: 1.5;
+      color: #3e2723;
+    }
+    .urgency-banner strong { color: #bf360c; }
 
     .filter-bar {
       max-width: 980px;
@@ -260,11 +283,15 @@
 </div>
 
 <div class="hero">
+  <div class="hero-logo"><img src="avocado-logo.png" alt="Natural Balance"></div>
   <h1>Aprobar Permisos</h1>
   <p>Revisa, aprueba/rechaza, cancela o sube comprobantes</p>
 </div>
 
 <div id="content" style="display:none">
+  <div class="urgency-banner">
+    <strong>📎 Política de comprobantes:</strong> Los comprobantes (médico/legal/educativo) deben llegar a más tardar <strong>miércoles EOD</strong> para ser procesados en la nómina del jueves. Sin comprobante, la falta no se justifica y no aplica el reposo del tiempo pagado.
+  </div>
   <div id="msgArea"></div>
 
   <div class="filter-bar">
