@@ -127,10 +127,15 @@ function migrateColaboradoresFromNotion() {
   const data = sheet.getDataRange().getValues();
   const headers = data[0];
   const numCol = headers.indexOf('Numero');
-  const existingByNumero = {};
+  const pageIdCol = headers.indexOf('Notion_Page_Id');
+
+  // Match by Notion page ID (each Notion page → exactly one sheet row).
+  // Numero alone isn't unique because Notion recycles employee numbers when
+  // a slot is reused (e.g. #38 = Elvia Activa + Michelle Inactiva).
+  const existingByPageId = {};
   for (let r = 1; r < data.length; r++) {
-    const n = parseInt(data[r][numCol]);
-    if (n) existingByNumero[n] = r + 1;
+    const pid = String(data[r][pageIdCol] || '').replace(/-/g, '').trim();
+    if (pid) existingByPageId[pid] = r + 1;
   }
 
   // Whitespace + case insensitive property lookup. Notion property names often
@@ -287,8 +292,8 @@ function migrateColaboradoresFromNotion() {
     };
     const rowArr = COLABORADORES_HEADERS.map(h => rowDict[h] != null ? rowDict[h] : '');
 
-    if (existingByNumero[numero]) {
-      updates.push({ rowNum: existingByNumero[numero], rowArr: rowArr });
+    if (existingByPageId[pageIdNoDash]) {
+      updates.push({ rowNum: existingByPageId[pageIdNoDash], rowArr: rowArr });
     } else {
       inserts.push(rowArr);
     }
