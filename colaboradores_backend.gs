@@ -133,18 +133,29 @@ function migrateColaboradoresFromNotion() {
     if (n) existingByNumero[n] = r + 1;
   }
 
-  // Try variants — Notion property names often have trailing/leading spaces,
-  // different accents, or capitalization. First non-empty match wins.
+  // Whitespace + case insensitive property lookup. Notion property names often
+  // have trailing/leading spaces or weird capitalization — this normalizes both
+  // sides so we don't have to enumerate every variant.
+  const norm = s => String(s || '').toLowerCase().replace(/\s+/g, ' ').trim();
   const tryProp = (page, names) => {
-    for (const n of names) {
-      const v = notionPropValue_(page, n);
-      if (v != null && v !== '' && (!Array.isArray(v) || v.length)) return v;
+    const wanted = names.map(norm);
+    for (const pname in page.properties) {
+      if (wanted.indexOf(norm(pname)) >= 0) {
+        const v = notionPropValue_(page, pname);
+        if (v != null && v !== '' && (!Array.isArray(v) || v.length)) return v;
+      }
     }
     return null;
   };
   const trySafe = (page, names) => {
     const v = tryProp(page, names);
     return v == null ? '' : v;
+  };
+  // For multi_select fields — return joined string instead of array
+  const tryMulti = (page, names) => {
+    const v = tryProp(page, names);
+    if (Array.isArray(v)) return v.join(', ');
+    return v == null ? '' : String(v);
   };
 
   const now = formatDateStr(new Date());
@@ -159,30 +170,16 @@ function migrateColaboradoresFromNotion() {
 
     // Personal
     const nombre = String(notionPropValue_(page, 'Nombre') || '').trim();
-    const email = String(trySafe(page, [
-      'Correo electrónico', 'Correo Electrónico', 'Correo electronico',
-      'Correo', 'Email', 'E-mail'
-    ])).trim();
-    const celular = String(trySafe(page, [
-      'Celular', 'Celular ', 'Teléfono', 'Telefono', 'Phone', 'Cel'
-    ])).trim();
-    const inicioLaboralRaw = tryProp(page, [
-      'Inicio laboral', 'Inicio laboral ', 'Inicio Laboral', 'Inicio Laboral ',
-      'Fecha de Inicio', 'Fecha Inicio', 'Fecha de inicio', 'Inicio de Labores'
-    ]);
+    const email = String(trySafe(page, ['Correo electrónico', 'Correo Electrónico', 'Correo', 'Email'])).trim();
+    const celular = String(trySafe(page, ['Celular', 'Teléfono', 'Telefono', 'Phone', 'Cel'])).trim();
+    const inicioLaboralRaw = tryProp(page, ['Inicio laboral', 'Inicio Laboral', 'Fecha de Inicio']);
     const inicioLaboral = inicioLaboralRaw ? formatDateStr(inicioLaboralRaw) : '';
-    const fechaNacRaw = tryProp(page, [
-      'Fecha nacimiento', 'Fecha Nacimiento', 'Fecha de nacimiento', 'Nacimiento'
-    ]);
+    const fechaNacRaw = tryProp(page, ['Fecha nacimiento', 'Fecha de nacimiento']);
     const fechaNac = fechaNacRaw ? formatDateStr(fechaNacRaw) : '';
-    const estadoCivil = String(trySafe(page, ['Estado civil', 'Estado Civil'])).trim();
-    const estado = String(trySafe(page, ['Estado ', 'Estado'])).trim();
-    const areaTrabajo = String(trySafe(page, [
-      'Area de trabajo', 'Área de trabajo', 'Area trabajo', 'Área trabajo'
-    ])).trim();
-    const mesaPuesto = String(trySafe(page, [
-      'Mesa / Puesto', 'Mesa/Puesto', 'Mesa /Puesto', 'Mesa/ Puesto', 'Puesto', 'Mesa'
-    ])).trim();
+    const estadoCivil = String(trySafe(page, ['Estado civil'])).trim();
+    const estado = String(trySafe(page, ['Estado'])).trim();
+    const areaTrabajo = tryMulti(page, ['Area de trabajo', 'Área de trabajo']);
+    const mesaPuesto = tryMulti(page, ['Mesa / Puesto', 'Mesa/Puesto', 'Puesto', 'Mesa']);
 
     // IDs
     const rfc = String(trySafe(page, ['RFC', 'rfc'])).trim();

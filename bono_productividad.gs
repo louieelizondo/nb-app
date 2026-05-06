@@ -121,6 +121,14 @@ function notionPropValue_(page, propName) {
       return prop.date ? prop.date.start : null;
     case 'relation':
       return (prop.relation || []).map(o => o.id);
+    case 'phone_number':
+      return prop.phone_number || null;
+    case 'email':
+      return prop.email || null;
+    case 'url':
+      return prop.url || null;
+    case 'people':
+      return (prop.people || []).map(o => o.id);
     case 'created_by':
       return prop.created_by ? prop.created_by.id : null;
     case 'created_time':
