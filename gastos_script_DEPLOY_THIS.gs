@@ -172,8 +172,11 @@ function doPost(e) {
       case 'save_inventory_counts':    return jsonResp(saveInventoryCounts(body));
       case 'update_inv_field':         return jsonResp(updateInvField(body));
       // Permisos (sheet-based, replaces Notion DB)
-      case 'submit_permiso':           return jsonResp(submitPermiso(body));
-      case 'update_permiso_status':    return jsonResp(updatePermisoStatus(body));
+      case 'submit_permiso':                 return jsonResp(submitPermiso(body));
+      case 'update_permiso_status':          return jsonResp(updatePermisoStatus(body));
+      case 'cancel_permiso':                 return jsonResp(cancelPermiso(body));
+      case 'delete_permiso':                 return jsonResp(deletePermiso(body));
+      case 'upload_comprobante_to_permiso':  return jsonResp(uploadComprobanteToPermiso(body));
       default:                 return jsonResp({ error: 'Unknown action: ' + action }, 400);
     }
   } catch(err) {

@@ -437,6 +437,7 @@ function recomputeSemanal(weekStart, weekEnd, sourceFile) {
   // Batch all SEMANAL writes — collect first, flush at the end
   const semInserts = [];               // 2D array, all appended together
   const semUpdates = [];               // [{ rowNum, rowArr }] full-row replacements
+  const allPermisoAnalyses = [];       // collected for writeBackPermisoAnalysis_
 
   Object.keys(byEmpleado).forEach(numStr => {
     const emp = byEmpleado[numStr];
@@ -452,10 +453,12 @@ function recomputeSemanal(weekStart, weekEnd, sourceFile) {
         const colDT = semHeaders.indexOf('DiasTrabajados') + 1;
         semanalSheet.getRange(rowNum, colDT).setValue(aggLocked.diasTrabajados);
       }
+      if (aggLocked.permisoAnalyses) allPermisoAnalyses.push.apply(allPermisoAnalyses, aggLocked.permisoAnalyses);
       return;
     }
 
     const agg = aggregateEmpDays_(emp.days, emp.numero, rulesMap, empPermisos);
+    if (agg.permisoAnalyses) allPermisoAnalyses.push.apply(allPermisoAnalyses, agg.permisoAnalyses);
 
     // Build SEMANAL row
     const rowDict = {
@@ -473,10 +476,15 @@ function recomputeSemanal(weekStart, weekEnd, sourceFile) {
       'FaltasReal': existing.FaltasReal != null && existing.FaltasReal !== ''
         ? existing.FaltasReal
         : agg.faltasRaw,
-      'FaltasJustificadas': existing.FaltasJustificadas || 0,
+      // FaltasJustificadas: max of user-entered value AND auto-detected (permiso w/ comprobante).
+      // This way user can override upward but the engine guarantees a comprobante always counts.
+      'FaltasJustificadas': Math.max(
+        parseInt(existing.FaltasJustificadas || 0) || 0,
+        agg.faltasJustificadasAuto || 0
+      ),
       'FaltasInjustificadas': Math.max(0,
         (parseInt(existing.FaltasReal != null && existing.FaltasReal !== '' ? existing.FaltasReal : agg.faltasRaw) || 0) -
-        (parseInt(existing.FaltasJustificadas || 0) || 0)
+        Math.max(parseInt(existing.FaltasJustificadas || 0) || 0, agg.faltasJustificadasAuto || 0)
       ),
       'FaltasPermisoCubierto': agg.faltasPermisoCubierto || 0,
       'Retardos': agg.retardos,
@@ -579,6 +587,17 @@ function recomputeSemanal(weekStart, weekEnd, sourceFile) {
   }
 
   SpreadsheetApp.flush();
+
+  // Write per-permiso analysis back to the PERMISOS sheet so the admin UI
+  // can show what actually happened (real ausente min, repose status, day-by-day breakdown)
+  try {
+    if (typeof writeBackPermisoAnalysis_ === 'function' && allPermisoAnalyses.length) {
+      writeBackPermisoAnalysis_(allPermisoAnalyses);
+    }
+  } catch (err) {
+    Logger.log('PERMISO_WRITEBACK_ERROR: ' + err.message);
+  }
+
   return { ok: true, computed: computedCount, weekStart: weekStart, weekEnd: weekEnd };
 }
 
@@ -1017,7 +1036,15 @@ function aggregateEmpDays_(days, numero, rulesMap, permisos) {
   let diasDescanso = 0;
   let faltasRaw = 0;
   let faltasPermisoCubierto = 0;
+  let faltasJustificadasAuto = 0;  // bumped when a falta is covered by a permiso with comprobante + valid asunto
   const retardos = [];
+
+  // Asuntos that qualify a falta as justificada when a comprobante is attached.
+  // Personal does NOT justify (per NB Vacaciones-y-Permisos rule).
+  const isJustifiableAsunto = (asuntoArr) => {
+    if (!Array.isArray(asuntoArr)) return false;
+    return asuntoArr.some(a => /m[eé]dico|legal|educativo/i.test(String(a)));
+  };
 
   days.forEach(d => {
     if (workDays && workDays.indexOf(d.DiaSemana) === -1) {
@@ -1035,8 +1062,18 @@ function aggregateEmpDays_(days, numero, rulesMap, permisos) {
     if (d.IsFalta === true || d.IsFalta === 'TRUE') {
       // If a full-day permiso (>=6h) covers it → FaltasPermisoCubierto, not FaltasRaw
       const fullDay = permisosToday.find(p => (parseFloat(p.horasAusente) || 0) >= 6);
-      if (fullDay) faltasPermisoCubierto++;
-      else         faltasRaw++;
+      if (fullDay) {
+        faltasPermisoCubierto++;
+        // Auto-justifica when the covering permiso has a comprobante + valid asunto
+        if (fullDay.comprobanteUrl && isJustifiableAsunto(fullDay.asunto)) {
+          faltasJustificadasAuto++;
+        }
+      } else {
+        faltasRaw++;
+        // Even without a full-day permiso, a same-day permiso w/ comprobante still justifies the falta
+        const justifyingPermiso = permisosToday.find(p => p.comprobanteUrl && isJustifiableAsunto(p.asunto));
+        if (justifyingPermiso) faltasJustificadasAuto++;
+      }
       return;
     }
     diasTrabajados++;
@@ -1062,6 +1099,7 @@ function aggregateEmpDays_(days, numero, rulesMap, permisos) {
   let hntFromPermisos = 0;
   let hntFromShortfall = 0;
   const permisoLines = [];
+  const permisoAnalyses = [];  // for writeBackPermisoAnalysis_
 
   const fmtHrs = (mins) => +(mins / 60).toFixed(2);
   (permisos || []).sort((a, b) => String(a.fechaPermiso).localeCompare(String(b.fechaPermiso)));
@@ -1074,6 +1112,10 @@ function aggregateEmpDays_(days, numero, rulesMap, permisos) {
     const effectiveHrs = fmtHrs(p.effectiveAusenteMin || 0);
     const reponer = p.reponer === 'Si';
 
+    // Detail buffer for sheet writeback (per-permiso, separate from week's permisoLines)
+    const detailBuf = [];
+    let analysisStatus = 'pending';
+
     // Header: "🗓 04/27 Legal · form 2.5h, real 2.55h"
     let hdr = '🗓 ' + dateShort + ' ' + asunto + ' ' + formHrs + 'h';
     if (actualHrs != null && Math.abs(actualHrs - formHrs) >= 0.05) {
@@ -1083,27 +1125,55 @@ function aggregateEmpDays_(days, numero, rulesMap, permisos) {
     // Case 1: > 4h actual → no repose, full HNT
     if (p.overCapNoRepose) {
       hntFromPermisos += effectiveHrs;
-      permisoLines.push(hdr + ' · ❌ excede 4h, descontar ' + effectiveHrs + 'h completo');
+      const line = hdr + ' · ❌ excede 4h, descontar ' + effectiveHrs + 'h completo';
+      permisoLines.push(line);
+      analysisStatus = 'over_cap_no_repose';
+      detailBuf.push(line);
+      permisoAnalyses.push({
+        permisoId: p.id, realAusenteMin: p.actualAusenteMin || null,
+        reposeStatus: analysisStatus, reposeDetail: detailBuf.join('\n')
+      });
       return;
     }
 
     // Case 2: Reponer=No → direct deduction
     if (!reponer) {
       hntFromPermisos += effectiveHrs;
-      permisoLines.push(hdr + ' · descontar ' + effectiveHrs + 'h');
+      const line = hdr + ' · descontar ' + effectiveHrs + 'h';
+      permisoLines.push(line);
+      analysisStatus = 'not_required';
+      detailBuf.push(line);
+      permisoAnalyses.push({
+        permisoId: p.id, realAusenteMin: p.actualAusenteMin || null,
+        reposeStatus: analysisStatus, reposeDetail: detailBuf.join('\n')
+      });
       return;
     }
 
     // Case 3: noChecador employee (no auto-verify)
     if (rules.noChecador) {
-      permisoLines.push(hdr + ' · reponiendo (sin checador)');
+      const line = hdr + ' · reponiendo (sin checador)';
+      permisoLines.push(line);
+      analysisStatus = 'no_checador';
+      detailBuf.push(line);
+      permisoAnalyses.push({
+        permisoId: p.id, realAusenteMin: null,
+        reposeStatus: analysisStatus, reposeDetail: detailBuf.join('\n')
+      });
       return;
     }
 
     // Case 4: Reponer=Sí, no método chosen
     if (!p.reposeWindow || !p.reposeStatus) {
       hntFromPermisos += effectiveHrs;
-      permisoLines.push(hdr + ' · ⚠️ sin método de reponer · descontar ' + effectiveHrs + 'h');
+      const line = hdr + ' · ⚠️ sin método de reponer · descontar ' + effectiveHrs + 'h';
+      permisoLines.push(line);
+      analysisStatus = 'no_method';
+      detailBuf.push(line);
+      permisoAnalyses.push({
+        permisoId: p.id, realAusenteMin: p.actualAusenteMin || null,
+        reposeStatus: analysisStatus, reposeDetail: detailBuf.join('\n')
+      });
       return;
     }
 
@@ -1112,29 +1182,45 @@ function aggregateEmpDays_(days, numero, rulesMap, permisos) {
     const expectedHrs = fmtHrs(st.expectedMin);
 
     // Header line
+    let headerLine;
     if (st.complete) {
-      permisoLines.push(hdr + ' · ✅ reposeado ' + reposedHrs + 'h');
+      headerLine = hdr + ' · ✅ reposeado ' + reposedHrs + 'h';
+      analysisStatus = 'completo';
     } else if (st.windowOver) {
       const shortHrs = fmtHrs(st.shortfallMin);
       hntFromShortfall += shortHrs;
-      permisoLines.push(hdr + ' · ⚠️ falta reponer ' + shortHrs + 'h · descontar ' + shortHrs + 'h');
+      headerLine = hdr + ' · ⚠️ falta reponer ' + shortHrs + 'h · descontar ' + shortHrs + 'h';
+      analysisStatus = 'shortfall';
     } else {
-      permisoLines.push(hdr + ' · reponiendo ' + reposedHrs + '/' + expectedHrs + 'h hasta ' + p.reposeWindow.endDate.slice(5));
+      headerLine = hdr + ' · reponiendo ' + reposedHrs + '/' + expectedHrs + 'h hasta ' + p.reposeWindow.endDate.slice(5);
+      analysisStatus = 'in_progress';
     }
+    permisoLines.push(headerLine);
+    detailBuf.push(headerLine);
 
     // Daily breakdown — one line per day with paid amount and status icon
     const statusIcons = { ok: '✓', partial: '~', missed: '✗', descanso: '—', 'sin-datos': '?' };
     (st.perDay || []).forEach(d => {
       const icon = statusIcons[d.status] || '·';
       const dateShort2 = d.fecha.slice(5);  // MM-DD
+      let dayLine;
       if (d.status === 'descanso') {
-        permisoLines.push('   ' + dateShort2 + ': descanso/inhábil ' + icon);
+        dayLine = '   ' + dateShort2 + ': descanso/inhábil ' + icon;
       } else if (d.status === 'sin-datos') {
-        permisoLines.push('   ' + dateShort2 + ': sin datos ' + icon);
+        dayLine = '   ' + dateShort2 + ': sin datos ' + icon;
       } else {
         const lunchTag = d.lunchSkipped ? ' (saltó comida)' : '';
-        permisoLines.push('   ' + dateShort2 + ': pagó ' + d.paid + 'm de ' + d.expected + 'm ' + icon + lunchTag);
+        dayLine = '   ' + dateShort2 + ': pagó ' + d.paid + 'm de ' + d.expected + 'm ' + icon + lunchTag;
       }
+      permisoLines.push(dayLine);
+      detailBuf.push(dayLine);
+    });
+
+    permisoAnalyses.push({
+      permisoId: p.id,
+      realAusenteMin: p.actualAusenteMin || null,
+      reposeStatus: analysisStatus,
+      reposeDetail: detailBuf.join('\n')
     });
   });
 
@@ -1155,9 +1241,11 @@ function aggregateEmpDays_(days, numero, rulesMap, permisos) {
     diasDescanso: diasDescanso,
     faltasRaw: faltasRaw,
     faltasPermisoCubierto: faltasPermisoCubierto,
+    faltasJustificadasAuto: faltasJustificadasAuto,
     retardos: retardos.length,
     retardosDetalle: retardosDetalle,
-    horasNoTrabajadas: horasNoTrabajadas
+    horasNoTrabajadas: horasNoTrabajadas,
+    permisoAnalyses: permisoAnalyses
   };
 }
 

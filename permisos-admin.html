@@ -86,8 +86,9 @@
       box-shadow: 0 2px 10px rgba(0,0,0,.04);
       border-left: 4px solid #ffa726;
     }
-    .permiso.aprobado { border-left-color: #2e7d32; opacity: .85; }
+    .permiso.aprobado { border-left-color: #2e7d32; }
     .permiso.rechazado { border-left-color: #c62828; opacity: .65; }
+    .permiso.cancelado { border-left-color: #757575; opacity: .6; }
 
     .permiso-header {
       display: flex;
@@ -98,6 +99,7 @@
       flex-wrap: wrap;
     }
     .permiso-header h3 { font-size: 16px; font-weight: 700; color: #2d2319; }
+    .badges { display: flex; gap: 6px; flex-wrap: wrap; }
     .badge {
       display: inline-block;
       padding: 3px 10px;
@@ -110,6 +112,12 @@
     .badge.pendiente { background: #fff3e0; color: #e65100; }
     .badge.aprobado { background: #e8f5e9; color: #1b5e20; }
     .badge.rechazado { background: #ffebee; color: #b71c1c; }
+    .badge.cancelado { background: #eeeeee; color: #424242; }
+    .badge.countdown.urgent { background: #ffcdd2; color: #b71c1c; }
+    .badge.countdown.soon   { background: #ffe0b2; color: #e65100; }
+    .badge.countdown.today  { background: #c5e1a5; color: #2e7d32; }
+    .badge.countdown.future { background: #e1f5fe; color: #01579b; }
+    .badge.countdown.past   { background: #f5f5f5; color: #757575; }
 
     .permiso-body {
       display: grid;
@@ -130,12 +138,54 @@
     }
     .permiso-body .value { color: #2d2319; font-weight: 500; }
 
+    .analysis {
+      grid-column: 1 / -1;
+      margin-top: 8px;
+      padding: 12px 14px;
+      background: #f8f5ef;
+      border-radius: 10px;
+      border-left: 3px solid #2e7d32;
+      font-size: 12px;
+    }
+    .analysis pre {
+      margin: 6px 0 0;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 12px;
+      white-space: pre-wrap;
+      color: #2d2319;
+      line-height: 1.5;
+    }
+    .analysis .status-row {
+      display: flex;
+      gap: 14px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    .analysis-status-badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 8px;
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .3px;
+    }
+    .analysis-status-badge.completo { background: #c8e6c9; color: #1b5e20; }
+    .analysis-status-badge.shortfall { background: #ffccbc; color: #b71c1c; }
+    .analysis-status-badge.in_progress { background: #b3e5fc; color: #01579b; }
+    .analysis-status-badge.over_cap_no_repose { background: #ffccbc; color: #b71c1c; }
+    .analysis-status-badge.not_required { background: #cfd8dc; color: #37474f; }
+    .analysis-status-badge.no_method { background: #ffe082; color: #e65100; }
+    .analysis-status-badge.no_checador { background: #d1c4e9; color: #4527a0; }
+    .analysis-status-badge.pending { background: #fff3e0; color: #e65100; }
+
     .permiso-actions {
       display: flex;
       gap: 8px;
       flex-wrap: wrap;
       padding-top: 12px;
       border-top: 1px solid #f0ebe4;
+      align-items: center;
     }
     .permiso-actions input[type="date"] {
       padding: 6px 10px;
@@ -158,8 +208,15 @@
     .btn:disabled { opacity: .5; cursor: not-allowed; }
     .btn.approve { background: #2e7d32; color: white; }
     .btn.reject { background: #c62828; color: white; }
+    .btn.cancel { background: #757575; color: white; }
+    .btn.delete { background: white; color: #c62828; border: 1px solid #c62828; }
+    .btn.upload { background: #1565c0; color: white; }
     .btn.approve:hover:not(:disabled) { background: #1b5e20; }
     .btn.reject:hover:not(:disabled) { background: #8e0000; }
+    .btn.cancel:hover:not(:disabled) { background: #424242; }
+    .btn.delete:hover:not(:disabled) { background: #ffebee; }
+    .btn.upload:hover:not(:disabled) { background: #0d47a1; }
+    .file-input-hidden { display: none; }
 
     .empty, .loading {
       max-width: 980px;
@@ -193,17 +250,6 @@
       text-decoration: none;
     }
     .comp-link:hover { background: #bbdefb; }
-
-    .no-perm {
-      max-width: 600px;
-      margin: 80px auto;
-      padding: 32px;
-      background: white;
-      border-radius: 16px;
-      text-align: center;
-      box-shadow: 0 4px 20px rgba(0,0,0,.05);
-    }
-    .no-perm h2 { color: #c62828; margin-bottom: 12px; }
   </style>
 </head>
 <body>
@@ -215,7 +261,7 @@
 
 <div class="hero">
   <h1>Aprobar Permisos</h1>
-  <p>Revisa y aprueba o rechaza solicitudes de permiso</p>
+  <p>Revisa, aprueba/rechaza, cancela o sube comprobantes</p>
 </div>
 
 <div id="content" style="display:none">
@@ -225,15 +271,11 @@
     <div class="chip active" data-filter="Pendiente">Pendientes <span class="count" id="cnt-Pendiente">0</span></div>
     <div class="chip" data-filter="Aprobado">Aprobados <span class="count" id="cnt-Aprobado">0</span></div>
     <div class="chip" data-filter="Rechazado">Rechazados <span class="count" id="cnt-Rechazado">0</span></div>
+    <div class="chip" data-filter="Cancelado">Cancelados <span class="count" id="cnt-Cancelado">0</span></div>
     <div class="chip" data-filter="">Todos <span class="count" id="cnt-Todos">0</span></div>
   </div>
 
   <div id="grid" class="grid"></div>
-</div>
-
-<div id="noPermView" class="no-perm" style="display:none">
-  <h2>Sin acceso</h2>
-  <p>Tu cuenta no tiene permisos para aprobar permisos. Pídele a Louie que te dé acceso.</p>
 </div>
 
 <script src="nb_auth.js"></script>
@@ -250,7 +292,6 @@ function showMsg(html, type, ttl) {
 }
 
 function canApprove(email) {
-  // Mirror backend canApprovePermisos_(); update both lists if you change it.
   return ['le.nbclub@gmail.com'].includes(String(email || '').toLowerCase());
 }
 
@@ -269,12 +310,13 @@ async function loadPermisos() {
 }
 
 function updateCounts() {
-  const counts = { Pendiente: 0, Aprobado: 0, Rechazado: 0 };
+  const counts = { Pendiente: 0, Aprobado: 0, Rechazado: 0, Cancelado: 0 };
   allPermisos.forEach(p => { if (counts[p.respuesta] != null) counts[p.respuesta]++; });
   $('cnt-Pendiente').textContent = counts.Pendiente;
-  $('cnt-Aprobado').textContent = counts.Aprobado;
+  $('cnt-Aprobado').textContent  = counts.Aprobado;
   $('cnt-Rechazado').textContent = counts.Rechazado;
-  $('cnt-Todos').textContent = allPermisos.length;
+  $('cnt-Cancelado').textContent = counts.Cancelado;
+  $('cnt-Todos').textContent     = allPermisos.length;
 }
 
 function fmtDate(s) {
@@ -284,13 +326,42 @@ function fmtDate(s) {
   return `${m[3]}/${m[2]}/${m[1]}`;
 }
 
+// Returns { text, kind } e.g. { text: "en 3 días", kind: "future" }
+function countdownFor(fechaPermiso) {
+  if (!fechaPermiso) return null;
+  const today = new Date(); today.setHours(0,0,0,0);
+  const target = new Date(fechaPermiso + 'T00:00:00');
+  const diffDays = Math.round((target - today) / (1000*60*60*24));
+  if (diffDays === 0) return { text: 'Hoy', kind: 'today' };
+  if (diffDays === 1) return { text: 'Mañana', kind: 'urgent' };
+  if (diffDays === -1) return { text: 'Ayer', kind: 'past' };
+  if (diffDays > 1 && diffDays <= 3) return { text: `En ${diffDays} días`, kind: 'urgent' };
+  if (diffDays > 3 && diffDays <= 7) return { text: `En ${diffDays} días`, kind: 'soon' };
+  if (diffDays > 7) return { text: `En ${diffDays} días`, kind: 'future' };
+  return { text: `Hace ${Math.abs(diffDays)} días`, kind: 'past' };
+}
+
+function statusLabel(s) {
+  const labels = {
+    completo: '✅ Reposo completo',
+    shortfall: '⚠️ Shortfall — descontado',
+    in_progress: '⏳ Reponiendo',
+    over_cap_no_repose: '❌ Excede 4h — sin repose',
+    not_required: 'No requiere reponer',
+    no_method: '⚠️ Sin método',
+    no_checador: 'Sin checador',
+    pending: 'Sin computar aún'
+  };
+  return labels[s] || s;
+}
+
 function render() {
   const list = currentFilter
     ? allPermisos.filter(p => p.respuesta === currentFilter)
     : allPermisos;
 
   if (!list.length) {
-    $('grid').innerHTML = `<div class="empty success">✓ Nada por revisar en "${currentFilter || 'Todos'}"</div>`;
+    $('grid').innerHTML = `<div class="empty success">✓ Nada en "${currentFilter || 'Todos'}"</div>`;
     return;
   }
 
@@ -299,11 +370,60 @@ function render() {
 
   $('grid').innerHTML = list.map(p => {
     const cls = p.respuesta.toLowerCase();
+    const cd = countdownFor(p.fechaPermiso);
+
+    // Action area depending on status
+    let actionsHTML = '';
+    if (!userCanApprove) {
+      actionsHTML = `<div class="permiso-actions" style="color:#998777;font-size:12px;font-style:italic">Sin permisos para tomar acciones — solo Louie puede.</div>`;
+    } else if (p.respuesta === 'Pendiente') {
+      actionsHTML = `
+        <div class="permiso-actions">
+          <input type="date" id="ff-${p.id}" value="${p.fechaFinalPagado || ''}" title="Fecha final del tiempo pagado (editable)">
+          <button class="btn approve" onclick="decide('${p.id}', 'Aprobado')">✓ Aprobar</button>
+          <button class="btn reject"  onclick="decide('${p.id}', 'Rechazado')">✗ Rechazar</button>
+          <button class="btn delete"  onclick="del('${p.id}')" title="Eliminar fila por completo">🗑</button>
+        </div>`;
+    } else if (p.respuesta === 'Aprobado') {
+      actionsHTML = `
+        <div class="permiso-actions">
+          <button class="btn upload" onclick="pickComprobante('${p.id}')">${p.comprobanteUrl ? '↻ Reemplazar comprobante' : '📎 Subir comprobante'}</button>
+          <input type="file" id="cf-${p.id}" class="file-input-hidden" accept=".pdf,.jpg,.jpeg,.png" onchange="uploadComprobante('${p.id}', this)">
+          <button class="btn cancel" onclick="cancelP('${p.id}')">Cancelar permiso</button>
+          <button class="btn delete" onclick="del('${p.id}')" title="Eliminar fila por completo">🗑</button>
+        </div>`;
+    } else if (p.respuesta === 'Rechazado' || p.respuesta === 'Cancelado') {
+      actionsHTML = `
+        <div class="permiso-actions">
+          <button class="btn delete" onclick="del('${p.id}')" title="Eliminar fila por completo">🗑 Eliminar</button>
+        </div>`;
+    }
+
+    // Analysis section (real time counted)
+    let analysisHTML = '';
+    if (p.respuesta === 'Aprobado' && (p.realAusenteMin != null || p.reposeStatus)) {
+      analysisHTML = `
+        <div class="analysis">
+          <div class="status-row">
+            <strong>Análisis del checador:</strong>
+            ${p.reposeStatus ? `<span class="analysis-status-badge ${p.reposeStatus}">${statusLabel(p.reposeStatus)}</span>` : ''}
+            ${p.realAusenteMin != null ? `<span style="color:#998777;font-size:11px">Real ausente: <strong style="color:#2d2319">${(p.realAusenteMin/60).toFixed(2)}h</strong></span>` : ''}
+            ${p.computedAt ? `<span style="color:#998777;font-size:11px">Computado: ${fmtDate(p.computedAt)}</span>` : ''}
+          </div>
+          ${p.reposeDetail ? `<pre>${p.reposeDetail.replace(/&/g,'&amp;').replace(/</g,'&lt;')}</pre>` : ''}
+        </div>`;
+    } else if (p.respuesta === 'Aprobado') {
+      analysisHTML = `<div class="analysis" style="border-left-color:#ffa726"><strong>Análisis del checador:</strong> <span class="analysis-status-badge pending">Pendiente</span> <span style="color:#998777;font-size:11px;margin-left:8px">— Se computará la próxima vez que corras la nómina semanal de esa semana.</span></div>`;
+    }
+
     return `
       <div class="permiso ${cls}">
         <div class="permiso-header">
           <h3>${p.nombre} <span style="font-size:12px;color:#998777;font-weight:500">#${p.numeroColab || '?'}</span></h3>
-          <span class="badge ${cls}">${p.respuesta}</span>
+          <div class="badges">
+            ${cd && (p.respuesta === 'Pendiente' || p.respuesta === 'Aprobado') ? `<span class="badge countdown ${cd.kind}">${cd.text}</span>` : ''}
+            <span class="badge ${cls}">${p.respuesta}</span>
+          </div>
         </div>
         <div class="permiso-body">
           <div class="field"><label>Fecha permiso</label><span class="value">${fmtDate(p.fechaPermiso)}</span></div>
@@ -312,22 +432,15 @@ function render() {
           <div class="field"><label>Asunto</label><span class="value">${p.asunto || '—'}</span></div>
           <div class="field"><label>Reponer</label><span class="value">${p.reponer || '—'}</span></div>
           <div class="field"><label>Solicitado</label><span class="value">${fmtDate(p.fechaSolicitud)}</span></div>
+          ${p.email ? `<div class="field"><label>Email</label><span class="value" style="font-size:12px">${p.email}</span></div>` : ''}
           ${p.comoReponer ? `<div class="field" style="grid-column:1/-1"><label>Cómo reponer</label><span class="value">${p.comoReponer}</span></div>` : ''}
           ${p.descripcion ? `<div class="field" style="grid-column:1/-1"><label>Descripción</label><span class="value">${p.descripcion}</span></div>` : ''}
           ${p.comprobanteUrl ? `<div class="field" style="grid-column:1/-1"><label>Comprobante</label><a href="${p.comprobanteUrl}" target="_blank" class="comp-link">Ver archivo</a></div>` : ''}
           ${p.notasAdmin ? `<div class="field" style="grid-column:1/-1"><label>Notas admin</label><span class="value" style="color:#c62828">${p.notasAdmin}</span></div>` : ''}
           ${p.aprobadoPor ? `<div class="field"><label>Decisión por</label><span class="value">${p.aprobadoPor} · ${fmtDate(p.fechaDecision)}</span></div>` : ''}
+          ${analysisHTML}
         </div>
-        ${p.respuesta === 'Pendiente' && userCanApprove ? `
-          <div class="permiso-actions">
-            <input type="date" id="ff-${p.id}" value="${p.fechaFinalPagado || ''}" title="Fecha final del tiempo pagado (editable)">
-            <button class="btn approve" onclick="decide('${p.id}', 'Aprobado')">✓ Aprobar</button>
-            <button class="btn reject"  onclick="decide('${p.id}', 'Rechazado')">✗ Rechazar</button>
-          </div>
-        ` : ''}
-        ${p.respuesta === 'Pendiente' && !userCanApprove ? `
-          <div class="permiso-actions" style="color:#998777;font-size:12px;font-style:italic">Sin permisos para aprobar — solo Louie puede.</div>
-        ` : ''}
+        ${actionsHTML}
       </div>
     `;
   }).join('');
@@ -337,32 +450,77 @@ async function decide(id, estado) {
   const user = getNbAuthUser();
   if (!user) return;
   const fechaFinal = $(`ff-${id}`)?.value || '';
-
   let notas = '';
-  if (estado === 'Rechazado') {
-    notas = prompt('Razón del rechazo (opcional):') || '';
-  }
+  if (estado === 'Rechazado') notas = prompt('Razón del rechazo (opcional):') || '';
+  await postAction({
+    action: 'update_permiso_status', id, estado,
+    email: user.email, fechaFinalPagado: fechaFinal, notasAdmin: notas
+  }, `Permiso ${estado.toLowerCase()}.`);
+}
 
-  // Disable buttons while in flight
+async function cancelP(id) {
+  const user = getNbAuthUser();
+  if (!user) return;
+  if (!confirm('¿Cancelar este permiso aprobado?')) return;
+  const notas = prompt('Razón de cancelación (opcional):') || '';
+  await postAction({
+    action: 'cancel_permiso', id, email: user.email, notasAdmin: notas
+  }, 'Permiso cancelado.');
+}
+
+async function del(id) {
+  const user = getNbAuthUser();
+  if (!user) return;
+  if (!confirm('¿Eliminar el registro? Esto borra la fila y no se puede recuperar.')) return;
+  await postAction({
+    action: 'delete_permiso', id, email: user.email
+  }, 'Permiso eliminado.');
+}
+
+function pickComprobante(id) {
+  const fileInput = $(`cf-${id}`);
+  if (fileInput) fileInput.click();
+}
+
+function fileToBase64(file) {
+  return new Promise((res, rej) => {
+    const fr = new FileReader();
+    fr.onload = () => {
+      const r = fr.result;
+      const i = r.indexOf(',');
+      res(i >= 0 ? r.slice(i + 1) : r);
+    };
+    fr.onerror = rej;
+    fr.readAsDataURL(file);
+  });
+}
+
+async function uploadComprobante(id, fileEl) {
+  const user = getNbAuthUser();
+  if (!user || !fileEl.files[0]) return;
+  const file = fileEl.files[0];
+  showMsg('Subiendo comprobante…', 'success');
+  let base64;
+  try { base64 = await fileToBase64(file); }
+  catch (err) { showMsg('No se pudo leer el archivo: ' + err.message, 'error', 5000); return; }
+  await postAction({
+    action: 'upload_comprobante_to_permiso', id, email: user.email,
+    base64, filename: file.name
+  }, 'Comprobante subido. La falta se marcará como justificada al recomputar la semana.');
+  fileEl.value = '';
+}
+
+async function postAction(body, successMsg) {
   document.querySelectorAll('.btn').forEach(b => b.disabled = true);
-
   try {
     const resp = await fetch(API, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({
-        action: 'update_permiso_status',
-        id: id,
-        estado: estado,
-        email: user.email,
-        fechaFinalPagado: fechaFinal,
-        notasAdmin: notas
-      })
+      body: JSON.stringify(body)
     });
     const data = await resp.json();
     if (data.error) throw new Error(data.error);
-
-    showMsg(`✓ Permiso ${estado.toLowerCase()}.`, 'success', 3000);
+    showMsg('✓ ' + successMsg, 'success', 4000);
     await loadPermisos();
   } catch (err) {
     showMsg('Error: ' + err.message, 'error', 6000);
@@ -380,21 +538,11 @@ document.querySelectorAll('.chip').forEach(chip => {
   });
 });
 
-// ─── Auth gate ──────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
   requireNbAuth(() => {
-    const user = getNbAuthUser();
     renderNbUserBadge('userBadge');
-    if (!canApprove(user?.email)) {
-      // User authed but doesn't have approver permissions — show no-perm view
-      // (they can still see the page exists, but not approve)
-      $('content').style.display = 'block';
-      // Allow read-only view
-      loadPermisos();
-    } else {
-      $('content').style.display = 'block';
-      loadPermisos();
-    }
+    $('content').style.display = 'block';
+    loadPermisos();
   });
 });
 </script>

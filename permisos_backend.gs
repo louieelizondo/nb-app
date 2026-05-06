@@ -31,19 +31,25 @@ const PERMISOS_HEADERS = [
   'Fecha_Solicitud',     // ISO datetime when form submitted
   'NumeroColab',         // number → maps to Colaboradores Activos
   'Nombre',              // string snapshot at submit
+  'Email_Empleado',      // optional, for confirmations
   'Fecha_Permiso',       // YYYY-MM-DD day of absence
-  'Horario_Ausente',     // free text e.g. "8:00 - 12:00"
-  'Horas_Ausente',       // self-reported, max 8 (1 day = 8h per NB rule)
+  'Horario_Ausente',     // e.g. "08:00 - 12:00" (built from time pickers)
+  'Horas_Ausente',       // computed from time pickers, max 8
   'Asunto',              // Personal | Médico | Legal | Educativo (single)
-  'Descripcion',         // brief description from form
+  'Descripcion',         // brief description from form (now required)
   'Reponer',             // "Sí" | "No" | ""
   'Como_Reponer',        // comma-joined methods
   'Fecha_Final_Pagado',  // YYYY-MM-DD (auto-calc on form, editable by admin)
-  'Comprobante_URL',     // Drive shareable URL (médico/legal proof)
-  'Respuesta',           // Pendiente | Aprobado | Rechazado
+  'Comprobante_URL',     // Drive shareable URL — uploaded by admin AFTER decision
+  'Respuesta',           // Pendiente | Aprobado | Rechazado | Cancelado
   'Aprobado_Por',        // admin email
   'Fecha_Decision',      // YYYY-MM-DD when status flipped
-  'Notas_Admin'          // optional rejection reason
+  'Notas_Admin',         // optional rejection/cancellation reason
+  // ── Engine writeback (populated by recomputeSemanal) ──
+  'Real_Ausente_Min',    // actual minutes ausente per checador
+  'Repose_Status',       // pending | completo | shortfall | over_cap_no_repose | not_required
+  'Repose_Detail',       // text breakdown e.g. "28 abr: pagó 30m de 30m ✓\n29 abr: ..."
+  'Computed_At'          // timestamp of last engine writeback
 ];
 
 const PERMISOS_FOLDER_NAME = 'NB_Comprobantes_Permisos';
@@ -54,20 +60,27 @@ const PERMISOS_CACHE_TTL_SHEET = 300;  // 5 min — matches Notion cache
 
 /**
  * Idempotent. Creates PERMISOS tab if missing, ensures headers match.
- * Run once from Apps Script editor before launching the form.
+ * Safe to run repeatedly — adds new columns without touching existing rows.
+ * Run from Apps Script editor whenever the schema changes.
  */
 function setupPermisosSheet() {
   const sheet = getOrCreateTab(PERMISOS_TAB, PERMISOS_HEADERS);
-  // Ensure existing sheet has correct headers (in case of schema drift)
-  const range = sheet.getRange(1, 1, 1, PERMISOS_HEADERS.length);
-  range.setValues([PERMISOS_HEADERS]);
-  range.setFontWeight('bold');
-  range.setBackground('#1a3a1a');
-  range.setFontColor('white');
+
+  // Detect existing columns and add any missing ones (idempotent migration)
+  const lastCol = Math.max(sheet.getLastColumn(), 1);
+  const existing = sheet.getRange(1, 1, 1, lastCol).getValues()[0].map(String);
+  if (existing.length < PERMISOS_HEADERS.length || existing.some((h, i) => h !== PERMISOS_HEADERS[i])) {
+    // Always overwrite the header row to match the canonical schema
+    const range = sheet.getRange(1, 1, 1, PERMISOS_HEADERS.length);
+    range.setValues([PERMISOS_HEADERS]);
+    range.setFontWeight('bold');
+    range.setBackground('#1a3a1a');
+    range.setFontColor('white');
+  }
   sheet.setFrozenRows(1);
 
   // Set reasonable column widths
-  const widths = [140, 130, 60, 180, 100, 130, 70, 90, 250, 60, 220, 110, 220, 100, 220, 110, 220];
+  const widths = [140, 130, 60, 180, 200, 100, 130, 70, 90, 250, 60, 220, 110, 220, 100, 220, 110, 220, 110, 130, 320, 130];
   widths.forEach((w, i) => sheet.setColumnWidth(i + 1, w));
 
   Logger.log('PERMISOS sheet ready · ' + PERMISOS_HEADERS.length + ' columns');
@@ -78,74 +91,83 @@ function setupPermisosSheet() {
 
 /**
  * Public POST handler — no auth required.
- * Body: {
- *   permiso: {
- *     numeroColab, nombre, fechaPermiso, horarioAusente, horasAusente,
- *     asunto, descripcion, reponer, comoReponer, fechaFinalPagado
- *   },
- *   comprobanteBase64?: string,
- *   comprobanteFilename?: string
- * }
+ * Body: { permiso: { numeroColab, nombre, email?, fechaPermiso,
+ *   horarioAusente, horasAusente, asunto, descripcion, reponer,
+ *   comoReponer, fechaFinalPagado } }
+ *
+ * Note: comprobante is no longer collected at submission — admin uploads
+ * it after the fact via uploadComprobanteToPermiso().
  */
 function submitPermiso(body) {
   const p = body.permiso || {};
   if (!p.numeroColab || !p.nombre || !p.fechaPermiso) {
     return { error: 'Faltan campos requeridos: numeroColab, nombre, fechaPermiso' };
   }
+  if (!p.descripcion || !String(p.descripcion).trim()) {
+    return { error: 'La descripción es requerida.' };
+  }
 
   const sheet = getOrCreateTab(PERMISOS_TAB, PERMISOS_HEADERS);
   const id = 'PRM' + Date.now();
   const ahora = formatDateStr(new Date());
 
-  // Optional comprobante upload
-  let comprobanteUrl = '';
-  if (body.comprobanteBase64 && body.comprobanteBase64.length > 100) {
-    try {
-      comprobanteUrl = saveComprobantePermisoToDrive_(
-        id,
-        body.comprobanteBase64,
-        body.comprobanteFilename || 'comprobante.pdf',
-        p.nombre || ''
-      );
-    } catch (err) {
-      Logger.log('PERMISO_COMP_ERROR: ' + err.message);
-      // Don't fail the whole submission — just log the comprobante error
-    }
-  }
-
   const comoReponerStr = Array.isArray(p.comoReponer)
     ? p.comoReponer.join(', ')
     : String(p.comoReponer || '');
 
-  const row = [
-    id,
-    ahora,
-    parseInt(p.numeroColab) || '',
-    String(p.nombre || '').trim(),
-    String(p.fechaPermiso || ''),
-    String(p.horarioAusente || ''),
-    parseFloat(p.horasAusente) || 0,
-    String(p.asunto || ''),
-    String(p.descripcion || ''),
-    String(p.reponer || ''),
-    comoReponerStr,
-    String(p.fechaFinalPagado || ''),
-    comprobanteUrl,
-    'Pendiente',
-    '',
-    '',
-    ''
-  ];
+  // Build row in canonical PERMISOS_HEADERS order
+  const row = buildPermisoRow_({
+    ID: id,
+    Fecha_Solicitud: ahora,
+    NumeroColab: parseInt(p.numeroColab) || '',
+    Nombre: String(p.nombre || '').trim(),
+    Email_Empleado: String(p.email || '').trim().toLowerCase(),
+    Fecha_Permiso: String(p.fechaPermiso || ''),
+    Horario_Ausente: String(p.horarioAusente || ''),
+    Horas_Ausente: parseFloat(p.horasAusente) || 0,
+    Asunto: String(p.asunto || ''),
+    Descripcion: String(p.descripcion || ''),
+    Reponer: String(p.reponer || ''),
+    Como_Reponer: comoReponerStr,
+    Fecha_Final_Pagado: String(p.fechaFinalPagado || ''),
+    Comprobante_URL: '',
+    Respuesta: 'Pendiente',
+    Aprobado_Por: '',
+    Fecha_Decision: '',
+    Notas_Admin: '',
+    Real_Ausente_Min: '',
+    Repose_Status: '',
+    Repose_Detail: '',
+    Computed_At: ''
+  });
   sheet.appendRow(row);
 
-  // Bust the engine's permisos cache so next compute sees the new row immediately
-  // (only matters for Aprobado, but cheap to do here too)
-  try {
-    CacheService.getScriptCache().remove(PERMISOS_CACHE_KEY_SHEET);
-  } catch (e) {}
+  try { CacheService.getScriptCache().remove(PERMISOS_CACHE_KEY_SHEET); } catch (e) {}
+
+  // Best-effort: send confirmation email to employee if provided
+  if (p.email) {
+    try {
+      sendPermisoEmail_(p.email, 'submitted', {
+        id: id, nombre: p.nombre, fechaPermiso: p.fechaPermiso,
+        horario: p.horarioAusente, asunto: p.asunto, descripcion: p.descripcion
+      });
+    } catch (err) {
+      Logger.log('PERMISO_EMAIL_ERROR (submit): ' + err.message);
+    }
+  }
 
   log('PERMISO_SUBMIT', id + ' · ' + p.nombre + ' · ' + p.fechaPermiso);
   return { ok: true, id: id };
+}
+
+/**
+ * Helper — builds a PERMISOS row array in canonical header order from a
+ * { ColumnName: value } object. Missing keys → ''.
+ * Use this everywhere we write to the sheet so column order can change
+ * without breaking inserts.
+ */
+function buildPermisoRow_(obj) {
+  return PERMISOS_HEADERS.map(h => obj[h] != null ? obj[h] : '');
 }
 
 // ─── Public: roster for the dropdown (no PII) ────────────────────────────
@@ -200,6 +222,7 @@ function listPermisos(params) {
       fechaSolicitud:    formatDateStr(row[idx('Fecha_Solicitud')]),
       numeroColab:       parseInt(row[idx('NumeroColab')]) || null,
       nombre:            String(row[idx('Nombre')] || ''),
+      email:             String(row[idx('Email_Empleado')] || ''),
       fechaPermiso:      formatDateStr(row[idx('Fecha_Permiso')]),
       horarioAusente:    String(row[idx('Horario_Ausente')] || ''),
       horasAusente:      parseFloat(row[idx('Horas_Ausente')]) || 0,
@@ -213,10 +236,15 @@ function listPermisos(params) {
       aprobadoPor:       String(row[idx('Aprobado_Por')] || ''),
       fechaDecision:     formatDateStr(row[idx('Fecha_Decision')]),
       notasAdmin:        String(row[idx('Notas_Admin')] || ''),
+      realAusenteMin:    parseFloat(row[idx('Real_Ausente_Min')]) || null,
+      reposeStatus:      String(row[idx('Repose_Status')] || ''),
+      reposeDetail:      String(row[idx('Repose_Detail')] || ''),
+      computedAt:        formatDateStr(row[idx('Computed_At')]),
       _row:              r + 1
     });
   }
-  out.sort((a, b) => String(b.fechaSolicitud).localeCompare(String(a.fechaSolicitud)));
+  // Sort by fechaPermiso DESC (most recent / upcoming permiso at top)
+  out.sort((a, b) => String(b.fechaPermiso || '').localeCompare(String(a.fechaPermiso || '')));
   return { ok: true, permisos: out };
 }
 
@@ -262,13 +290,177 @@ function updatePermisoStatus(body) {
       if (body.notasAdmin != null) {
         sheet.getRange(rowNum, notCol + 1).setValue(String(body.notasAdmin));
       }
-      // Bust the engine's permisos cache so the change is picked up immediately
       CacheService.getScriptCache().remove(PERMISOS_CACHE_KEY_SHEET);
+
+      // Best-effort decision email to employee
+      const empEmail = String(data[r][headers.indexOf('Email_Empleado')] || '');
+      if (empEmail) {
+        try {
+          sendPermisoEmail_(empEmail, body.estado === 'Aprobado' ? 'approved' : 'rejected', {
+            id: body.id,
+            nombre: String(data[r][headers.indexOf('Nombre')] || ''),
+            fechaPermiso: formatDateStr(data[r][headers.indexOf('Fecha_Permiso')]),
+            horario: String(data[r][headers.indexOf('Horario_Ausente')] || ''),
+            asunto: String(data[r][headers.indexOf('Asunto')] || ''),
+            notas: body.notasAdmin || ''
+          });
+        } catch (err) {
+          Logger.log('PERMISO_EMAIL_ERROR (decision): ' + err.message);
+        }
+      }
+
       log('PERMISO_DECISION', body.id + ' · ' + body.estado + ' · ' + body.email);
       return { ok: true, id: body.id, estado: body.estado };
     }
   }
   return { error: 'Permiso no encontrado: ' + body.id };
+}
+
+// ─── Admin: cancel an approved permiso ───────────────────────────────────
+
+/**
+ * Body: { id, email, notasAdmin? }
+ * Sets Respuesta=Cancelado. Engine treats Cancelado like not-approved.
+ */
+function cancelPermiso(body) {
+  if (!body.id || !body.email) return { error: 'Faltan campos: id, email' };
+  if (!canApprovePermisos_(body.email)) {
+    return { error: 'Sin permisos para cancelar (' + body.email + ')' };
+  }
+  const sheet = getOrCreateTab(PERMISOS_TAB, PERMISOS_HEADERS);
+  const data = sheet.getDataRange().getValues();
+  const headers = data[0];
+  const idCol = headers.indexOf('ID');
+  for (let r = 1; r < data.length; r++) {
+    if (String(data[r][idCol]) === String(body.id)) {
+      const rowNum = r + 1;
+      sheet.getRange(rowNum, headers.indexOf('Respuesta') + 1).setValue('Cancelado');
+      sheet.getRange(rowNum, headers.indexOf('Aprobado_Por') + 1).setValue(body.email);
+      sheet.getRange(rowNum, headers.indexOf('Fecha_Decision') + 1).setValue(formatDateStr(new Date()));
+      if (body.notasAdmin) {
+        sheet.getRange(rowNum, headers.indexOf('Notas_Admin') + 1).setValue(String(body.notasAdmin));
+      }
+      CacheService.getScriptCache().remove(PERMISOS_CACHE_KEY_SHEET);
+      log('PERMISO_CANCEL', body.id + ' · ' + body.email);
+      return { ok: true, id: body.id, estado: 'Cancelado' };
+    }
+  }
+  return { error: 'Permiso no encontrado: ' + body.id };
+}
+
+// ─── Admin: delete a permiso row entirely ────────────────────────────────
+
+/**
+ * Body: { id, email }
+ * Removes the row. Use for bad data (e.g. wrong year). Audit trail is lost.
+ */
+function deletePermiso(body) {
+  if (!body.id || !body.email) return { error: 'Faltan campos: id, email' };
+  if (!canApprovePermisos_(body.email)) {
+    return { error: 'Sin permisos para borrar (' + body.email + ')' };
+  }
+  const sheet = getOrCreateTab(PERMISOS_TAB, PERMISOS_HEADERS);
+  const data = sheet.getDataRange().getValues();
+  const headers = data[0];
+  const idCol = headers.indexOf('ID');
+  for (let r = 1; r < data.length; r++) {
+    if (String(data[r][idCol]) === String(body.id)) {
+      sheet.deleteRow(r + 1);
+      CacheService.getScriptCache().remove(PERMISOS_CACHE_KEY_SHEET);
+      log('PERMISO_DELETE', body.id + ' · ' + body.email);
+      return { ok: true, id: body.id };
+    }
+  }
+  return { error: 'Permiso no encontrado: ' + body.id };
+}
+
+// ─── Admin: upload comprobante AFTER decision ────────────────────────────
+
+/**
+ * Body: { id, email, base64, filename }
+ * Uploads file to Drive, sets Comprobante_URL on the permiso row.
+ * Engine then auto-justifies any falta covered by an Aprobado permiso
+ * with a comprobante (asunto Médico/Legal/Educativo).
+ */
+function uploadComprobanteToPermiso(body) {
+  if (!body.id || !body.email || !body.base64) {
+    return { error: 'Faltan campos: id, email, base64' };
+  }
+  if (!canApprovePermisos_(body.email)) {
+    return { error: 'Sin permisos para subir comprobante (' + body.email + ')' };
+  }
+  const sheet = getOrCreateTab(PERMISOS_TAB, PERMISOS_HEADERS);
+  const data = sheet.getDataRange().getValues();
+  const headers = data[0];
+  const idCol = headers.indexOf('ID');
+  for (let r = 1; r < data.length; r++) {
+    if (String(data[r][idCol]) === String(body.id)) {
+      const rowNum = r + 1;
+      const nombre = String(data[r][headers.indexOf('Nombre')] || '');
+      const url = saveComprobantePermisoToDrive_(
+        body.id, body.base64, body.filename || 'comprobante.pdf', nombre
+      );
+      sheet.getRange(rowNum, headers.indexOf('Comprobante_URL') + 1).setValue(url);
+      CacheService.getScriptCache().remove(PERMISOS_CACHE_KEY_SHEET);
+      log('PERMISO_COMPROBANTE', body.id + ' · ' + body.email);
+      return { ok: true, id: body.id, url: url };
+    }
+  }
+  return { error: 'Permiso no encontrado: ' + body.id };
+}
+
+// ─── Email helper ────────────────────────────────────────────────────────
+
+/**
+ * Sends a status email to the employee.
+ * type: 'submitted' | 'approved' | 'rejected'
+ * data: { id, nombre, fechaPermiso, horario, asunto, descripcion?, notas? }
+ */
+function sendPermisoEmail_(toEmail, type, data) {
+  if (!toEmail) return;
+  const subjects = {
+    submitted: 'Permiso recibido — pendiente de revisión',
+    approved:  '✓ Tu permiso fue aprobado',
+    rejected:  '✗ Tu permiso fue rechazado'
+  };
+  const subject = subjects[type] || 'Actualización de tu permiso';
+
+  const fmtDate = (s) => {
+    if (!s) return '—';
+    const m = String(s).match(/^(\d{4})-(\d{2})-(\d{2})/);
+    return m ? (m[3] + '/' + m[2] + '/' + m[1]) : s;
+  };
+
+  const colorBar = type === 'approved' ? '#2e7d32'
+                : type === 'rejected'  ? '#c62828'
+                : '#1565c0';
+
+  let intro = '';
+  if (type === 'submitted') intro = 'Recibimos tu solicitud de permiso. Pronto recibirás respuesta de Louie.';
+  if (type === 'approved')  intro = '¡Tu permiso fue aprobado! Aquí están los detalles confirmados.';
+  if (type === 'rejected')  intro = 'Tu permiso fue rechazado. ' + (data.notas ? 'Razón: ' + data.notas : '');
+
+  const html = `
+    <div style="font-family:-apple-system,Segoe UI,sans-serif;max-width:560px;margin:0 auto;color:#2d2319">
+      <div style="background:linear-gradient(135deg,#1a3a1a 0%,#2e6b2e 100%);color:white;padding:24px;border-radius:14px 14px 0 0;text-align:center">
+        <div style="width:48px;height:48px;background:rgba(255,255,255,.95);border-radius:12px;display:inline-flex;align-items:center;justify-content:center;font-weight:900;color:#2e6b2e;font-size:20px;margin-bottom:8px">NB</div>
+        <h2 style="margin:0;font-size:18px">${subject}</h2>
+      </div>
+      <div style="background:white;padding:24px;border-left:4px solid ${colorBar};border-radius:0 0 14px 14px;box-shadow:0 4px 16px rgba(0,0,0,.05)">
+        <p style="margin:0 0 18px;font-size:14px">Hola <strong>${data.nombre || ''}</strong>,</p>
+        <p style="margin:0 0 18px;font-size:14px;line-height:1.5">${intro}</p>
+        <table style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:16px">
+          <tr><td style="padding:6px 0;color:#998777;width:120px">ID</td><td><code>${data.id}</code></td></tr>
+          <tr><td style="padding:6px 0;color:#998777">Fecha permiso</td><td>${fmtDate(data.fechaPermiso)}</td></tr>
+          <tr><td style="padding:6px 0;color:#998777">Horario</td><td>${data.horario || '—'}</td></tr>
+          <tr><td style="padding:6px 0;color:#998777">Asunto</td><td>${data.asunto || '—'}</td></tr>
+          ${data.descripcion ? `<tr><td style="padding:6px 0;color:#998777;vertical-align:top">Descripción</td><td>${data.descripcion}</td></tr>` : ''}
+        </table>
+        <p style="margin:0;font-size:12px;color:#998777">Natural Balance Club · Sistema de Permisos</p>
+      </div>
+    </div>
+  `;
+  GmailApp.sendEmail(toEmail, subject, '', { htmlBody: html, name: 'NB Permisos' });
 }
 
 // ─── RBAC hook (Phase 1 stub, future-proof) ──────────────────────────────
@@ -379,7 +571,8 @@ function getApprovedPermisosFromSheet_() {
       asunto:          asunto,
       reponer:         reponerNorm,
       comoReponer:     comoReponer,
-      fechaFinalManual: formatDateStr(row[idx('Fecha_Final_Pagado')]) || null
+      fechaFinalManual: formatDateStr(row[idx('Fecha_Final_Pagado')]) || null,
+      comprobanteUrl:  String(row[idx('Comprobante_URL')] || '').trim()
     });
   }
   out.sort((a, b) => String(a.fechaPermiso).localeCompare(String(b.fechaPermiso)));
@@ -393,6 +586,47 @@ function refreshPermisosSheet() {
   const list = getApprovedPermisosFromSheet_();
   Logger.log('Refreshed ' + list.length + ' permisos aprobados (sheet)');
   return list;
+}
+
+// ─── Engine writeback ────────────────────────────────────────────────────
+
+/**
+ * Called by recomputeSemanal in asistencia_engine.gs after processing a week.
+ * Writes per-permiso analysis (real ausente min, repose status, day-by-day
+ * detail, computed timestamp) back to the PERMISOS sheet so the admin UI
+ * can show what actually happened.
+ *
+ * Input: array of {
+ *   permisoId, realAusenteMin, reposeStatus, reposeDetail
+ * }
+ */
+function writeBackPermisoAnalysis_(analyses) {
+  if (!analyses || !analyses.length) return;
+  const sheet = getOrCreateTab(PERMISOS_TAB, PERMISOS_HEADERS);
+  const data = sheet.getDataRange().getValues();
+  const headers = data[0];
+  const idCol = headers.indexOf('ID');
+  const realCol = headers.indexOf('Real_Ausente_Min');
+  const statusCol = headers.indexOf('Repose_Status');
+  const detailCol = headers.indexOf('Repose_Detail');
+  const computedCol = headers.indexOf('Computed_At');
+  if (idCol < 0 || realCol < 0) return;  // sheet not yet upgraded — silently skip
+
+  const byId = {};
+  analyses.forEach(a => { byId[String(a.permisoId)] = a; });
+  const now = formatDateStr(new Date());
+
+  for (let r = 1; r < data.length; r++) {
+    const id = String(data[r][idCol]);
+    const a = byId[id];
+    if (!a) continue;
+    const rowNum = r + 1;
+    sheet.getRange(rowNum, realCol + 1).setValue(a.realAusenteMin != null ? a.realAusenteMin : '');
+    sheet.getRange(rowNum, statusCol + 1).setValue(a.reposeStatus || '');
+    sheet.getRange(rowNum, detailCol + 1).setValue(a.reposeDetail || '');
+    sheet.getRange(rowNum, computedCol + 1).setValue(now);
+  }
+  CacheService.getScriptCache().remove(PERMISOS_CACHE_KEY_SHEET);
 }
 
 // ─── One-time migration: April + May permisos from Notion → Sheet ────────
@@ -484,25 +718,26 @@ function migrateAprilMayPermisosFromNotion() {
     const comoReponerStr = Array.isArray(comoReponerArr) ? comoReponerArr.join(', ') : String(comoReponerArr);
     const fechaFinal = String(notionPropValue_(page, 'Fecha final de tiempo pagado') || '');
 
-    rowsToAppend.push([
-      sheetId,                                            // ID
-      formatDateStr(new Date()),                          // Fecha_Solicitud (today, since we don't have it from Notion)
-      numero || '',                                       // NumeroColab
-      nombreCompleto,                                     // Nombre
-      fecha,                                              // Fecha_Permiso
-      horario,                                            // Horario_Ausente
-      horas,                                              // Horas_Ausente
-      asuntoStr,                                          // Asunto
-      '',                                                 // Descripcion (Notion didn't have this field)
-      reponer,                                            // Reponer
-      comoReponerStr,                                     // Como_Reponer
-      fechaFinal,                                         // Fecha_Final_Pagado
-      '',                                                 // Comprobante_URL (Notion didn't store these)
-      'Aprobado',                                         // Respuesta
-      'le.nbclub@gmail.com',                              // Aprobado_Por (assumed Louie)
-      formatDateStr(new Date()),                          // Fecha_Decision
-      'Migrado de Notion (' + page.id + ')'               // Notas_Admin
-    ]);
+    rowsToAppend.push(buildPermisoRow_({
+      ID: sheetId,
+      Fecha_Solicitud: formatDateStr(new Date()),
+      NumeroColab: numero || '',
+      Nombre: nombreCompleto,
+      Email_Empleado: '',
+      Fecha_Permiso: fecha,
+      Horario_Ausente: horario,
+      Horas_Ausente: horas,
+      Asunto: asuntoStr,
+      Descripcion: '',
+      Reponer: reponer,
+      Como_Reponer: comoReponerStr,
+      Fecha_Final_Pagado: fechaFinal,
+      Comprobante_URL: '',
+      Respuesta: 'Aprobado',
+      Aprobado_Por: 'le.nbclub@gmail.com',
+      Fecha_Decision: formatDateStr(new Date()),
+      Notas_Admin: 'Migrado de Notion (' + page.id + ')'
+    }));
   });
 
   if (rowsToAppend.length) {

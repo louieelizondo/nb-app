@@ -203,15 +203,23 @@
   </select>
   <p class="hint">Si tu nombre no aparece, avísale a Louie.</p>
 
+  <label for="email">Tu correo (opcional, para confirmaciones)</label>
+  <input type="email" id="email" placeholder="tu@correo.com" autocomplete="email">
+  <p class="hint">Si lo llenas, recibirás un correo cuando se reciba y cuando se apruebe/rechace.</p>
+
   <label class="req" for="fechaPermiso">Fecha del permiso</label>
   <input type="date" id="fechaPermiso" required>
 
-  <label class="req" for="horarioAusente">Horario que vas a estar ausente</label>
-  <input type="text" id="horarioAusente" placeholder="Ej: 8:00 - 12:00" required>
+  <label class="req">Horario que vas a estar ausente</label>
+  <div class="row-2">
+    <input type="time" id="horaInicio" required>
+    <input type="time" id="horaFin" required>
+  </div>
+  <p class="hint">Selecciona la hora de inicio y la hora de fin. Las horas se calculan solas (máx 8h).</p>
 
-  <label class="req" for="horasAusente">Tiempo total ausente (en horas)</label>
-  <input type="number" id="horasAusente" min="0.5" max="8" step="0.5" placeholder="4" required>
-  <p class="hint">1 día completo = 8 horas. Máximo 8.</p>
+  <input type="hidden" id="horarioAusente">
+  <input type="hidden" id="horasAusente">
+  <p id="horasComputed" class="hint" style="color:#2e6b2e;font-weight:600;display:none">Calculado: <span id="horasComputedTxt"></span></p>
 
   <label class="req" for="asunto">Asunto del permiso</label>
   <select id="asunto" required>
@@ -222,8 +230,8 @@
     <option value="Educativo">Educativo</option>
   </select>
 
-  <label for="descripcion">Breve descripción</label>
-  <textarea id="descripcion" placeholder="Ej: Cita médica de control, audiencia legal, etc."></textarea>
+  <label class="req" for="descripcion">Breve descripción</label>
+  <textarea id="descripcion" placeholder="Ej: Cita médica de control, audiencia legal, etc." required minlength="6"></textarea>
 
   <label class="req" for="reponer">¿Vas a reponer el tiempo ausente?</label>
   <select id="reponer" required>
@@ -247,12 +255,7 @@
     <p class="hint">Se calcula automáticamente con tus horas ausentes y método de reposición.</p>
   </div>
 
-  <label for="comprobante">Comprobante (opcional, médico/legal/educativo)</label>
-  <label class="file-input" for="comprobanteFile">
-    📎 Subir archivo (PDF, JPG, PNG)
-    <input type="file" id="comprobanteFile" accept=".pdf,.jpg,.jpeg,.png">
-    <span class="file-name" id="fileNameLabel"></span>
-  </label>
+  <p class="hint" style="margin-top:18px;background:#e3f2fd;padding:10px;border-radius:8px;color:#0d47a1">📌 Si después tienes comprobante (médico/legal/educativo), Louie lo subirá al sistema. No es necesario que lo entregues aquí.</p>
 
   <button type="submit" class="submit" id="submitBtn">Enviar Solicitud</button>
 </form>
@@ -304,6 +307,38 @@ $('reponer').addEventListener('change', e => {
   }
 });
 
+// ─── Compute Horas + Horario from time pickers ────────────────
+function recomputeHoras() {
+  const ini = $('horaInicio').value;
+  const fin = $('horaFin').value;
+  const txt = $('horasComputedTxt');
+  const wrap = $('horasComputed');
+  if (!ini || !fin) {
+    wrap.style.display = 'none';
+    $('horarioAusente').value = '';
+    $('horasAusente').value = '';
+    return;
+  }
+  const [hi, mi] = ini.split(':').map(Number);
+  const [hf, mf] = fin.split(':').map(Number);
+  let mins = (hf * 60 + mf) - (hi * 60 + mi);
+  if (mins < 0) mins = 0;
+  const horas = Math.min(8, +(mins / 60).toFixed(2));
+  $('horarioAusente').value = ini + ' - ' + fin;
+  $('horasAusente').value = horas;
+  if (horas <= 0) {
+    txt.textContent = 'La hora de fin debe ser después de la de inicio';
+    wrap.style.display = 'block';
+    wrap.style.color = '#c62828';
+  } else {
+    txt.textContent = horas + ' h (' + ini + ' a ' + fin + ')';
+    wrap.style.display = 'block';
+    wrap.style.color = '#2e6b2e';
+  }
+  recomputeFechaFinal();
+}
+['horaInicio', 'horaFin'].forEach(id => $(id).addEventListener('change', recomputeHoras));
+
 // ─── Auto-calc Fecha Final Pagado ────────────────────────────
 function recomputeFechaFinal() {
   const fecha = $('fechaPermiso').value;
@@ -335,31 +370,10 @@ function recomputeFechaFinal() {
   $('fechaFinalPagado').value = start.toISOString().slice(0, 10);
 }
 
-['fechaPermiso', 'horasAusente'].forEach(id => $(id).addEventListener('change', recomputeFechaFinal));
+$('fechaPermiso').addEventListener('change', recomputeFechaFinal);
 document.querySelectorAll('input[name="comoReponer"]').forEach(cb => {
   cb.addEventListener('change', recomputeFechaFinal);
 });
-
-// ─── File picker label ───────────────────────────────────────
-$('comprobanteFile').addEventListener('change', e => {
-  const f = e.target.files[0];
-  $('fileNameLabel').textContent = f ? '✓ ' + f.name : '';
-});
-
-// ─── Convert file to base64 ──────────────────────────────────
-function fileToBase64(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      // Strip "data:...;base64," prefix
-      const result = reader.result;
-      const idx = result.indexOf(',');
-      resolve(idx >= 0 ? result.slice(idx + 1) : result);
-    };
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
-}
 
 // ─── Submit ──────────────────────────────────────────────────
 $('permisoForm').addEventListener('submit', async e => {
@@ -368,15 +382,24 @@ $('permisoForm').addEventListener('submit', async e => {
   const sel = $('numeroColab');
   const nombre = sel.options[sel.selectedIndex]?.dataset.nombre || sel.options[sel.selectedIndex]?.textContent || '';
 
+  // Final compute pass to make sure horarioAusente/horasAusente are set
+  recomputeHoras();
+  const horas = parseFloat($('horasAusente').value);
+  if (!horas || horas <= 0) {
+    showMsg('Revisa el horario — la hora de fin debe ser después de la de inicio.', 'error');
+    return;
+  }
+
   const comoReponer = Array.from(document.querySelectorAll('input[name="comoReponer"]:checked'))
     .map(cb => cb.value);
 
   const permiso = {
     numeroColab: parseInt($('numeroColab').value),
     nombre: nombre.trim(),
+    email: $('email').value.trim(),
     fechaPermiso: $('fechaPermiso').value,
-    horarioAusente: $('horarioAusente').value.trim(),
-    horasAusente: parseFloat($('horasAusente').value),
+    horarioAusente: $('horarioAusente').value,
+    horasAusente: horas,
     asunto: $('asunto').value,
     descripcion: $('descripcion').value.trim(),
     reponer: $('reponer').value,
@@ -388,32 +411,19 @@ $('permisoForm').addEventListener('submit', async e => {
     showMsg('Selecciona tu nombre.', 'error');
     return;
   }
+  if (!permiso.descripcion) {
+    showMsg('La descripción es requerida.', 'error');
+    return;
+  }
 
   btn.disabled = true;
   btn.textContent = 'Enviando…';
-
-  let comprobanteBase64 = '';
-  let comprobanteFilename = '';
-  const file = $('comprobanteFile').files[0];
-  if (file) {
-    try {
-      comprobanteBase64 = await fileToBase64(file);
-      comprobanteFilename = file.name;
-    } catch (err) {
-      // Continue without comprobante if file read fails
-    }
-  }
 
   try {
     const resp = await fetch(API, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },  // avoid CORS preflight
-      body: JSON.stringify({
-        action: 'submit_permiso',
-        permiso: permiso,
-        comprobanteBase64: comprobanteBase64,
-        comprobanteFilename: comprobanteFilename
-      })
+      body: JSON.stringify({ action: 'submit_permiso', permiso: permiso })
     });
     const data = await resp.json();
     if (data.error) throw new Error(data.error);
@@ -422,12 +432,13 @@ $('permisoForm').addEventListener('submit', async e => {
     showMsg(
       `<strong>✓ Permiso enviado.</strong><br>` +
       `ID: ${data.id}<br>` +
-      `Louie revisará tu solicitud y recibirás respuesta. Por mientras, queda en estado <strong>Pendiente</strong>.`,
+      `Louie revisará tu solicitud y recibirás respuesta. Por mientras, queda en estado <strong>Pendiente</strong>.` +
+      (permiso.email ? '<br><span style="font-size:12px">Te enviamos un correo de confirmación a ' + permiso.email + '.</span>' : ''),
       'success'
     );
     $('permisoForm').reset();
     $('reponerBlock').classList.add('hidden');
-    $('fileNameLabel').textContent = '';
+    $('horasComputed').style.display = 'none';
   } catch (err) {
     showMsg('No se pudo enviar: ' + err.message, 'error');
   } finally {
