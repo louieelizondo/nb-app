@@ -51,6 +51,7 @@ const COLABORADORES_HEADERS = [
   'Dias_Trabaja',               // comma-joined: "Lun,Mar,Mié,Jue,Vie,Sáb"
   'Horas_Dia',
   'Retardos_Perdonados',
+  'Dias_Usados_Backfill_Actual', // manual: días vacación ya usados ANTES del sistema (anualidad actual)
   'Notas',
   'Notion_Page_Id',
   'Last_Synced_At'
@@ -75,7 +76,7 @@ function setupColaboradoresSheet() {
   range.setFontColor('white');
   sheet.setFrozenRows(1);
   // Reasonable column widths
-  const w = [60, 200, 220, 120, 110, 110, 100, 80, 140, 140, 130, 150, 130, 80, 200, 140, 100, 180, 130, 130, 100, 110, 80, 110, 80, 110, 80, 80, 200, 70, 80, 200, 220, 130];
+  const w = [60, 200, 220, 120, 110, 110, 100, 80, 140, 140, 130, 150, 130, 80, 200, 140, 100, 180, 130, 130, 100, 110, 80, 110, 80, 110, 80, 80, 200, 70, 80, 130, 200, 220, 130];
   w.forEach((px, i) => sheet.setColumnWidth(i + 1, px));
   Logger.log('COLABORADORES sheet ready · ' + COLABORADORES_HEADERS.length + ' columns');
   return { ok: true, columns: COLABORADORES_HEADERS.length };
@@ -360,7 +361,7 @@ function getColaboradoresFromSheet_() {
     out[numero] = {
       nombre:             String(row[idx('Nombre')] || '').trim(),
       email:              String(row[idx('Email')] || '').trim(),
-      telefono:           String(row[idx('Telefono')] || '').trim(),
+      telefono:           String(row[idx('Celular')] || '').trim(),
       inicioLaboral:      formatDateStr(row[idx('Inicio_Laboral')]),
       estado:             estado || 'Activo',
       mesaPuesto:         String(row[idx('Mesa_Puesto')] || '').trim(),
@@ -368,6 +369,7 @@ function getColaboradoresFromSheet_() {
       diasTrabaja:        String(row[idx('Dias_Trabaja')] || '').split(',').map(s => s.trim()).filter(Boolean),
       horasDia:           parseFloat(row[idx('Horas_Dia')]) || 8,
       retardosPerdonados: row[idx('Retardos_Perdonados')] === true || row[idx('Retardos_Perdonados')] === 'TRUE',
+      diasUsadosBackfill: parseFloat(row[idx('Dias_Usados_Backfill_Actual')]) || 0,
       notionPageId:       String(row[idx('Notion_Page_Id')] || '')
     };
   }

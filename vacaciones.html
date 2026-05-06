@@ -315,8 +315,11 @@ async function loadBalance() {
     $('balUsados').textContent = j.diasUsados;
     $('balReservados').textContent = j.diasReservados;
     $('balDisponibles').textContent = j.disponibles;
+    const backfillNote = j.diasUsadosBackfill > 0
+      ? ` · Backfill manual: <strong>${j.diasUsadosBackfill}</strong>`
+      : '';
     $('balanceMeta').innerHTML =
-      `Inicio laboral: <strong>${fmtDateMx(j.inicioLaboral)}</strong> · Anualidad actual: ${fmtDateMx(j.anualidadInicio)} → ${fmtDateMx(j.anualidadFin)} · Próxima anualidad: <strong>${fmtDateMx(j.nextAnniversary)}</strong> (${j.proximaAnualidadDias} días)`;
+      `Inicio laboral: <strong>${fmtDateMx(j.inicioLaboral)}</strong> · Anualidad actual: ${fmtDateMx(j.anualidadInicio)} → ${fmtDateMx(j.anualidadFin)} · Próxima anualidad: <strong>${fmtDateMx(j.nextAnniversary)}</strong> (${j.proximaAnualidadDias} días)${backfillNote}`;
     $('balNote').textContent = j.anosCompletos === 0
       ? 'Aún no aplicas a vacaciones — primera anualidad inicia en tu primer aniversario.'
       : '';

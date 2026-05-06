@@ -219,12 +219,11 @@ function submitVacacion(body) {
       return { error: `Solo tienes ${bal.disponibles} días disponibles en esta anualidad. Solicitaste ${dias}.` };
     }
   } else if (reqYear === bal.currentAnniversaryYear + 1) {
-    // Reservation territory — must be within 2 months of next anniversary
-    const today = new Date();
-    const nextAnniv = new Date(bal.nextAnniversary + 'T00:00:00');
-    const monthsUntil = (nextAnniv - today) / (1000*60*60*24*30.44);
-    if (monthsUntil > 2) {
-      return { error: `Tu próxima anualidad inicia el ${bal.nextAnniversary}. Solo puedes reservar hasta 2 meses antes.` };
+    // Reservation territory — must be within 2 months (60 days) of next anniversary
+    const todayStr = formatDateStr(new Date());
+    const earliestReservaStr = addDaysStr_(bal.nextAnniversary, -60);
+    if (todayStr < earliestReservaStr) {
+      return { error: `Tu próxima anualidad inicia el ${bal.nextAnniversary}. Solo puedes reservar hasta 2 meses antes (a partir del ${earliestReservaStr}).` };
     }
     if (dias > bal.proximaAnualidadDias) {
       return { error: `En tu próxima anualidad tendrás ${bal.proximaAnualidadDias} días. Solicitaste ${dias}.` };
@@ -316,46 +315,50 @@ function getVacacionBalance(numeroColab) {
   if (!c) return { error: 'Colaborador #' + num + ' no encontrado en COLABORADORES' };
   if (!c.inicioLaboral) return { error: 'Falta Inicio_Laboral en COLABORADORES para #' + num };
 
-  const today = new Date(); today.setHours(0,0,0,0);
-  const inicio = new Date(c.inicioLaboral + 'T00:00:00');
+  // String-based date math — avoids the JS Date / TZ off-by-one bug entirely.
+  const inicioStr = String(c.inicioLaboral);
+  const todayStr  = formatDateStr(new Date());
+  const [iy, im, id] = inicioStr.split('-').map(Number);
+  const [ty, tm, td] = todayStr.split('-').map(Number);
 
-  // Years completed at today's date
-  let anos = today.getFullYear() - inicio.getFullYear();
-  const annivThisYear = new Date(today.getFullYear(), inicio.getMonth(), inicio.getDate());
-  if (today < annivThisYear) anos--;
+  // Completed years
+  let anos = ty - iy;
+  if (tm < im || (tm === im && td < id)) anos--;
+
+  const pad = n => String(n).padStart(2, '0');
+  const mmdd = pad(im) + '-' + pad(id);
+  const backfill = parseFloat(c.diasUsadosBackfill) || 0;
 
   if (anos < 1) {
-    // First year — no entitlement yet
-    const firstAnniv = new Date(inicio); firstAnniv.setFullYear(inicio.getFullYear() + 1);
+    const firstAnnivStr = (iy + 1) + '-' + mmdd;
     return {
-      numero: num,
-      nombre: c.nombre,
-      inicioLaboral: c.inicioLaboral,
-      anosCompletos: 0,
-      currentAnniversaryYear: 0,
-      anualidadInicio: c.inicioLaboral,
-      anualidadFin: formatDateStr(firstAnniv),
-      nextAnniversary: formatDateStr(firstAnniv),
+      numero: num, nombre: c.nombre, inicioLaboral: inicioStr,
+      anosCompletos: 0, currentAnniversaryYear: 0,
+      anualidadInicio: inicioStr,
+      anualidadFin: addDaysStr_(firstAnnivStr, -1),
+      nextAnniversary: firstAnnivStr,
       diasEntitled: 0,
-      diasUsados: 0,
+      diasUsados: 0, diasUsadosBackfill: backfill,
       diasReservados: 0,
       disponibles: 0,
       proximaAnualidadDias: lftDaysForYear_(1)
     };
   }
 
-  // Current anniversary year window: [inicio + anos years, inicio + (anos+1) years)
-  const anualidadInicio = new Date(inicio); anualidadInicio.setFullYear(inicio.getFullYear() + anos);
-  const anualidadFin = new Date(inicio); anualidadFin.setFullYear(inicio.getFullYear() + anos + 1);
-  const diasEntitled = lftDaysForYear_(anos);
+  // Anniversary year window: [anniv N, anniv N+1)
+  // anualidadInicio = day OF anniversary; anualidadFin = day BEFORE next anniversary
+  const anualidadInicioStr = (iy + anos) + '-' + mmdd;
+  const nextAnnivStr       = (iy + anos + 1) + '-' + mmdd;
+  const anualidadFinStr    = addDaysStr_(nextAnnivStr, -1);
+  const diasEntitled       = lftDaysForYear_(anos);
   const proximaAnualidadDias = lftDaysForYear_(anos + 1);
 
-  // Sum used + reserved from approved + pending vacation requests
+  // Sum used + reserved from sheet rows (string compare on YYYY-MM-DD works lexicographically)
   const sheet = getOrCreateTab(PERMISOS_TAB, PERMISOS_HEADERS);
   const data = sheet.getDataRange().getValues();
   const headers = data[0];
   const idx = (h) => headers.indexOf(h);
-  let usados = 0, reservados = 0;
+  let usadosFromRows = 0, reservados = 0;
   for (let r = 1; r < data.length; r++) {
     const row = data[r];
     if (String(row[idx('Tipo')]) !== 'Vacacion') continue;
@@ -363,30 +366,32 @@ function getVacacionBalance(numeroColab) {
     const respuesta = String(row[idx('Respuesta')]);
     if (respuesta === 'Rechazado' || respuesta === 'Cancelado') continue;
     const dias = parseInt(row[idx('Dias_Vacacion')]) || 0;
-    const start = formatDateStr(row[idx('Fecha_Permiso')]);
-    if (!start) continue;
-    const startDate = new Date(start + 'T00:00:00');
-    if (startDate >= anualidadInicio && startDate < anualidadFin) {
-      usados += dias;
-    } else if (startDate >= anualidadFin) {
+    const startStr = formatDateStr(row[idx('Fecha_Permiso')]);
+    if (!startStr) continue;
+    if (startStr >= anualidadInicioStr && startStr <= anualidadFinStr) {
+      usadosFromRows += dias;
+    } else if (startStr > anualidadFinStr) {
       reservados += dias;
     }
   }
 
+  const diasUsados = usadosFromRows + backfill;
+
   return {
     numero: num,
     nombre: c.nombre,
-    inicioLaboral: c.inicioLaboral,
+    inicioLaboral: inicioStr,
     anosCompletos: anos,
     currentAnniversaryYear: anos,
-    anualidadInicio: formatDateStr(anualidadInicio),
-    anualidadFin: formatDateStr(anualidadFin),
-    nextAnniversary: formatDateStr(anualidadFin),
+    anualidadInicio: anualidadInicioStr,
+    anualidadFin: anualidadFinStr,
+    nextAnniversary: nextAnnivStr,
     diasEntitled,
-    diasUsados: usados,
+    diasUsados,
+    diasUsadosBackfill: backfill,
     diasReservados: reservados,
-    disponibles: Math.max(0, diasEntitled - usados),
-    proximaAnualidadDias: proximaAnualidadDias
+    disponibles: Math.max(0, diasEntitled - diasUsados),
+    proximaAnualidadDias
   };
 }
 
@@ -410,15 +415,14 @@ function lftDaysForYear_(year) {
   return 32;  // capped reasonable upper bound
 }
 
-/** Returns the anniversary year index (0=before first anniv, 1=year-1 window, etc.) for a given absolute date, or null if before inicio. */
+/** Returns the anniversary year index (0=before first anniv, 1=year-1 window, etc.) for a given absolute date string, or null if before inicio. */
 function anniversaryYearForDate_(inicioLaboral, dateStr) {
-  if (!inicioLaboral) return null;
-  const inicio = new Date(inicioLaboral + 'T00:00:00');
-  const target = new Date(dateStr + 'T00:00:00');
-  if (target < inicio) return null;
-  let years = target.getFullYear() - inicio.getFullYear();
-  const annivThatYear = new Date(target.getFullYear(), inicio.getMonth(), inicio.getDate());
-  if (target < annivThatYear) years--;
+  if (!inicioLaboral || !dateStr) return null;
+  if (String(dateStr) < String(inicioLaboral)) return null;
+  const [iy, im, id] = String(inicioLaboral).split('-').map(Number);
+  const [ty, tm, td] = String(dateStr).split('-').map(Number);
+  let years = ty - iy;
+  if (tm < im || (tm === im && td < id)) years--;
   return Math.max(0, years);
 }
 
@@ -469,6 +473,77 @@ function findVacacionOverlaps_(startStr, endStr, excludeNumero) {
     }
   }
   return out;
+}
+
+// ─── One-time seed: pre-existing reservations (Louie's data, May 2026) ──
+
+/**
+ * Seeds the 3 vacation reservations Louie communicated 2026-05-06:
+ *   - Iris Soto Romero (#9)         · 2026-08-01 → 2026-08-15
+ *   - Antonio Aguiñaga (#34)        · 2026-05-29 → 2026-05-30
+ *   - Elvia Raquel Acosta (#38)     · 2026-08-07 → 2026-08-18
+ *
+ * All inserted as Tipo=Vacacion · Respuesta=Aprobado · Aprobado_Por=Louie.
+ * Idempotent — skips rows whose ID already exists.
+ *
+ * Edit the SEED array below if names/dates need adjustment, then run once.
+ */
+function seedReservedVacaciones2026() {
+  const SEED = [
+    { numero: 9,  nombre: 'Iris Soto Romero',           inicio: '2026-08-01', fin: '2026-08-15', desc: 'Vacaciones reservadas (backfill 2026-05-06)' },
+    { numero: 34, nombre: 'Juan Antonio Aguiñaga Rodriguez', inicio: '2026-05-29', fin: '2026-05-30', desc: 'Vacaciones reservadas (backfill 2026-05-06)' },
+    { numero: 38, nombre: 'Elvia Raquel Acosta Jimenez', inicio: '2026-08-07', fin: '2026-08-18', desc: 'Vacaciones reservadas (backfill 2026-05-06)' }
+  ];
+  const sheet = getOrCreateTab(PERMISOS_TAB, PERMISOS_HEADERS);
+  const data = sheet.getDataRange().getValues();
+  const headers = data[0];
+  const idCol = headers.indexOf('ID');
+  const existingIds = new Set();
+  for (let r = 1; r < data.length; r++) existingIds.add(String(data[r][idCol]));
+
+  const ahora = formatDateStr(new Date());
+  const rows = [];
+  let inserted = 0, skipped = 0;
+  SEED.forEach((s, i) => {
+    const id = 'SEED' + s.numero + '_' + s.inicio.replace(/-/g, '');
+    if (existingIds.has(id)) { skipped++; return; }
+    const dias = countWorkDaysBetween_(s.inicio, s.fin);
+    rows.push(buildPermisoRow_({
+      ID: id,
+      Tipo: 'Vacacion',
+      Fecha_Solicitud: ahora,
+      NumeroColab: s.numero,
+      Nombre: s.nombre,
+      Email_Empleado: '',
+      Fecha_Permiso: s.inicio,
+      Fecha_Fin: s.fin,
+      Dias_Vacacion: dias,
+      Horario_Ausente: '',
+      Horas_Ausente: '',
+      Asunto: 'Vacaciones',
+      Descripcion: s.desc,
+      Reponer: '',
+      Como_Reponer: '',
+      Fecha_Final_Pagado: '',
+      Comprobante_URL: '',
+      Respuesta: 'Aprobado',
+      Aprobado_Por: 'le.nbclub@gmail.com',
+      Fecha_Decision: ahora,
+      Notas_Admin: 'Seed migration (backfill)',
+      Real_Ausente_Min: '',
+      Repose_Status: '',
+      Repose_Detail: '',
+      Computed_At: ''
+    }));
+    inserted++;
+  });
+  if (rows.length) {
+    sheet.getRange(sheet.getLastRow() + 1, 1, rows.length, PERMISOS_HEADERS.length).setValues(rows);
+  }
+  CacheService.getScriptCache().remove(PERMISOS_CACHE_KEY_SHEET);
+  CacheService.getScriptCache().remove('asistencia_vacacion_days_v1');
+  Logger.log('Seed reservaciones 2026: inserted=' + inserted + ', skipped=' + skipped);
+  return { ok: true, inserted, skipped };
 }
 
 // ─── Calendar feed ────────────────────────────────────────────────────────
