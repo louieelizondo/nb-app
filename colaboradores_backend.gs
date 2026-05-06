@@ -22,17 +22,37 @@ const COLABORADORES_TAB = 'COLABORADORES';
 const COLABORADORES_HEADERS = [
   'Numero',
   'Nombre',
-  'Email',
-  'Telefono',
-  'Inicio_Laboral',         // YYYY-MM-DD — drives vacation accrual
-  'Estado',                 // Activo | Inactivo
-  'Mesa_Puesto',
-  'Usa_Checador',           // boolean
-  'Dias_Trabaja',           // comma-joined: "Lun,Mar,Mié,Jue,Vie,Sáb"
-  'Horas_Dia',              // number, default 8
-  'Retardos_Perdonados',    // boolean
+  'Email',                      // Correo electrónico
+  'Celular',                    // Celular
+  'Inicio_Laboral',             // drives vacation accrual
+  'Fecha_Nacimiento',
+  'Estado_Civil',
+  'Estado',                     // Activo | Inactivo
+  'Area_Trabajo',
+  'Mesa_Puesto',                // Mesa / Puesto
+  'RFC',
+  'CURP',
+  'NSS_IMSS',
+  'Clinica',
+  'Calle',
+  'Colonia',
+  'Codigo_Postal',
+  'Beneficiario_Nombre',
+  'Beneficiario_Telefono',
+  'Cuenta_Santander',
+  'Tamano_Sudadera',
+  'Contrato_28_Fecha',
+  'Contrato_28_Firmado',
+  'Contrato_84_Fecha',
+  'Contrato_84_Firmado',
+  'Contrato_Indef_Fecha',
+  'Contrato_Indef_Firmado',
+  'Usa_Checador',
+  'Dias_Trabaja',               // comma-joined: "Lun,Mar,Mié,Jue,Vie,Sáb"
+  'Horas_Dia',
+  'Retardos_Perdonados',
   'Notas',
-  'Notion_Page_Id',         // for legacy permiso relation matching
+  'Notion_Page_Id',
   'Last_Synced_At'
 ];
 
@@ -41,6 +61,11 @@ const COLABORADORES_CACHE_TTL = 600;  // 10 min — same as Notion cache
 
 // ─── Setup ────────────────────────────────────────────────────────────────
 
+/**
+ * Idempotent. Run after schema additions — overwrites header row only,
+ * data rows untouched. Existing migrated rows that miss new columns will
+ * just have empty values until next migrateColaboradoresFromNotion() run.
+ */
 function setupColaboradoresSheet() {
   const sheet = getOrCreateTab(COLABORADORES_TAB, COLABORADORES_HEADERS);
   const range = sheet.getRange(1, 1, 1, COLABORADORES_HEADERS.length);
@@ -49,10 +74,36 @@ function setupColaboradoresSheet() {
   range.setBackground('#1a3a1a');
   range.setFontColor('white');
   sheet.setFrozenRows(1);
-  const widths = [70, 220, 220, 130, 110, 90, 180, 110, 220, 90, 140, 220, 250, 130];
-  widths.forEach((w, i) => sheet.setColumnWidth(i + 1, w));
+  // Reasonable column widths
+  const w = [60, 200, 220, 120, 110, 110, 100, 80, 140, 140, 130, 150, 130, 80, 200, 140, 100, 180, 130, 130, 100, 110, 80, 110, 80, 110, 80, 80, 200, 70, 80, 200, 220, 130];
+  w.forEach((px, i) => sheet.setColumnWidth(i + 1, px));
   Logger.log('COLABORADORES sheet ready · ' + COLABORADORES_HEADERS.length + ' columns');
   return { ok: true, columns: COLABORADORES_HEADERS.length };
+}
+
+/**
+ * DEBUG helper — logs every property name + type from the first
+ * Colaboradores Activos page so we can see exactly what to map against.
+ * Run from Apps Script editor when migration misses fields.
+ */
+function debugListColaboradorProperties() {
+  const pages = notionQueryAll_(NOTION_DS_COLABORADORES_ACTIVOS, null);
+  if (!pages.length) { Logger.log('No pages returned'); return; }
+  const sample = pages[0];
+  const lines = [];
+  Object.keys(sample.properties).sort().forEach(propName => {
+    const p = sample.properties[propName];
+    let preview = '';
+    try {
+      const v = notionPropValue_(sample, propName);
+      preview = v === null ? '(null)' : JSON.stringify(v).slice(0, 60);
+    } catch (e) { preview = '(err)'; }
+    // Show name with quotes so trailing spaces are visible
+    lines.push(`"${propName}" [${p.type}] = ${preview}`);
+  });
+  const out = lines.join('\n');
+  Logger.log('Notion properties on page "' + (notionPropValue_(sample, 'Nombre') || sample.id) + '":\n' + out);
+  return out;
 }
 
 // ─── Migration: Notion → Sheet ────────────────────────────────────────────
@@ -79,11 +130,11 @@ function migrateColaboradoresFromNotion() {
   const existingByNumero = {};
   for (let r = 1; r < data.length; r++) {
     const n = parseInt(data[r][numCol]);
-    if (n) existingByNumero[n] = r + 1;  // 1-indexed row
+    if (n) existingByNumero[n] = r + 1;
   }
 
-  // Try variants — Notion property names sometimes have trailing spaces or
-  // accents differ. First match wins.
+  // Try variants — Notion property names often have trailing/leading spaces,
+  // different accents, or capitalization. First non-empty match wins.
   const tryProp = (page, names) => {
     for (const n of names) {
       const v = notionPropValue_(page, n);
@@ -91,42 +142,145 @@ function migrateColaboradoresFromNotion() {
     }
     return null;
   };
+  const trySafe = (page, names) => {
+    const v = tryProp(page, names);
+    return v == null ? '' : v;
+  };
 
   const now = formatDateStr(new Date());
-  const updates = [];   // [{ rowNum, rowArr }]
-  const inserts = [];   // 2D
+  const updates = [];
+  const inserts = [];
   let unmatched = 0;
+  const missingFields = {};  // tracks which fields couldn't be found across pages
 
   pages.forEach(page => {
     const numero = parseInt(notionPropValue_(page, 'Número Colab.')) || null;
     if (!numero) { unmatched++; return; }
 
+    // Personal
+    const nombre = String(notionPropValue_(page, 'Nombre') || '').trim();
+    const email = String(trySafe(page, [
+      'Correo electrónico', 'Correo Electrónico', 'Correo electronico',
+      'Correo', 'Email', 'E-mail'
+    ])).trim();
+    const celular = String(trySafe(page, [
+      'Celular', 'Celular ', 'Teléfono', 'Telefono', 'Phone', 'Cel'
+    ])).trim();
     const inicioLaboralRaw = tryProp(page, [
-      'Inicio Laboral', 'Inicio laboral', 'Fecha de Inicio', 'Fecha Inicio',
-      'Fecha de inicio', 'Inicio de Labores', 'Inicio_Laboral'
+      'Inicio laboral', 'Inicio laboral ', 'Inicio Laboral', 'Inicio Laboral ',
+      'Fecha de Inicio', 'Fecha Inicio', 'Fecha de inicio', 'Inicio de Labores'
     ]);
     const inicioLaboral = inicioLaboralRaw ? formatDateStr(inicioLaboralRaw) : '';
+    const fechaNacRaw = tryProp(page, [
+      'Fecha nacimiento', 'Fecha Nacimiento', 'Fecha de nacimiento', 'Nacimiento'
+    ]);
+    const fechaNac = fechaNacRaw ? formatDateStr(fechaNacRaw) : '';
+    const estadoCivil = String(trySafe(page, ['Estado civil', 'Estado Civil'])).trim();
+    const estado = String(trySafe(page, ['Estado ', 'Estado'])).trim();
+    const areaTrabajo = String(trySafe(page, [
+      'Area de trabajo', 'Área de trabajo', 'Area trabajo', 'Área trabajo'
+    ])).trim();
+    const mesaPuesto = String(trySafe(page, [
+      'Mesa / Puesto', 'Mesa/Puesto', 'Mesa /Puesto', 'Mesa/ Puesto', 'Puesto', 'Mesa'
+    ])).trim();
 
-    const estado = String(notionPropValue_(page, 'Estado ') || notionPropValue_(page, 'Estado') || '').trim();
-    const nombre = String(notionPropValue_(page, 'Nombre') || '').trim();
-    const email = String(tryProp(page, ['Email', 'Correo', 'E-mail']) || '').trim();
-    const telefono = String(tryProp(page, ['Teléfono', 'Telefono', 'Phone', 'Cel']) || '').trim();
-    const mesaPuesto = String(tryProp(page, ['Mesa/Puesto', 'Puesto', 'Mesa']) || '').trim();
+    // IDs
+    const rfc = String(trySafe(page, ['RFC', 'rfc'])).trim();
+    const curp = String(trySafe(page, ['CURP', 'curp'])).trim();
+    const nss = String(trySafe(page, ['NSS - IMSS', 'NSS-IMSS', 'NSS IMSS', 'NSS', 'NSS_IMSS'])).trim();
+    const clinica = String(trySafe(page, ['Clinica', 'Clínica'])).trim();
+
+    // Address
+    const calle = String(trySafe(page, ['Calle'])).trim();
+    const colonia = String(trySafe(page, ['Colonia'])).trim();
+    const cp = String(trySafe(page, ['Codigo postal', 'Código postal', 'Codigo Postal', 'CP'])).trim();
+
+    // Beneficiarios
+    const benefNombre = String(trySafe(page, [
+      'Beneficiario Nombre', 'Beneficiario nombre', 'Beneficiario'
+    ])).trim();
+    const benefTel = String(trySafe(page, [
+      'Beneficiario Teléfono', 'Beneficiario Telefono', 'Beneficiario teléfono', 'Beneficiario telefono'
+    ])).trim();
+
+    // Otros
+    const cuentaSantander = String(trySafe(page, ['Cuenta Santander'])).trim();
+    const sudadera = String(trySafe(page, ['Tamaño Sudadera', 'Tamano Sudadera', 'Tamaño sudadera'])).trim();
+
+    // Contratos — Notion has BOTH a date and a checkbox property with the
+    // same display name (e.g. two "Contrato 28 días"). Indexing by name gives
+    // whichever Notion serializes first, so we scan all props and pick by type.
+    const findByNameAndType = (page, namePatterns, type) => {
+      for (const pname in page.properties) {
+        const p = page.properties[pname];
+        if (p.type !== type) continue;
+        const lc = pname.toLowerCase().replace(/\s+/g, ' ').trim();
+        for (const pat of namePatterns) {
+          if (lc === pat) return notionPropValue_(page, pname);
+        }
+      }
+      return null;
+    };
+
+    const c28FechaRaw = findByNameAndType(page, ['contrato 28 días', 'contrato 28 dias'], 'date');
+    const c28FechaStr = c28FechaRaw ? formatDateStr(c28FechaRaw) : '';
+    const c28FirmadoStrict = findByNameAndType(page, ['contrato 28 días', 'contrato 28 dias'], 'checkbox') === true;
+
+    const c84FechaRaw = findByNameAndType(page, ['contrato 84 días', 'contrato 84 dias'], 'date');
+    const c84FechaStr = c84FechaRaw ? formatDateStr(c84FechaRaw) : '';
+    const c84FirmadoStrict = findByNameAndType(page, ['contrato 84 días', 'contrato 84 dias'], 'checkbox') === true;
+
+    const cIndefFechaRaw = findByNameAndType(page, [
+      'contrato indeterminado', 'contrato indeter', 'contrato indef'
+    ], 'date');
+    const cIndefFechaStr = cIndefFechaRaw ? formatDateStr(cIndefFechaRaw) : '';
+    const cIndefFirmadoStrict = findByNameAndType(page, [
+      'contrato indeterminado', 'contrato indeter', 'contrato indef'
+    ], 'checkbox') === true;
+
+    // Engine rules
     const usaChecador = notionPropValue_(page, 'Usa Checador');
     const diasTrabajaArr = notionPropValue_(page, 'Días Trabaja') || [];
     const horasDia = notionPropValue_(page, 'Horas/Día');
     const retardosPerdonados = notionPropValue_(page, 'Retardos Perdonados') === true;
+
     const pageIdNoDash = page.id.replace(/-/g, '');
+
+    // Track missing core fields for diagnostic
+    if (!email) missingFields.Email = (missingFields.Email || 0) + 1;
+    if (!inicioLaboral) missingFields.Inicio_Laboral = (missingFields.Inicio_Laboral || 0) + 1;
+    if (!celular) missingFields.Celular = (missingFields.Celular || 0) + 1;
+    if (!mesaPuesto) missingFields.Mesa_Puesto = (missingFields.Mesa_Puesto || 0) + 1;
 
     const rowDict = {
       Numero: numero,
       Nombre: nombre,
       Email: email,
-      Telefono: telefono,
+      Celular: celular,
       Inicio_Laboral: inicioLaboral,
+      Fecha_Nacimiento: fechaNac,
+      Estado_Civil: estadoCivil,
       Estado: estado,
+      Area_Trabajo: areaTrabajo,
       Mesa_Puesto: mesaPuesto,
-      Usa_Checador: usaChecador !== false,  // default true
+      RFC: rfc,
+      CURP: curp,
+      NSS_IMSS: nss,
+      Clinica: clinica,
+      Calle: calle,
+      Colonia: colonia,
+      Codigo_Postal: cp,
+      Beneficiario_Nombre: benefNombre,
+      Beneficiario_Telefono: benefTel,
+      Cuenta_Santander: cuentaSantander,
+      Tamano_Sudadera: sudadera,
+      Contrato_28_Fecha: c28FechaStr,
+      Contrato_28_Firmado: c28FirmadoStrict === true,
+      Contrato_84_Fecha: c84FechaStr,
+      Contrato_84_Firmado: c84FirmadoStrict === true,
+      Contrato_Indef_Fecha: cIndefFechaStr,
+      Contrato_Indef_Firmado: cIndefFirmadoStrict === true,
+      Usa_Checador: usaChecador !== false,
       Dias_Trabaja: Array.isArray(diasTrabajaArr) ? diasTrabajaArr.join(',') : '',
       Horas_Dia: (typeof horasDia === 'number' && horasDia > 0) ? horasDia : 8,
       Retardos_Perdonados: retardosPerdonados,
@@ -143,7 +297,6 @@ function migrateColaboradoresFromNotion() {
     }
   });
 
-  // Flush
   updates.forEach(u => {
     sheet.getRange(u.rowNum, 1, 1, COLABORADORES_HEADERS.length).setValues([u.rowArr]);
   });
@@ -153,10 +306,19 @@ function migrateColaboradoresFromNotion() {
   }
 
   CacheService.getScriptCache().remove(COLABORADORES_CACHE_KEY);
-  CacheService.getScriptCache().remove(EMPLEADO_RULES_CACHE_KEY);  // engine cache
+  CacheService.getScriptCache().remove(EMPLEADO_RULES_CACHE_KEY);
 
-  const summary = { ok: true, updated: updates.length, inserted: inserts.length, unmatched: unmatched };
-  Logger.log('Colaboradores migration: ' + JSON.stringify(summary));
+  const summary = {
+    ok: true,
+    updated: updates.length,
+    inserted: inserts.length,
+    unmatched: unmatched,
+    missingFieldCount: missingFields
+  };
+  Logger.log('Colaboradores migration: ' + JSON.stringify(summary, null, 2));
+  if (Object.keys(missingFields).length) {
+    Logger.log('TIP: run debugListColaboradorProperties() to see exact Notion property names.');
+  }
   log('COLAB_MIGRATE', JSON.stringify(summary));
   return summary;
 }
