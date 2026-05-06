@@ -628,20 +628,25 @@ function fixMigratedPermisoColumns() {
 
   const headers = data[0];
   const idCol = headers.indexOf('ID');
-  const emailCol = headers.indexOf('Email_Empleado');  // 5th column (index 4)
-  const datePattern = /^\d{4}-\d{2}-\d{2}/;
+  const emailCol = headers.indexOf('Email_Empleado');  // index 4
 
   let fixed = 0;
+  let scanned = 0;
   for (let r = 1; r < data.length; r++) {
     const row = data[r];
     const id = String(row[idCol] || '');
+    // Target migrated rows (NOT*) but also handle any row where Email_Empleado
+    // was filled with non-email data (Date object, dashes, anything else).
     if (!id.startsWith('NOT')) continue;
-    const emailVal = String(row[emailCol] || '').trim();
-    // Detect: shifted rows have a date in Email_Empleado, not an email
-    if (!datePattern.test(emailVal)) continue;
+    scanned++;
 
-    // Build the corrected row: shift everything from Email_Empleado onwards
-    // right by 1, set Email_Empleado to empty, last column overflow = drop.
+    const cell = row[emailCol];
+    // Empty cell → already aligned
+    if (cell === '' || cell === null || cell === undefined) continue;
+    // Looks like a real email → already aligned
+    if (typeof cell === 'string' && cell.indexOf('@') >= 0) continue;
+    // Anything else (Date, number, non-email string) → this row is shifted
+
     const newRow = row.slice();
     for (let c = lastCol - 1; c > emailCol; c--) {
       newRow[c] = row[c - 1];
@@ -652,8 +657,8 @@ function fixMigratedPermisoColumns() {
     fixed++;
   }
   CacheService.getScriptCache().remove(PERMISOS_CACHE_KEY_SHEET);
-  Logger.log('Fixed ' + fixed + ' shifted rows');
-  return { ok: true, fixed: fixed };
+  Logger.log('fixMigratedPermisoColumns: scanned=' + scanned + ' NOT* rows, fixed=' + fixed);
+  return { ok: true, scanned: scanned, fixed: fixed };
 }
 
 // ─── Engine writeback ────────────────────────────────────────────────────
