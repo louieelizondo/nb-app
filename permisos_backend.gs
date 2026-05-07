@@ -667,7 +667,8 @@ function getAusenciasCalendar(params) {
  *   vacacionesTotal, vacacionesAprobadas
  * }
  */
-function getColaboradoresRecord() {
+function getColaboradoresRecord(params) {
+  const targetYear = params && params.year ? parseInt(params.year) : null;
   const colabs = (typeof getColaboradoresFromSheet_ === 'function')
     ? getColaboradoresFromSheet_() : {};
   const sheet = getOrCreateTab(PERMISOS_TAB, PERMISOS_HEADERS);
@@ -699,43 +700,147 @@ function getColaboradoresRecord() {
   Object.keys(colabs).forEach(numStr => {
     const num = parseInt(numStr);
     const c = colabs[numStr];
-    const bal = getVacacionBalance(num);
     const stats = statsByNum[num] || { permisosTotal: 0, permisosAprobados: 0, vacacionesTotal: 0, vacacionesAprobadas: 0 };
-    if (bal.error) {
-      out.push({
-        numero: num, nombre: c.nombre,
-        inicioLaboral: c.inicioLaboral || null,
-        error: bal.error,
-        permisosTotal: stats.permisosTotal,
-        permisosAprobados: stats.permisosAprobados,
-        vacacionesTotal: stats.vacacionesTotal,
-        vacacionesAprobadas: stats.vacacionesAprobadas
-      });
-      return;
-    }
+
+    const info = getColaboradorAnualidadInfo_(num, targetYear, data, idx);
     out.push({
-      numero: num, nombre: bal.nombre,
-      inicioLaboral: bal.inicioLaboral,
-      anosCompletos: bal.anosCompletos,
-      anualidadInicio: bal.anualidadInicio,
-      anualidadFin: bal.anualidadFin,
-      nextAnniversary: bal.nextAnniversary,
-      anualidadCalendarYear: parseInt(String(bal.anualidadInicio).slice(0, 4)),
-      diasEntitled: bal.diasEntitled,
-      diasUsados: bal.diasUsados,
-      diasReservadosActual: bal.diasReservadosActual ?? 0,
-      diasReservadosProxima: bal.diasReservadosProxima ?? 0,
-      disponibles: bal.disponibles,
-      proximaAnualidadDias: bal.proximaAnualidadDias,
-      proximaDisponibles: bal.proximaDisponibles ?? bal.proximaAnualidadDias ?? 0,
+      numero: num,
+      nombre: c.nombre,
+      inicioLaboral: c.inicioLaboral || null,
+      ...info,
       permisosTotal: stats.permisosTotal,
       permisosAprobados: stats.permisosAprobados,
       vacacionesTotal: stats.vacacionesTotal,
       vacacionesAprobadas: stats.vacacionesAprobadas
     });
   });
-  out.sort((a, b) => String(a.nombre || '').localeCompare(String(b.nombre || ''), 'es'));
-  return { ok: true, colaboradores: out };
+  // Sort by numero ASC (1, 5, 9, 10, 34, ...)
+  out.sort((a, b) => (a.numero || 0) - (b.numero || 0));
+  return { ok: true, colaboradores: out, year: targetYear };
+}
+
+/**
+ * Computes vacation info for a colaborador for a SPECIFIC anualidad year
+ * (calendar year of when the anualidad started). If targetYear is null,
+ * uses the current anualidad.
+ *
+ * Returns { anualidadCalendarYear, status, anualidadInicio, anualidadFin,
+ *   nextAnniversary, anosCompletos (year of service for this anualidad),
+ *   diasEntitled, diasUsados, diasReservadosActual, diasReservadosProxima,
+ *   disponibles, proximaAnualidadDias, proximaDisponibles }
+ *
+ * status: 'before-inicio' | 'past' | 'current' | 'future' | 'closed'
+ */
+function getColaboradorAnualidadInfo_(numero, targetYear, sheetData, sheetIdx) {
+  const colabs = getColaboradoresFromSheet_();
+  const c = colabs[numero];
+  if (!c) return { error: 'Colaborador no encontrado', diasEntitled: 0 };
+  if (!c.inicioLaboral) return { error: 'Falta Inicio_Laboral', diasEntitled: 0 };
+
+  const inicioStr = c.inicioLaboral;
+  const todayStr = formatDateStr(new Date());
+  const [iy, im, id] = inicioStr.split('-').map(Number);
+  const [ty, tm, td] = todayStr.split('-').map(Number);
+  const pad = n => String(n).padStart(2, '0');
+  const mmdd = pad(im) + '-' + pad(id);
+
+  // Years completed at today
+  let anosCurrent = ty - iy;
+  if (tm < im || (tm === im && td < id)) anosCurrent--;
+  if (anosCurrent < 0) anosCurrent = 0;
+
+  // Calendar year of CURRENT anualidad start
+  const currentAnualidadCalYear = anosCurrent < 1 ? null : (iy + anosCurrent);
+  const proximaAnualidadDias = lftDaysForYear_(anosCurrent + 1);
+
+  // Calendar year for the requested anualidad — defaults to current
+  const anualidadCalYear = targetYear || currentAnualidadCalYear || iy + 1;
+  const yos = anualidadCalYear - iy;  // year of service (1 = first full year, etc.)
+
+  // Build window strings
+  const anualidadInicioStr = anualidadCalYear + '-' + mmdd;
+  const nextAnnivStr = (anualidadCalYear + 1) + '-' + mmdd;
+  const anualidadFinStr = addDaysStr_(nextAnnivStr, -1);
+
+  // Status relative to today
+  let status;
+  if (yos < 1) status = 'before-inicio';
+  else if (todayStr < anualidadInicioStr) status = 'future';
+  else if (todayStr > anualidadFinStr) status = 'closed';
+  else status = 'current';
+
+  const diasEntitled = yos < 1 ? 0 : lftDaysForYear_(yos);
+
+  // Walk vacation rows for this colaborador, classify per Anualidad_Year column
+  // (preferred) or by date (legacy fallback).
+  const data = sheetData;
+  const idx = sheetIdx;
+  const anualidadYearCol = idx('Anualidad_Year');
+  let usadosFromRows = 0, reservadosActual = 0, reservadosProxima = 0;
+  for (let r = 1; r < data.length; r++) {
+    const row = data[r];
+    if (String(row[idx('Tipo')]) !== 'Vacacion') continue;
+    if (parseInt(row[idx('NumeroColab')]) !== numero) continue;
+    const respuesta = String(row[idx('Respuesta')]);
+    if (respuesta === 'Rechazado' || respuesta === 'Cancelado') continue;
+    const dias = parseInt(row[idx('Dias_Vacacion')]) || 0;
+    const startStr = formatDateStr(row[idx('Fecha_Permiso')]);
+    const endStr   = formatDateStr(row[idx('Fecha_Fin')]) || startStr;
+    if (!startStr) continue;
+
+    // Determine which anualidad this row belongs to
+    let belongsToYear = null;
+    if (anualidadYearCol >= 0) {
+      const explicit = parseInt(row[anualidadYearCol]);
+      if (explicit) belongsToYear = explicit;
+    }
+    if (!belongsToYear) {
+      // Fallback: infer from start date
+      // Find which anualidad window contains startStr
+      const sy = parseInt(startStr.slice(0, 4));
+      const startMonth = parseInt(startStr.slice(5, 7));
+      const startDay = parseInt(startStr.slice(8, 10));
+      // If start date is on/after anniversary mmdd of year sy, it belongs to year sy
+      if (startMonth > im || (startMonth === im && startDay >= id)) {
+        belongsToYear = sy;
+      } else {
+        belongsToYear = sy - 1;
+      }
+    }
+
+    if (belongsToYear === anualidadCalYear) {
+      // This row is in the requested anualidad
+      if (endStr < todayStr) usadosFromRows += dias;
+      else                    reservadosActual += dias;
+    } else if (belongsToYear === anualidadCalYear + 1) {
+      reservadosProxima += dias;
+    }
+  }
+
+  // Backfill: only apply when the requested anualidad is the CURRENT one
+  // (the column tracks pre-system usage in the active anualidad).
+  const backfill = (status === 'current' && (anualidadCalYear === currentAnualidadCalYear))
+    ? (parseFloat(c.diasUsadosBackfill) || 0)
+    : 0;
+  const diasUsados = usadosFromRows + backfill;
+  const disponibles = Math.max(0, diasEntitled - diasUsados - reservadosActual);
+
+  return {
+    anualidadCalendarYear: anualidadCalYear,
+    status,
+    anualidadInicio: anualidadInicioStr,
+    anualidadFin: anualidadFinStr,
+    nextAnniversary: nextAnnivStr,
+    anosCompletos: yos,
+    diasEntitled,
+    diasUsados,
+    diasUsadosBackfill: backfill,
+    diasReservadosActual: reservadosActual,
+    diasReservadosProxima: reservadosProxima,
+    disponibles,
+    proximaAnualidadDias: lftDaysForYear_(yos + 1),
+    proximaDisponibles: Math.max(0, lftDaysForYear_(yos + 1) - reservadosProxima)
+  };
 }
 
 // ─── Vacation email ──────────────────────────────────────────────────────

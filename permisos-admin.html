@@ -397,11 +397,17 @@
   </div><!-- /tab-aprobaciones -->
 
   <div id="tab-historial" style="display:none">
-    <div style="max-width:1100px;margin:0 auto 14px;padding:0 4px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;justify-content:space-between">
+    <div style="max-width:1100px;margin:0 auto 14px;padding:0 4px;display:flex;gap:12px;flex-wrap:wrap;align-items:center;justify-content:space-between">
       <div style="font-size:13px;color:#5e4e3d">
         <strong>Tabla completa de colaboradores activos.</strong> Click en una fila para filtrar Aprobaciones por ese colaborador.
       </div>
-      <button type="button" id="btnReloadRecord" style="padding:8px 14px;background:#2e6b2e;color:white;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">🔄 Recargar</button>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+        <label style="font-size:12px;font-weight:700;color:#5e4e3d;text-transform:uppercase;letter-spacing:.4px">Año anualidad:</label>
+        <select id="recordYear" style="padding:8px 12px;border:1px solid #d4cabe;border-radius:8px;font-size:14px;background:white;font-weight:600">
+          <!-- populated dynamically -->
+        </select>
+        <button type="button" id="btnReloadRecord" style="padding:8px 14px;background:#2e6b2e;color:white;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">🔄 Recargar</button>
+      </div>
     </div>
     <div class="record-wrap">
       <div id="recordContent"><div style="text-align:center;padding:30px;color:#998777">Cargando…</div></div>
@@ -856,10 +862,28 @@ document.querySelectorAll('.tab').forEach(t => {
 });
 
 // ─── Historial RH ──────────────────────────────────────────────────────
+let currentRecordYear = null;
+
+function ensureYearSelector() {
+  const sel = $('recordYear');
+  if (sel.options.length > 0) return;
+  const thisYear = new Date().getFullYear();
+  // Show 2 prior years + current + 2 next years
+  for (let y = thisYear - 2; y <= thisYear + 2; y++) {
+    const opt = document.createElement('option');
+    opt.value = String(y);
+    opt.textContent = String(y);
+    if (y === thisYear) opt.selected = true;
+    sel.appendChild(opt);
+  }
+  currentRecordYear = thisYear;
+}
+
 async function loadRecord() {
+  ensureYearSelector();
   $('recordContent').innerHTML = '<div style="text-align:center;padding:30px;color:#998777">Cargando…</div>';
   try {
-    const r = await fetch(API + '?action=get_colaboradores_record');
+    const r = await fetch(API + '?action=get_colaboradores_record&year=' + (currentRecordYear || ''));
     const j = await r.json();
     if (!j.ok) throw new Error(j.error || 'Error');
     renderRecord(j.colaboradores || []);
@@ -875,6 +899,13 @@ function renderRecord(rows) {
     return;
   }
   const pill = (n, cls) => `<span class="pill-num ${cls || (n > 0 ? 'disp' : 'zero')}">${n}</span>`;
+  const statusBadge = (s) => {
+    if (s === 'before-inicio') return '<span style="font-size:10px;padding:2px 6px;border-radius:8px;background:#f5f5f5;color:#998777;text-transform:uppercase;letter-spacing:.4px;font-weight:700">Aún no aplica</span>';
+    if (s === 'future')        return '<span style="font-size:10px;padding:2px 6px;border-radius:8px;background:#e1f5fe;color:#01579b;text-transform:uppercase;letter-spacing:.4px;font-weight:700">Futura</span>';
+    if (s === 'closed')        return '<span style="font-size:10px;padding:2px 6px;border-radius:8px;background:#eeeeee;color:#424242;text-transform:uppercase;letter-spacing:.4px;font-weight:700">Cerrada</span>';
+    return '<span style="font-size:10px;padding:2px 6px;border-radius:8px;background:#c8e6c9;color:#1b5e20;text-transform:uppercase;letter-spacing:.4px;font-weight:700">Actual</span>';
+  };
+
   const tr = rows.map(r => {
     if (r.error) {
       return `
@@ -884,13 +915,14 @@ function renderRecord(rows) {
           <td colspan="9" style="color:#998777;font-style:italic">Sin balance</td>
         </tr>`;
     }
-    const aniv = r.anosCompletos === 0 ? 'Aún no aplica' : `Año ${r.anosCompletos}`;
+    const aniv = r.anosCompletos < 1 ? 'Aún no aplica' : `Año ${r.anosCompletos}`;
+    const beforeInicio = r.status === 'before-inicio';
     return `
-      <tr data-num="${r.numero}" style="cursor:pointer">
+      <tr data-num="${r.numero}" style="cursor:pointer${beforeInicio ? ';opacity:.55' : ''}">
         <td class="num">${r.numero}</td>
         <td>
           <span class="name">${r.nombre}</span>
-          <br><span class="sub">Inicio ${fmtDate(r.inicioLaboral)} · ${aniv}</span>
+          <br><span class="sub">Inicio ${fmtDate(r.inicioLaboral)} · ${aniv} ${statusBadge(r.status)}</span>
         </td>
         <td class="num"><span class="sub">${r.anualidadCalendarYear ?? '—'}</span></td>
         <td class="num">${r.diasEntitled ?? 0}</td>
@@ -938,6 +970,10 @@ function renderRecord(rows) {
 }
 
 $('btnReloadRecord').addEventListener('click', () => { recordLoaded = false; loadRecord(); });
+$('recordYear').addEventListener('change', e => {
+  currentRecordYear = parseInt(e.target.value);
+  loadRecord();
+});
 
 document.addEventListener('DOMContentLoaded', () => {
   requireNbAuth(() => {
