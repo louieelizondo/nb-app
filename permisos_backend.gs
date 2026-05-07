@@ -1266,9 +1266,12 @@ function fixV2ToV3Permisos() {
   for (let r = 1; r < data.length; r++) {
     const row = data[r];
     const id = String(row[idCol] || '');
-    if (!id.startsWith('NOT')) continue;
+    // V2 layout can occur on NOT* (migrated from Notion) AND PRM* (form
+    // submissions made before the V3 schema landed). SEED* + VAC* were
+    // always created under V3 and use buildPermisoRow_, so they're safe.
+    if (!id.startsWith('NOT') && !id.startsWith('PRM')) continue;
 
-    // If Tipo is already 'Permiso' (or anything sensible), this row is V3 already
+    // If Tipo is already 'Permiso' or 'Vacacion', the row is V3-aligned. Skip.
     const currentTipo = String(row[tipoCol] || '').trim();
     if (currentTipo === 'Permiso' || currentTipo === 'Vacacion') {
       skipped++;
