@@ -300,11 +300,23 @@
 
   <div class="filter-bar">
     <div class="chip active" data-filter="Pendiente">Pendientes <span class="count" id="cnt-Pendiente">0</span></div>
-    <div class="chip" data-filter="Aprobado">Aprobados <span class="count" id="cnt-Aprobado">0</span></div>
+    <div class="chip" data-filter="Aprobado">Próximas <span class="count" id="cnt-Aprobado">0</span></div>
+    <div class="chip" data-filter="Pasado">Pasadas <span class="count" id="cnt-Pasado">0</span></div>
     <div class="chip" data-filter="Rechazado">Rechazados <span class="count" id="cnt-Rechazado">0</span></div>
     <div class="chip" data-filter="Cancelado">Cancelados <span class="count" id="cnt-Cancelado">0</span></div>
     <div class="chip" data-filter="">Todos <span class="count" id="cnt-Todos">0</span></div>
   </div>
+
+  <div class="search-bar" style="max-width:980px;margin:0 auto 14px;padding:0 4px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+    <input type="text" id="colabSearch" placeholder="🔍 Buscar por nombre del colaborador…"
+      style="flex:1;min-width:200px;padding:10px 14px;border:1px solid #d4cabe;border-radius:10px;font-size:14px;background:white">
+    <select id="colabSelect" style="padding:10px 14px;border:1px solid #d4cabe;border-radius:10px;font-size:14px;background:white;min-width:200px">
+      <option value="">— Todos los colaboradores —</option>
+    </select>
+    <button type="button" id="clearFilters" style="padding:8px 14px;background:white;border:1px solid #d4cabe;border-radius:10px;font-size:13px;font-weight:600;color:#5e4e3d;cursor:pointer">Limpiar</button>
+  </div>
+
+  <div id="colabSummary" style="display:none;max-width:980px;margin:0 auto 14px;padding:16px 18px;background:linear-gradient(135deg,#f0fdf4,#e8f5e9);border-radius:12px;border-left:4px solid #2e7d32;font-size:13px"></div>
 
   <div id="grid" class="grid"></div>
 </div>
@@ -316,6 +328,7 @@ const API = 'https://script.google.com/macros/s/AKfycbxQ7BzFITQnxyndvo2q7Xa1-Sc-
 const $ = id => document.getElementById(id);
 let allPermisos = [];
 let currentFilter = 'Pendiente';
+let currentColabFilter = '';   // '' = all, otherwise numeroColab as string
 
 function showMsg(html, type, ttl) {
   $('msgArea').innerHTML = `<div class="alert ${type}">${html}</div>`;
@@ -326,6 +339,18 @@ function canApprove(email) {
   return ['le.nbclub@gmail.com'].includes(String(email || '').toLowerCase());
 }
 
+const todayStr = () => {
+  const d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+};
+
+// "Past" = fechaFin (or fechaPermiso) is BEFORE today.
+function isPast(p) {
+  const end = p.fechaFin || p.fechaPermiso;
+  if (!end) return false;
+  return String(end) < todayStr();
+}
+
 async function loadPermisos() {
   $('grid').innerHTML = '<div class="loading">Cargando…</div>';
   try {
@@ -334,6 +359,7 @@ async function loadPermisos() {
     if (!data.ok) throw new Error(data.error || 'Error al cargar');
     allPermisos = data.permisos || [];
     updateCounts();
+    populateColabDropdown();
     render();
   } catch (err) {
     $('grid').innerHTML = `<div class="loading" style="color:#c62828">Error: ${err.message}</div>`;
@@ -341,13 +367,44 @@ async function loadPermisos() {
 }
 
 function updateCounts() {
-  const counts = { Pendiente: 0, Aprobado: 0, Rechazado: 0, Cancelado: 0 };
-  allPermisos.forEach(p => { if (counts[p.respuesta] != null) counts[p.respuesta]++; });
+  const counts = { Pendiente: 0, AprobadoUpcoming: 0, Pasado: 0, Rechazado: 0, Cancelado: 0 };
+  allPermisos.forEach(p => {
+    if (p.respuesta === 'Pendiente') counts.Pendiente++;
+    else if (p.respuesta === 'Aprobado') {
+      if (isPast(p)) counts.Pasado++;
+      else counts.AprobadoUpcoming++;
+    }
+    else if (p.respuesta === 'Rechazado') counts.Rechazado++;
+    else if (p.respuesta === 'Cancelado') counts.Cancelado++;
+  });
   $('cnt-Pendiente').textContent = counts.Pendiente;
-  $('cnt-Aprobado').textContent  = counts.Aprobado;
+  $('cnt-Aprobado').textContent  = counts.AprobadoUpcoming;
+  $('cnt-Pasado').textContent    = counts.Pasado;
   $('cnt-Rechazado').textContent = counts.Rechazado;
   $('cnt-Cancelado').textContent = counts.Cancelado;
   $('cnt-Todos').textContent     = allPermisos.length;
+}
+
+// Populate colaborador dropdown from unique entries in allPermisos
+function populateColabDropdown() {
+  const sel = $('colabSelect');
+  const seen = {};
+  allPermisos.forEach(p => {
+    if (p.numeroColab) seen[p.numeroColab] = p.nombre;
+  });
+  // Sort by name
+  const opts = Object.keys(seen).map(num => ({ num: parseInt(num), nombre: seen[num] }))
+    .sort((a, b) => String(a.nombre).localeCompare(String(b.nombre), 'es'));
+  // Preserve current selection
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">— Todos los colaboradores —</option>';
+  opts.forEach(o => {
+    const opt = document.createElement('option');
+    opt.value = String(o.num);
+    opt.textContent = `${o.nombre} (#${o.num})`;
+    sel.appendChild(opt);
+  });
+  if (cur) sel.value = cur;
 }
 
 function fmtDate(s) {
@@ -386,13 +443,100 @@ function statusLabel(s) {
   return labels[s] || s;
 }
 
+async function refreshColabSummary() {
+  const box = $('colabSummary');
+  if (!currentColabFilter) { box.style.display = 'none'; return; }
+  const num = parseInt(currentColabFilter);
+  const colabRows = allPermisos.filter(p => p.numeroColab === num);
+  const nombre = colabRows[0]?.nombre || '#' + num;
+  const permisosTotal = colabRows.filter(p => p.tipo === 'Permiso').length;
+  const permisosApr = colabRows.filter(p => p.tipo === 'Permiso' && p.respuesta === 'Aprobado').length;
+  const vacacionesTotal = colabRows.filter(p => p.tipo === 'Vacacion').length;
+  const vacacionesApr = colabRows.filter(p => p.tipo === 'Vacacion' && p.respuesta === 'Aprobado').length;
+
+  // Try to get current vacation balance from backend
+  let balanceHtml = '';
+  try {
+    const r = await fetch(API + '?action=get_vacacion_balance&numero=' + num);
+    const j = await r.json();
+    if (j && !j.error) {
+      const reservadosActual = j.diasReservadosActual ?? 0;
+      const reservadosProx = j.diasReservadosProxima ?? 0;
+      balanceHtml = `
+        <div style="margin-top:10px;padding-top:10px;border-top:1px solid rgba(46,125,50,.2);display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px">
+          <div><span style="color:#5e4e3d;font-size:11px;text-transform:uppercase;letter-spacing:.4px">Asignados anualidad</span><br><strong style="font-size:18px">${j.diasEntitled}</strong></div>
+          <div><span style="color:#5e4e3d;font-size:11px;text-transform:uppercase;letter-spacing:.4px">Usados</span><br><strong style="font-size:18px">${j.diasUsados}</strong></div>
+          <div><span style="color:#5e4e3d;font-size:11px;text-transform:uppercase;letter-spacing:.4px">Reservados (actual)</span><br><strong style="font-size:18px">${reservadosActual}</strong></div>
+          <div><span style="color:#5e4e3d;font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:#1b5e20">Disponibles</span><br><strong style="font-size:20px;color:#1b5e20">${j.disponibles}</strong></div>
+          ${reservadosProx > 0 ? `<div><span style="color:#5e4e3d;font-size:11px;text-transform:uppercase;letter-spacing:.4px">Reservados (próxima)</span><br><strong style="font-size:18px">${reservadosProx}</strong></div>` : ''}
+        </div>
+        <p style="margin:8px 0 0;font-size:11px;color:#5e4e3d">Inicio laboral ${fmtDate(j.inicioLaboral)} · Anualidad ${fmtDate(j.anualidadInicio)} → ${fmtDate(j.anualidadFin)} · Próximo aniversario ${fmtDate(j.nextAnniversary)}</p>
+      `;
+    } else if (j && j.error) {
+      balanceHtml = `<div style="margin-top:8px;font-size:12px;color:#998777"><em>Sin balance de vacaciones: ${j.error}</em></div>`;
+    }
+  } catch (err) { /* ignore */ }
+
+  box.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px">
+      <strong style="font-size:15px;color:#1b5e20">${nombre} <span style="font-weight:500;color:#5e4e3d">#${num}</span></strong>
+      <span style="font-size:12px;color:#5e4e3d">📝 ${permisosApr}/${permisosTotal} permisos aprobados · 🏖 ${vacacionesApr}/${vacacionesTotal} vacaciones aprobadas</span>
+    </div>
+    ${balanceHtml}
+  `;
+  box.style.display = 'block';
+}
+
+function applySearchAndColabFilter(rows) {
+  const searchVal = ($('colabSearch').value || '').toLowerCase().trim();
+  let filtered = rows;
+  if (currentColabFilter) {
+    filtered = filtered.filter(p => p.numeroColab === parseInt(currentColabFilter));
+  } else if (searchVal) {
+    filtered = filtered.filter(p =>
+      String(p.nombre || '').toLowerCase().includes(searchVal) ||
+      String(p.numeroColab || '').includes(searchVal)
+    );
+  }
+  return filtered;
+}
+
+function sortForFilter(list, filter) {
+  // Pendiente / Aprobado (próximas) → soonest first (asc by fechaPermiso)
+  // Pasado / Rechazado / Cancelado → most recent first (desc by fechaPermiso)
+  // Todos → newest submission first (desc by fechaSolicitud)
+  if (filter === 'Pendiente' || filter === 'Aprobado') {
+    return list.slice().sort((a, b) => String(a.fechaPermiso || '').localeCompare(String(b.fechaPermiso || '')));
+  }
+  if (filter === 'Pasado' || filter === 'Rechazado' || filter === 'Cancelado') {
+    return list.slice().sort((a, b) => String(b.fechaPermiso || '').localeCompare(String(a.fechaPermiso || '')));
+  }
+  // Todos
+  return list.slice().sort((a, b) => String(b.fechaSolicitud || '').localeCompare(String(a.fechaSolicitud || '')));
+}
+
 function render() {
-  const list = currentFilter
-    ? allPermisos.filter(p => p.respuesta === currentFilter)
-    : allPermisos;
+  refreshColabSummary();
+
+  // Bucket: status filters apply except 'Pasado' which is a special view of past Aprobados
+  let list;
+  if (currentFilter === 'Pasado') {
+    list = allPermisos.filter(p => p.respuesta === 'Aprobado' && isPast(p));
+  } else if (currentFilter === 'Aprobado') {
+    // "Próximas" — only upcoming Aprobados
+    list = allPermisos.filter(p => p.respuesta === 'Aprobado' && !isPast(p));
+  } else if (currentFilter) {
+    list = allPermisos.filter(p => p.respuesta === currentFilter);
+  } else {
+    list = allPermisos.slice();  // Todos
+  }
+  list = applySearchAndColabFilter(list);
+  list = sortForFilter(list, currentFilter);
 
   if (!list.length) {
-    $('grid').innerHTML = `<div class="empty success">✓ Nada en "${currentFilter || 'Todos'}"</div>`;
+    const filterLabel = currentFilter === 'Pasado' ? 'Pasadas' : (currentFilter === 'Aprobado' ? 'Próximas' : (currentFilter || 'Todos'));
+    const colabHint = currentColabFilter ? ' para este colaborador' : '';
+    $('grid').innerHTML = `<div class="empty success">✓ Nada en "${filterLabel}"${colabHint}</div>`;
     return;
   }
 
@@ -588,6 +732,25 @@ document.querySelectorAll('.chip').forEach(chip => {
     currentFilter = chip.dataset.filter;
     render();
   });
+});
+
+// Search + dropdown
+let searchDebounce = null;
+$('colabSearch').addEventListener('input', () => {
+  clearTimeout(searchDebounce);
+  searchDebounce = setTimeout(() => render(), 200);
+});
+$('colabSelect').addEventListener('change', e => {
+  currentColabFilter = e.target.value || '';
+  // When picking a specific colab, clear the text search
+  if (currentColabFilter) $('colabSearch').value = '';
+  render();
+});
+$('clearFilters').addEventListener('click', () => {
+  $('colabSearch').value = '';
+  $('colabSelect').value = '';
+  currentColabFilter = '';
+  render();
 });
 
 document.addEventListener('DOMContentLoaded', () => {
