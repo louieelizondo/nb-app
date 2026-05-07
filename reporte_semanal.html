@@ -259,6 +259,7 @@
             <th>#</th>
             <th>Colaborador</th>
             <th class="num">Días<br>Trab.</th>
+            <th class="num">Días<br>Festivos</th>
             <th class="num">Faltas<br>Checador</th>
             <th class="num">Faltas<br>Reales</th>
             <th class="num">Just.<br>(comp.)</th>
@@ -420,6 +421,12 @@ function exportExcel() {
       alignment: { horizontal: 'center', vertical: 'center' },
       border: { top: BORDER_THIN, bottom: BORDER_THIN, left: BORDER_THIN, right: BORDER_THIN }
     },
+    numFestivo: {                             // días festivos → lavender tint
+      font: { bold: true, sz: 11, name: 'Calibri', color: { rgb: '4A148C' } },
+      fill: { fgColor: { rgb: 'F3E5F5' } },
+      alignment: { horizontal: 'center', vertical: 'center' },
+      border: { top: BORDER_THIN, bottom: BORDER_THIN, left: BORDER_THIN, right: BORDER_THIN }
+    },
     notas: {
       font: { sz: 9, name: 'Calibri', color: { rgb: '5A4F44' } },
       alignment: { wrapText: true, vertical: 'top', horizontal: 'left' },
@@ -450,12 +457,13 @@ function exportExcel() {
   aoa.push(['Nómina Semanal NB']);
   aoa.push(['Semana ' + weekLabel]);
   aoa.push([]);
-  aoa.push(['#', 'Colaborador', 'Días\nTrab.', 'Faltas\nReales', 'Justif.\n(Comp.)', 'Inj.', 'Retardos', 'Hrs\nDeducir', 'Punt', 'Asis', 'Notas / Ajustes']);
+  aoa.push(['#', 'Colaborador', 'Días\nTrab.', 'Días\nFestivos', 'Faltas\nReales', 'Justif.\n(Comp.)', 'Inj.', 'Retardos', 'Hrs\nDeducir', 'Punt', 'Asis', 'Notas / Ajustes']);
 
-  const totals = { days: 0, real: 0, just: 0, inj: 0, ret: 0, hnt: 0, punt: 0, asis: 0 };
+  const totals = { days: 0, fest: 0, real: 0, just: 0, inj: 0, ret: 0, hnt: 0, punt: 0, asis: 0 };
 
   currentRows.forEach(r => {
     const days = parseInt(r.DiasTrabajados) || 0;
+    const fest = parseInt(r.DiasFestivos) || 0;
     const real = parseInt(r.FaltasReal) || 0;
     const just = parseInt(r.FaltasJustificadas) || 0;
     const inj  = Math.max(0, real - just);
@@ -467,7 +475,7 @@ function exportExcel() {
     const detalle = r.RetardosDetalle || '';
     const notas = [ajustes, detalle].filter(Boolean).join('\n');
 
-    totals.days += days; totals.real += real; totals.just += just;
+    totals.days += days; totals.fest += fest; totals.real += real; totals.just += just;
     totals.inj  += inj;  totals.ret  += ret;  totals.hnt  += hnt;
     if (punt) totals.punt++;
     if (asis) totals.asis++;
@@ -475,7 +483,7 @@ function exportExcel() {
     aoa.push([
       r.NumeroColab || '',
       titleCase(r.Nombre || ''),
-      days, real, just, inj, ret, hnt,
+      days, fest, real, just, inj, ret, hnt,
       punt ? '✓' : '✗',
       asis ? '✓' : '✗',
       notas
@@ -483,7 +491,7 @@ function exportExcel() {
   });
 
   aoa.push([]);
-  aoa.push(['', 'TOTAL', totals.days, totals.real, totals.just, totals.inj, totals.ret, +totals.hnt.toFixed(2), totals.punt + '/' + currentRows.length, totals.asis + '/' + currentRows.length, '']);
+  aoa.push(['', 'TOTAL', totals.days, totals.fest, totals.real, totals.just, totals.inj, totals.ret, +totals.hnt.toFixed(2), totals.punt + '/' + currentRows.length, totals.asis + '/' + currentRows.length, '']);
 
   const ws = XLSX.utils.aoa_to_sheet(aoa);
 
@@ -491,7 +499,8 @@ function exportExcel() {
   ws['!cols'] = [
     { wch: 5 },   // #
     { wch: 32 },  // Colaborador
-    { wch: 9 },   // Días
+    { wch: 9 },   // Días Trab.
+    { wch: 10 },  // Días Festivos
     { wch: 10 },  // Faltas Reales
     { wch: 11 },  // Justif
     { wch: 7 },   // Inj
@@ -530,44 +539,46 @@ function exportExcel() {
   // Title + subtitle
   setStyle(0, 0, STYLE.title);
   setStyle(1, 0, STYLE.subtitle);
-  // Header row (col 0..10)
-  for (let c = 0; c <= 10; c++) setStyle(headerRowIdx, c, STYLE.header);
+  // Header row (col 0..11)
+  for (let c = 0; c <= 11; c++) setStyle(headerRowIdx, c, STYLE.header);
 
-  // Data rows
+  // Data rows — col layout: #, Nombre, Días, Festivos, Faltas, Just, Inj, Ret, Hrs, Punt, Asis, Notas
   for (let i = 0; i < currentRows.length; i++) {
     const row = aoa[dataStart + i];
-    const real = row[3] || 0;
-    const just = row[4] || 0;
-    const inj  = row[5] || 0;
-    const ret  = row[6] || 0;
-    const hnt  = row[7] || 0;
-    const punt = row[8] === '✓';
-    const asis = row[9] === '✓';
+    const fest = row[3] || 0;
+    const real = row[4] || 0;
+    const just = row[5] || 0;
+    const inj  = row[6] || 0;
+    const ret  = row[7] || 0;
+    const hnt  = row[8] || 0;
+    const punt = row[9] === '✓';
+    const asis = row[10] === '✓';
     const hasFalta = real > 0;
 
-    setStyle(dataStart + i, 0, hasFalta ? STYLE.rowHasFalta : STYLE.num);      // #
-    setStyle(dataStart + i, 1, hasFalta ? STYLE.rowHasFalta : STYLE.nameCell); // Nombre
-    setStyle(dataStart + i, 2, STYLE.num);                                      // Días
-    setStyle(dataStart + i, 3, real > 0 ? STYLE.numHighlight : STYLE.num);      // Faltas Reales
-    setStyle(dataStart + i, 4, just > 0 ? STYLE.numJust      : STYLE.num);      // Justif
-    setStyle(dataStart + i, 5, inj  > 0 ? STYLE.numHighlight : STYLE.num);      // Inj
-    setStyle(dataStart + i, 6, ret  > 0 ? STYLE.numHighlight : STYLE.num);      // Retardos
-    setStyle(dataStart + i, 7, hnt  > 0 ? STYLE.numHighlight : STYLE.num);      // Hrs Deducir
-    setStyle(dataStart + i, 8, punt ? STYLE.bonoYes : STYLE.bonoNo);            // Punt
-    setStyle(dataStart + i, 9, asis ? STYLE.bonoYes : STYLE.bonoNo);            // Asis
-    setStyle(dataStart + i, 10, STYLE.notas);                                   // Notas
+    setStyle(dataStart + i, 0,  hasFalta ? STYLE.rowHasFalta : STYLE.num);      // #
+    setStyle(dataStart + i, 1,  hasFalta ? STYLE.rowHasFalta : STYLE.nameCell); // Nombre
+    setStyle(dataStart + i, 2,  STYLE.num);                                      // Días Trab.
+    setStyle(dataStart + i, 3,  fest > 0 ? STYLE.numFestivo  : STYLE.num);       // Días Festivos
+    setStyle(dataStart + i, 4,  real > 0 ? STYLE.numHighlight : STYLE.num);      // Faltas Reales
+    setStyle(dataStart + i, 5,  just > 0 ? STYLE.numJust      : STYLE.num);      // Justif
+    setStyle(dataStart + i, 6,  inj  > 0 ? STYLE.numHighlight : STYLE.num);      // Inj
+    setStyle(dataStart + i, 7,  ret  > 0 ? STYLE.numHighlight : STYLE.num);      // Retardos
+    setStyle(dataStart + i, 8,  hnt  > 0 ? STYLE.numHighlight : STYLE.num);      // Hrs Deducir
+    setStyle(dataStart + i, 9,  punt ? STYLE.bonoYes : STYLE.bonoNo);            // Punt
+    setStyle(dataStart + i, 10, asis ? STYLE.bonoYes : STYLE.bonoNo);            // Asis
+    setStyle(dataStart + i, 11, STYLE.notas);                                    // Notas
   }
 
   // TOTAL row
   const totalRowIdx = dataStart + currentRows.length + 1;
   setStyle(totalRowIdx, 0, STYLE.totalLabel);
   setStyle(totalRowIdx, 1, STYLE.totalLabel);
-  for (let c = 2; c <= 10; c++) setStyle(totalRowIdx, c, STYLE.totalNum);
+  for (let c = 2; c <= 11; c++) setStyle(totalRowIdx, c, STYLE.totalNum);
 
-  // ── Title merges (now spanning 11 columns) ────────────────────────────
+  // ── Title merges (now spanning 12 columns) ────────────────────────────
   ws['!merges'] = [
-    { s: { r: 0, c: 0 }, e: { r: 0, c: 10 } },
-    { s: { r: 1, c: 0 }, e: { r: 1, c: 10 } }
+    { s: { r: 0, c: 0 }, e: { r: 0, c: 11 } },
+    { s: { r: 1, c: 0 }, e: { r: 1, c: 11 } }
   ];
 
   // ── Freeze headers ────────────────────────────────────────────────────
@@ -738,6 +749,7 @@ function renderSemTable(rows) {
         ${apellidos ? `<div class="apellido-line">${escapeHtml(apellidos)}</div>` : ''}
       </td>
       <td class="num">${r.DiasTrabajados || 0}</td>
+      <td class="num">${(parseInt(r.DiasFestivos) || 0) > 0 ? `<span class="pill" style="background:#f3e5f5;color:#4a148c">${r.DiasFestivos}</span>` : '0'}</td>
       <td class="num"><span class="pill gray">${r.FaltasRaw || 0}</span></td>
       <td class="num"><input type="number" min="0" max="6" data-idx="${idx}" data-field="FaltasReal" value="${r.FaltasReal != null ? r.FaltasReal : (r.FaltasRaw || 0)}"></td>
       <td class="num"><input type="number" min="0" max="6" data-idx="${idx}" data-field="FaltasJustificadas" value="${r.FaltasJustificadas || 0}"></td>
