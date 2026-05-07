@@ -273,6 +273,75 @@
       text-decoration: none;
     }
     .comp-link:hover { background: #bbdefb; }
+
+    /* ─── Tabs ─── */
+    .tabs {
+      max-width: 980px;
+      margin: 0 auto 16px;
+      display: flex;
+      gap: 6px;
+      background: white;
+      padding: 5px;
+      border-radius: 12px;
+      box-shadow: 0 2px 10px rgba(0,0,0,.04);
+    }
+    .tab {
+      flex: 1;
+      padding: 10px 16px;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      text-align: center;
+      color: #5e4e3d;
+      border: none;
+      background: transparent;
+      transition: all .15s;
+    }
+    .tab.active { background: #1a3a1a; color: white; }
+    .tab:hover:not(.active) { background: #f4ede4; }
+
+    /* ─── Historial table ─── */
+    .record-wrap {
+      max-width: 1100px;
+      margin: 0 auto;
+      background: white;
+      border-radius: 14px;
+      padding: 18px;
+      box-shadow: 0 2px 14px rgba(0,0,0,.04);
+      overflow-x: auto;
+    }
+    .record-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+    .record-table th {
+      text-align: left;
+      padding: 10px 8px;
+      background: #1a3a1a;
+      color: white;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .4px;
+      position: sticky;
+      top: 0;
+    }
+    .record-table th.num { text-align: center; }
+    .record-table td {
+      padding: 12px 8px;
+      border-bottom: 1px solid #f0ebe4;
+      vertical-align: middle;
+    }
+    .record-table td.num { text-align: center; font-variant-numeric: tabular-nums; }
+    .record-table tr:hover { background: #faf6f1; }
+    .record-table .name { font-weight: 600; color: #2d2319; }
+    .record-table .sub { font-size: 11px; color: #998777; }
+    .pill-num { display: inline-block; padding: 3px 10px; border-radius: 10px; font-size: 12px; font-weight: 600; }
+    .pill-num.disp { background: #e8f5e9; color: #1b5e20; }
+    .pill-num.zero { background: #f5f5f5; color: #998777; }
+    .pill-num.warn { background: #fff3e0; color: #bf360c; }
   </style>
 </head>
 <body>
@@ -293,6 +362,12 @@
 </div>
 
 <div id="content" style="display:none">
+  <div class="tabs">
+    <button class="tab active" data-tab="aprobaciones">📋 Aprobaciones</button>
+    <button class="tab" data-tab="historial">📊 Historial RH</button>
+  </div>
+
+  <div id="tab-aprobaciones">
   <div class="urgency-banner">
     <strong>📎 Política de comprobantes:</strong> Los comprobantes (médico/legal/educativo) deben llegar a más tardar <strong>miércoles EOD</strong> para ser procesados en la nómina del jueves. Sin comprobante, la falta no se justifica y no aplica el reposo del tiempo pagado.
   </div>
@@ -319,6 +394,19 @@
   <div id="colabSummary" style="display:none;max-width:980px;margin:0 auto 14px;padding:16px 18px;background:linear-gradient(135deg,#f0fdf4,#e8f5e9);border-radius:12px;border-left:4px solid #2e7d32;font-size:13px"></div>
 
   <div id="grid" class="grid"></div>
+  </div><!-- /tab-aprobaciones -->
+
+  <div id="tab-historial" style="display:none">
+    <div style="max-width:1100px;margin:0 auto 14px;padding:0 4px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;justify-content:space-between">
+      <div style="font-size:13px;color:#5e4e3d">
+        <strong>Tabla completa de colaboradores activos.</strong> Click en una fila para filtrar Aprobaciones por ese colaborador.
+      </div>
+      <button type="button" id="btnReloadRecord" style="padding:8px 14px;background:#2e6b2e;color:white;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">🔄 Recargar</button>
+    </div>
+    <div class="record-wrap">
+      <div id="recordContent"><div style="text-align:center;padding:30px;color:#998777">Cargando…</div></div>
+    </div>
+  </div>
 </div>
 
 <script src="nb_auth.js"></script>
@@ -752,6 +840,104 @@ $('clearFilters').addEventListener('click', () => {
   currentColabFilter = '';
   render();
 });
+
+// ─── Tabs ──────────────────────────────────────────────────────────────
+let recordLoaded = false;
+
+function switchTab(tabName) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tabName));
+  $('tab-aprobaciones').style.display = tabName === 'aprobaciones' ? 'block' : 'none';
+  $('tab-historial').style.display    = tabName === 'historial'    ? 'block' : 'none';
+  if (tabName === 'historial' && !recordLoaded) loadRecord();
+}
+
+document.querySelectorAll('.tab').forEach(t => {
+  t.addEventListener('click', () => switchTab(t.dataset.tab));
+});
+
+// ─── Historial RH ──────────────────────────────────────────────────────
+async function loadRecord() {
+  $('recordContent').innerHTML = '<div style="text-align:center;padding:30px;color:#998777">Cargando…</div>';
+  try {
+    const r = await fetch(API + '?action=get_colaboradores_record');
+    const j = await r.json();
+    if (!j.ok) throw new Error(j.error || 'Error');
+    renderRecord(j.colaboradores || []);
+    recordLoaded = true;
+  } catch (err) {
+    $('recordContent').innerHTML = `<div style="text-align:center;padding:30px;color:#c62828">Error: ${err.message}</div>`;
+  }
+}
+
+function renderRecord(rows) {
+  if (!rows.length) {
+    $('recordContent').innerHTML = '<div style="text-align:center;padding:30px;color:#998777">No hay colaboradores activos.</div>';
+    return;
+  }
+  const pill = (n, cls) => `<span class="pill-num ${cls || (n > 0 ? 'disp' : 'zero')}">${n}</span>`;
+  const tr = rows.map(r => {
+    if (r.error) {
+      return `
+        <tr data-num="${r.numero}">
+          <td class="num">${r.numero}</td>
+          <td><span class="name">${r.nombre || '—'}</span><br><span class="sub" style="color:#c62828">${r.error}</span></td>
+          <td colspan="9" style="color:#998777;font-style:italic">Sin balance</td>
+        </tr>`;
+    }
+    const aniv = r.anosCompletos === 0 ? 'Aún no aplica' : `Año ${r.anosCompletos}`;
+    return `
+      <tr data-num="${r.numero}" style="cursor:pointer">
+        <td class="num">${r.numero}</td>
+        <td>
+          <span class="name">${r.nombre}</span>
+          <br><span class="sub">Inicio ${fmtDate(r.inicioLaboral)} · ${aniv}</span>
+        </td>
+        <td class="num"><span class="sub">${r.anualidadCalendarYear ?? '—'}</span></td>
+        <td class="num">${r.diasEntitled ?? 0}</td>
+        <td class="num">${pill(r.diasUsados ?? 0, (r.diasUsados ?? 0) > 0 ? 'warn' : 'zero')}</td>
+        <td class="num">${pill(r.diasReservadosActual ?? 0)}</td>
+        <td class="num">${pill(r.diasReservadosProxima ?? 0)}</td>
+        <td class="num">${pill(r.disponibles ?? 0)}</td>
+        <td class="num"><span class="sub">${r.proximaAnualidadDias ?? 0}</span></td>
+        <td class="num">${pill(r.permisosAprobados ?? 0)}</td>
+        <td class="num">${pill(r.vacacionesAprobadas ?? 0)}</td>
+      </tr>`;
+  }).join('');
+
+  $('recordContent').innerHTML = `
+    <table class="record-table">
+      <thead>
+        <tr>
+          <th class="num">#</th>
+          <th>Colaborador</th>
+          <th class="num">Año<br>Anualidad</th>
+          <th class="num">Asignados</th>
+          <th class="num">Usados</th>
+          <th class="num">Reservados<br>Actual</th>
+          <th class="num">Reservados<br>Próxima</th>
+          <th class="num">Disponibles</th>
+          <th class="num">Próxima<br>Anualidad</th>
+          <th class="num">Permisos<br>Aprob.</th>
+          <th class="num">Vacaciones<br>Aprob.</th>
+        </tr>
+      </thead>
+      <tbody>${tr}</tbody>
+    </table>
+  `;
+  // Click a row → switch to Aprobaciones tab filtered by that colab
+  document.querySelectorAll('.record-table tbody tr').forEach(row => {
+    row.addEventListener('click', () => {
+      const num = row.dataset.num;
+      if (!num) return;
+      $('colabSelect').value = num;
+      currentColabFilter = num;
+      switchTab('aprobaciones');
+      render();
+    });
+  });
+}
+
+$('btnReloadRecord').addEventListener('click', () => { recordLoaded = false; loadRecord(); });
 
 document.addEventListener('DOMContentLoaded', () => {
   requireNbAuth(() => {

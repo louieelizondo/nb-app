@@ -242,6 +242,12 @@
 <form id="vacForm2" class="card" autocomplete="off">
   <h2>Selecciona tus días</h2>
 
+  <label class="req" for="anualidadYear">¿De qué anualidad estás usando los días?</label>
+  <select id="anualidadYear" required>
+    <option value="">Selecciona tu nombre primero…</option>
+  </select>
+  <p class="hint">Si te quedan días pendientes de una anualidad pasada, escógela. Si quieres reservar adelantadas, escoge la próxima.</p>
+
   <div class="row-2">
     <div>
       <label class="req" for="fechaInicio">Fecha de inicio</label>
@@ -330,6 +336,31 @@ async function loadBalance() {
     $('balProxEntitled').textContent = j.proximaAnualidadDias ?? 0;
     $('balProxReservados').textContent = j.diasReservadosProxima ?? 0;
     $('balProxDisponibles').textContent = j.proximaDisponibles ?? j.proximaAnualidadDias ?? 0;
+
+    // Populate anualidad dropdown
+    const anuSel = $('anualidadYear');
+    const currentYear = parseInt(String(j.anualidadInicio).slice(0, 4));
+    const nextYear = currentYear + 1;
+    anuSel.innerHTML = '';
+    if (j.anosCompletos < 1) {
+      const o = document.createElement('option');
+      o.value = ''; o.textContent = 'Aún no aplicas a vacaciones';
+      o.disabled = true; o.selected = true;
+      anuSel.appendChild(o);
+    } else {
+      // Current
+      const optActual = document.createElement('option');
+      optActual.value = String(currentYear);
+      optActual.textContent = `Anualidad ${currentYear} — actual (${j.disponibles} días disponibles)`;
+      anuSel.appendChild(optActual);
+      // Next (reservación adelantada)
+      const optProx = document.createElement('option');
+      optProx.value = String(nextYear);
+      const proxDisp = j.proximaDisponibles ?? j.proximaAnualidadDias ?? 0;
+      optProx.textContent = `Anualidad ${nextYear} — próxima (${proxDisp} días, reservación adelantada)`;
+      anuSel.appendChild(optProx);
+      anuSel.selectedIndex = 0;
+    }
     const backfillNote = j.diasUsadosBackfill > 0
       ? ` · Backfill (días usados antes del sistema): <strong>${j.diasUsadosBackfill}</strong>`
       : '';
@@ -465,6 +496,7 @@ async function submitVacacion(confirmedOverlap) {
       numeroColab: parseInt(sel.value),
       nombre: nombre.trim(),
       email: $('email').value.trim(),
+      anualidadYear: parseInt($('anualidadYear').value) || null,
       fechaInicio: ini,
       fechaFin: fin,
       diasVacacion: countWorkDays(ini, fin),

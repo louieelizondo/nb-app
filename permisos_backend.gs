@@ -55,7 +55,8 @@ const PERMISOS_HEADERS = [
   'Real_Ausente_Min',    // actual minutes ausente per checador (Permiso)
   'Repose_Status',       // pending | completo | shortfall | over_cap_no_repose | not_required (Permiso)
   'Repose_Detail',       // text breakdown (Permiso)
-  'Computed_At'          // timestamp of last engine writeback
+  'Computed_At',         // timestamp of last engine writeback
+  'Anualidad_Year'       // year the anualidad started (Vacacion only) — explicit override
 ];
 
 const PERMISOS_FOLDER_NAME = 'NB_Comprobantes_Permisos';
@@ -220,27 +221,38 @@ function submitVacacion(body) {
   const bal = getVacacionBalance(v.numeroColab);
   if (bal.error) return { error: 'No pude calcular tu balance: ' + bal.error };
 
-  // Determine which "anniversary year" this request falls into
-  const reqYear = anniversaryYearForDate_(bal.inicioLaboral, v.fechaInicio);
-  if (reqYear == null) {
-    return { error: 'Aún no aplicas a vacaciones — primera anualidad inicia el ' + bal.nextAnniversary + '.' };
-  }
-  if (reqYear === bal.currentAnniversaryYear) {
-    if (dias > bal.disponibles) {
-      return { error: `Solo tienes ${bal.disponibles} días disponibles en esta anualidad. Solicitaste ${dias}.` };
+  // Anualidad selection — employee picks explicitly which year these days come from.
+  // Fallback to date inference if not provided (legacy behavior).
+  let anualidadYear = parseInt(v.anualidadYear) || null;
+  if (!anualidadYear) {
+    const inferred = anniversaryYearForDate_(bal.inicioLaboral, v.fechaInicio);
+    if (inferred == null) {
+      return { error: 'Aún no aplicas a vacaciones — primera anualidad inicia el ' + bal.nextAnniversary + '.' };
     }
-  } else if (reqYear === bal.currentAnniversaryYear + 1) {
-    // Reservation territory — must be within 2 months (60 days) of next anniversary
+    // Convert "anniversary year index" (0,1,2,...) to absolute calendar year of anualidad start
+    anualidadYear = parseInt(bal.inicioLaboral.slice(0, 4)) + inferred;
+  }
+
+  // Validate the chosen anualidad
+  const currentAnualidadStartYear = parseInt(bal.anualidadInicio.slice(0, 4));
+  if (anualidadYear === currentAnualidadStartYear) {
+    if (dias > bal.disponibles) {
+      return { error: `Solo tienes ${bal.disponibles} días disponibles en la anualidad ${anualidadYear}. Solicitaste ${dias}.` };
+    }
+  } else if (anualidadYear === currentAnualidadStartYear + 1) {
+    // Reservación adelantada — must be within 2 months of next anniversary
     const todayStr = formatDateStr(new Date());
     const earliestReservaStr = addDaysStr_(bal.nextAnniversary, -60);
     if (todayStr < earliestReservaStr) {
-      return { error: `Tu próxima anualidad inicia el ${bal.nextAnniversary}. Solo puedes reservar hasta 2 meses antes (a partir del ${earliestReservaStr}).` };
+      return { error: `Tu próxima anualidad ${anualidadYear} inicia el ${bal.nextAnniversary}. Solo puedes reservar hasta 2 meses antes (a partir del ${earliestReservaStr}).` };
     }
     if (dias > bal.proximaAnualidadDias) {
-      return { error: `En tu próxima anualidad tendrás ${bal.proximaAnualidadDias} días. Solicitaste ${dias}.` };
+      return { error: `En tu anualidad ${anualidadYear} tendrás ${bal.proximaAnualidadDias} días. Solicitaste ${dias}.` };
     }
+  } else if (anualidadYear < currentAnualidadStartYear) {
+    return { error: `La anualidad ${anualidadYear} ya cerró. Solo puedes usar días de tu anualidad ${currentAnualidadStartYear} o reservar para ${currentAnualidadStartYear + 1}.` };
   } else {
-    return { error: 'No puedes solicitar vacaciones tan adelantadas.' };
+    return { error: `No puedes solicitar vacaciones para la anualidad ${anualidadYear}. Demasiado adelantado.` };
   }
 
   // Overlap detection (soft warning — caller decides to proceed via body.confirmedOverlap)
@@ -286,7 +298,8 @@ function submitVacacion(body) {
     Real_Ausente_Min: '',
     Repose_Status: '',
     Repose_Detail: '',
-    Computed_At: ''
+    Computed_At: '',
+    Anualidad_Year: anualidadYear
   });
   sheet.appendRow(row);
   CacheService.getScriptCache().remove(PERMISOS_CACHE_KEY_SHEET);
@@ -376,16 +389,15 @@ function getVacacionBalance(numeroColab) {
   const diasEntitled       = lftDaysForYear_(anos);
   const proximaAnualidadDias = lftDaysForYear_(anos + 1);
 
-  // Walk vacation rows and bucket by (anualidad × past-vs-future).
-  // Mental model the user uses:
-  //   - "Usados" = days already taken (past or completed) — backfill + ended rows in current anualidad
-  //   - "Reservados (actual)" = future booked rows in current anualidad
-  //   - "Reservados (próxima)" = booked rows that fall in the next anualidad
-  //   - "Disponibles" = entitled - usados - reservadosActual
+  // Walk vacation rows and bucket by anualidad. New rows store Anualidad_Year
+  // explicitly (the calendar year the anualidad started). Older rows fall back
+  // to date inference.
+  const currentAnualidadStartYear = iy + anos;  // e.g. 2025 for Elvia year-2 anualidad
   const sheet = getOrCreateTab(PERMISOS_TAB, PERMISOS_HEADERS);
   const data = sheet.getDataRange().getValues();
   const headers = data[0];
   const idx = (h) => headers.indexOf(h);
+  const anualidadYearCol = idx('Anualidad_Year');
   let usadosFromRows = 0, reservadosActual = 0, reservadosProxima = 0;
   for (let r = 1; r < data.length; r++) {
     const row = data[r];
@@ -398,22 +410,27 @@ function getVacacionBalance(numeroColab) {
     const endStr   = formatDateStr(row[idx('Fecha_Fin')]) || startStr;
     if (!startStr) continue;
 
-    // Which anualidad does this row fall in?
-    let anualidad;
-    if (startStr >= anualidadInicioStr && startStr <= anualidadFinStr) {
-      anualidad = 'actual';
-    } else if (startStr >= addDaysStr_(anualidadFinStr, 1) && startStr <= proxAnualidadFinStr) {
-      anualidad = 'proxima';
+    // Determine anualidad: prefer explicit Anualidad_Year, fall back to dates.
+    let anualidad = null;  // 'actual' | 'proxima' | null
+    const explicitYear = anualidadYearCol >= 0 ? parseInt(row[anualidadYearCol]) : null;
+    if (explicitYear) {
+      if (explicitYear === currentAnualidadStartYear) anualidad = 'actual';
+      else if (explicitYear === currentAnualidadStartYear + 1) anualidad = 'proxima';
+      else continue;  // older anualidad — already closed, ignore for current balance
     } else {
-      continue;  // outside window we care about
+      if (startStr >= anualidadInicioStr && startStr <= anualidadFinStr) {
+        anualidad = 'actual';
+      } else if (startStr >= addDaysStr_(anualidadFinStr, 1) && startStr <= proxAnualidadFinStr) {
+        anualidad = 'proxima';
+      } else {
+        continue;
+      }
     }
 
-    // Past vs future: ended already → usados; not yet ended → reservados
     if (anualidad === 'actual') {
       if (endStr < todayStr) usadosFromRows += dias;
       else                    reservadosActual += dias;
     } else {
-      // Próxima anualidad reservations — always future from current perspective
       reservadosProxima += dias;
     }
   }
@@ -633,6 +650,92 @@ function getAusenciasCalendar(params) {
   }
   out.sort((a, b) => String(a.fechaInicio).localeCompare(String(b.fechaInicio)));
   return { ok: true, from, to, ausencias: out };
+}
+
+// ─── Admin: full HR record table ─────────────────────────────────────────
+
+/**
+ * Returns ALL active colaboradores with their permiso/vacacion stats and
+ * current vacation balance. Used by the admin Historial RH tab.
+ *
+ * Each entry: {
+ *   numero, nombre, inicioLaboral, anosCompletos,
+ *   anualidadInicio, anualidadFin, nextAnniversary, anualidadCalendarYear,
+ *   diasEntitled, diasUsados, diasReservadosActual, diasReservadosProxima,
+ *   disponibles, proximaAnualidadDias,
+ *   permisosTotal, permisosAprobados,
+ *   vacacionesTotal, vacacionesAprobadas
+ * }
+ */
+function getColaboradoresRecord() {
+  const colabs = (typeof getColaboradoresFromSheet_ === 'function')
+    ? getColaboradoresFromSheet_() : {};
+  const sheet = getOrCreateTab(PERMISOS_TAB, PERMISOS_HEADERS);
+  const data = sheet.getDataRange().getValues();
+  const headers = data[0];
+  const idx = (h) => headers.indexOf(h);
+
+  // Pre-bucket rows by numeroColab for permiso/vacacion counts
+  const statsByNum = {};
+  for (let r = 1; r < data.length; r++) {
+    const num = parseInt(data[r][idx('NumeroColab')]);
+    if (!num) continue;
+    if (!statsByNum[num]) statsByNum[num] = {
+      permisosTotal: 0, permisosAprobados: 0,
+      vacacionesTotal: 0, vacacionesAprobadas: 0
+    };
+    const tipo = String(data[r][idx('Tipo')] || '');
+    const resp = String(data[r][idx('Respuesta')] || '');
+    if (tipo === 'Vacacion') {
+      statsByNum[num].vacacionesTotal++;
+      if (resp === 'Aprobado') statsByNum[num].vacacionesAprobadas++;
+    } else {
+      statsByNum[num].permisosTotal++;
+      if (resp === 'Aprobado') statsByNum[num].permisosAprobados++;
+    }
+  }
+
+  const out = [];
+  Object.keys(colabs).forEach(numStr => {
+    const num = parseInt(numStr);
+    const c = colabs[numStr];
+    const bal = getVacacionBalance(num);
+    const stats = statsByNum[num] || { permisosTotal: 0, permisosAprobados: 0, vacacionesTotal: 0, vacacionesAprobadas: 0 };
+    if (bal.error) {
+      out.push({
+        numero: num, nombre: c.nombre,
+        inicioLaboral: c.inicioLaboral || null,
+        error: bal.error,
+        permisosTotal: stats.permisosTotal,
+        permisosAprobados: stats.permisosAprobados,
+        vacacionesTotal: stats.vacacionesTotal,
+        vacacionesAprobadas: stats.vacacionesAprobadas
+      });
+      return;
+    }
+    out.push({
+      numero: num, nombre: bal.nombre,
+      inicioLaboral: bal.inicioLaboral,
+      anosCompletos: bal.anosCompletos,
+      anualidadInicio: bal.anualidadInicio,
+      anualidadFin: bal.anualidadFin,
+      nextAnniversary: bal.nextAnniversary,
+      anualidadCalendarYear: parseInt(String(bal.anualidadInicio).slice(0, 4)),
+      diasEntitled: bal.diasEntitled,
+      diasUsados: bal.diasUsados,
+      diasReservadosActual: bal.diasReservadosActual ?? 0,
+      diasReservadosProxima: bal.diasReservadosProxima ?? 0,
+      disponibles: bal.disponibles,
+      proximaAnualidadDias: bal.proximaAnualidadDias,
+      proximaDisponibles: bal.proximaDisponibles ?? bal.proximaAnualidadDias ?? 0,
+      permisosTotal: stats.permisosTotal,
+      permisosAprobados: stats.permisosAprobados,
+      vacacionesTotal: stats.vacacionesTotal,
+      vacacionesAprobadas: stats.vacacionesAprobadas
+    });
+  });
+  out.sort((a, b) => String(a.nombre || '').localeCompare(String(b.nombre || ''), 'es'));
+  return { ok: true, colaboradores: out };
 }
 
 // ─── Vacation email ──────────────────────────────────────────────────────

@@ -113,6 +113,7 @@ function doGet(e) {
       // Vacaciones + ausencias calendar
       case 'get_vacacion_balance':           return jsonResp(getVacacionBalance(e.parameter.numero));
       case 'get_ausencias_calendar':         return jsonResp(getAusenciasCalendar(e.parameter));
+      case 'get_colaboradores_record':       return jsonResp(getColaboradoresRecord());
       // Días festivos
       case 'list_dias_festivos':             return jsonResp(listDiasFestivos(e.parameter));
       default:              return jsonResp({ error: 'Unknown action: ' + action }, 400);
