@@ -77,6 +77,21 @@
       overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
       cursor: default;
     }
+    /* Mobile: same compact dimensions as the embedded calendar in vacaciones.html */
+    @media (max-width: 700px) {
+      body { padding: 12px 8px 40px; }
+      .cal-header { gap: 6px; }
+      .cal-nav { padding: 6px 10px; font-size: 13px; }
+      .cal-month { font-size: 14px; }
+      .cal-dow { padding: 6px 2px; font-size: 10px; }
+      .cal-day { min-height: 70px; padding: 4px 5px; font-size: 11px; }
+      .cal-num { min-width: 20px; height: 20px; line-height: 20px; font-size: 11px; }
+      .cal-evt { font-size: 9px; padding: 1px 4px; margin-top: 2px; }
+      .cal-legend { font-size: 11px; gap: 10px; }
+      .hero { padding: 18px 16px; }
+      .hero h1 { font-size: 18px; }
+      .hero p { font-size: 12px; }
+    }
     .cal-evt.permiso { background: #e3f2fd; color: #0d47a1; }
     .cal-evt.vacacion { background: #fff3e0; color: #bf360c; }
     .cal-evt.festivo { background: #f3e5f5; color: #4a148c; font-weight: 600; }

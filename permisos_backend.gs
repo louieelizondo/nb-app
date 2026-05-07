@@ -1231,6 +1231,94 @@ function getApprovedVacacionDaysFromSheet_() {
   return out;
 }
 
+// ─── One-time fix: V2 → V3 column layout ─────────────────────────────────
+
+/**
+ * V2 schema (22 cols) had no Tipo / Fecha_Fin / Dias_Vacacion. V3 inserted
+ * them at positions 2, 8, 9. Old NOT* migrated rows store data in V2
+ * positions, so reading them with the V3 header gives shifted values
+ * (Tipo column shows Fecha_Solicitud, Nombre column shows Email, etc).
+ *
+ * This rebuilds each NOT* row by taking the V2 layout values and placing
+ * them in the correct V3 positions. Idempotent — detects already-fixed
+ * rows by checking if the Tipo cell == 'Permiso'.
+ *
+ * Run once from the editor:  fixV2ToV3Permisos()
+ */
+function fixV2ToV3Permisos() {
+  const sheet = getOrCreateTab(PERMISOS_TAB, PERMISOS_HEADERS);
+  const lastCol = PERMISOS_HEADERS.length;
+  const data = sheet.getDataRange().getValues();
+  if (data.length < 2) return { ok: true, fixed: 0 };
+  const headers = data[0];
+  const idCol = headers.indexOf('ID');
+  const tipoCol = headers.indexOf('Tipo');
+
+  const v2Order = [
+    'ID','Fecha_Solicitud','NumeroColab','Nombre','Email_Empleado',
+    'Fecha_Permiso','Horario_Ausente','Horas_Ausente','Asunto','Descripcion',
+    'Reponer','Como_Reponer','Fecha_Final_Pagado','Comprobante_URL','Respuesta',
+    'Aprobado_Por','Fecha_Decision','Notas_Admin',
+    'Real_Ausente_Min','Repose_Status','Repose_Detail','Computed_At'
+  ];
+
+  let fixed = 0, skipped = 0;
+  for (let r = 1; r < data.length; r++) {
+    const row = data[r];
+    const id = String(row[idCol] || '');
+    if (!id.startsWith('NOT')) continue;
+
+    // If Tipo is already 'Permiso' (or anything sensible), this row is V3 already
+    const currentTipo = String(row[tipoCol] || '').trim();
+    if (currentTipo === 'Permiso' || currentTipo === 'Vacacion') {
+      skipped++;
+      continue;
+    }
+
+    // Read row's V2 values from positions 0..21 (matches v2Order)
+    const v2vals = {};
+    for (let i = 0; i < v2Order.length; i++) {
+      v2vals[v2Order[i]] = row[i];
+    }
+
+    // Build a V3 row with values placed correctly
+    const fechaPermiso = v2vals['Fecha_Permiso'];
+    const newRow = buildPermisoRow_({
+      ID: v2vals['ID'],
+      Tipo: 'Permiso',
+      Fecha_Solicitud: v2vals['Fecha_Solicitud'],
+      NumeroColab: v2vals['NumeroColab'],
+      Nombre: v2vals['Nombre'],
+      Email_Empleado: v2vals['Email_Empleado'],
+      Fecha_Permiso: fechaPermiso,
+      Fecha_Fin: fechaPermiso,            // permisos: same day
+      Dias_Vacacion: '',
+      Horario_Ausente: v2vals['Horario_Ausente'],
+      Horas_Ausente: v2vals['Horas_Ausente'],
+      Asunto: v2vals['Asunto'],
+      Descripcion: v2vals['Descripcion'],
+      Reponer: v2vals['Reponer'],
+      Como_Reponer: v2vals['Como_Reponer'],
+      Fecha_Final_Pagado: v2vals['Fecha_Final_Pagado'],
+      Comprobante_URL: v2vals['Comprobante_URL'],
+      Respuesta: v2vals['Respuesta'],
+      Aprobado_Por: v2vals['Aprobado_Por'],
+      Fecha_Decision: v2vals['Fecha_Decision'],
+      Notas_Admin: v2vals['Notas_Admin'],
+      Real_Ausente_Min: v2vals['Real_Ausente_Min'],
+      Repose_Status: v2vals['Repose_Status'],
+      Repose_Detail: v2vals['Repose_Detail'],
+      Computed_At: v2vals['Computed_At']
+    });
+
+    sheet.getRange(r + 1, 1, 1, lastCol).setValues([newRow]);
+    fixed++;
+  }
+  CacheService.getScriptCache().remove(PERMISOS_CACHE_KEY_SHEET);
+  Logger.log('fixV2ToV3Permisos: fixed=' + fixed + ', skipped=' + skipped);
+  return { ok: true, fixed, skipped };
+}
+
 // ─── One-time fix: shift mis-aligned migrated rows ───────────────────────
 
 /**
