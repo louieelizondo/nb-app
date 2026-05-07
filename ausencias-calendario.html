@@ -79,7 +79,9 @@
     }
     .cal-evt.permiso { background: #e3f2fd; color: #0d47a1; }
     .cal-evt.vacacion { background: #fff3e0; color: #bf360c; }
+    .cal-evt.festivo { background: #f3e5f5; color: #4a148c; font-weight: 600; }
     .cal-evt.pendiente { opacity: .55; border: 1px dashed #999; }
+    .cal-day.festivo-bg { background: #faf5fc; }
     .cal-legend { display: flex; gap: 18px; margin-top: 12px; font-size: 12px; color: #5e4e3d; flex-wrap: wrap; }
     .cal-legend .swatch { display: inline-block; width: 14px; height: 14px; border-radius: 3px; vertical-align: middle; margin-right: 6px; }
     .loading { text-align: center; padding: 60px 20px; color: #998777; font-size: 14px; }
@@ -110,6 +112,7 @@
   <div class="cal-legend">
     <span><span class="swatch" style="background:#fff3e0"></span>Vacación</span>
     <span><span class="swatch" style="background:#e3f2fd"></span>Permiso</span>
+    <span><span class="swatch" style="background:#f3e5f5"></span>Día festivo (paid, no work)</span>
     <span><span class="swatch" style="background:white;border:1px dashed #999"></span>Pendiente de aprobar</span>
     <span style="color:#998777;font-size:11px;margin-left:auto">Pasa el cursor sobre un evento para ver detalles</span>
   </div>
@@ -125,13 +128,18 @@ let allEvents = [];
 
 const isoDate = d => d.toISOString().slice(0, 10);
 
+let allFestivos = [];
+
 async function loadCalendar() {
   const from = isoDate(new Date(calCursor.getFullYear(), calCursor.getMonth() - 1, 1));
   const to   = isoDate(new Date(calCursor.getFullYear(), calCursor.getMonth() + 2, 0));
   try {
-    const r = await fetch(API + `?action=get_ausencias_calendar&from=${from}&to=${to}`);
-    const j = await r.json();
-    if (j.ok) allEvents = j.ausencias;
+    const [ausR, festR] = await Promise.all([
+      fetch(API + `?action=get_ausencias_calendar&from=${from}&to=${to}`).then(r => r.json()),
+      fetch(API + `?action=list_dias_festivos&from=${from}&to=${to}`).then(r => r.json())
+    ]);
+    if (ausR.ok) allEvents = ausR.ausencias;
+    if (festR.ok) allFestivos = festR.festivos;
     renderCalendar();
   } catch (err) {
     $('calendar').innerHTML = '<div class="loading" style="color:#c62828">Error: ' + err.message + '</div>';
@@ -161,6 +169,9 @@ function renderCalendar() {
       cur.setDate(cur.getDate() + 1);
     }
   });
+  // Festivos as separate map keyed by date
+  const festByDate = {};
+  allFestivos.forEach(f => { festByDate[f.fecha] = f; });
 
   let html = '';
   const dows = ['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'];
@@ -175,8 +186,13 @@ function renderCalendar() {
     const isWeekend = d.getDay() === 0 || d.getDay() === 6;
     const isToday = d.getTime() === today.getTime();
     const evts = byDate[isoStr] || [];
-    let dayHtml = `<div class="cal-day${inMonth ? '' : ' outside'}${isWeekend ? ' weekend' : ''}${isToday ? ' today' : ''}">`;
+    const fest = festByDate[isoStr];
+    const festClass = fest ? ' festivo-bg' : '';
+    let dayHtml = `<div class="cal-day${inMonth ? '' : ' outside'}${isWeekend ? ' weekend' : ''}${isToday ? ' today' : ''}${festClass}">`;
     dayHtml += `<span class="cal-num">${dayNum}</span>`;
+    if (fest) {
+      dayHtml += `<span class="cal-evt festivo" title="${fest.nombre} · ${fest.tipo}${fest.notas ? ' · ' + fest.notas : ''}">★ ${fest.nombre.substring(0, 16)}</span>`;
+    }
     evts.slice(0, 5).forEach(ev => {
       const cls = ev.tipo === 'Vacacion' ? 'vacacion' : 'permiso';
       const pendCls = ev.respuesta === 'Pendiente' ? ' pendiente' : '';

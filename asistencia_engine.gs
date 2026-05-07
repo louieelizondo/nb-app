@@ -34,7 +34,8 @@ const ASISTENCIA_RAW_HEADERS = [
   'ALaborar_min',
   'Saldo_min',                  // can be negative
   'UploadedAt',
-  'SourceFile'
+  'SourceFile',
+  'IsFestivo'                   // INHABIL/INHÁBIL from checador (paid, no work)
 ];
 
 const ASISTENCIA_SEMANAL_TAB = 'ASISTENCIA_SEMANAL';
@@ -60,7 +61,8 @@ const ASISTENCIA_SEMANAL_HEADERS = [
   'Locked',                     // 🔒 No sincronizar override
   'LastComputedAt',
   'SourceFile',
-  'DiasVacacion'                // appended at end (matches getOrCreateTab auto-migration position)
+  'DiasVacacion',               // appended at end (matches getOrCreateTab auto-migration position)
+  'DiasFestivos'                // count of paid-but-not-worked holidays in this week
 ];
 
 // NB attendance rules (mirror of asistencia/scripts/config.py)
@@ -143,7 +145,9 @@ function parseAsistenciaXlsx(rows2D) {
     if (!fecha) continue;
 
     const isDescanso = isDescansoCell_(row);
+    const isFestivo = isFestivoCell_(row);
     const isFalta = isFaltaCell_(row);
+    const noWork = isDescanso || isFestivo || isFalta;
 
     records.push({
       numero: parseInt(numero),
@@ -151,12 +155,13 @@ function parseAsistenciaXlsx(rows2D) {
       fecha: fecha,
       diaSemana: DIAS_SP[dayOfWeek_(fecha)],
       isDescanso: isDescanso,
+      isFestivo: isFestivo,
       isFalta: isFalta,
-      retEntrada_min: isDescanso || isFalta ? 0 : parseDurationToMinutes_(row[3]),
-      salComerAntes_min: isDescanso || isFalta ? 0 : parseDurationToMinutes_(row[4]),
-      retComida_min: isDescanso || isFalta ? 0 : parseDurationToMinutes_(row[5]),
-      salAntes_min: isDescanso || isFalta ? 0 : parseDurationToMinutes_(row[6]),
-      laborado_min: isDescanso || isFalta ? 0 : parseDurationToMinutes_(row[7]),
+      retEntrada_min: noWork ? 0 : parseDurationToMinutes_(row[3]),
+      salComerAntes_min: noWork ? 0 : parseDurationToMinutes_(row[4]),
+      retComida_min: noWork ? 0 : parseDurationToMinutes_(row[5]),
+      salAntes_min: noWork ? 0 : parseDurationToMinutes_(row[6]),
+      laborado_min: noWork ? 0 : parseDurationToMinutes_(row[7]),
       aLaborar_min: parseDurationToMinutes_(row[8]),
       saldo_min: parseSaldoToMinutes_(row[9])
     });
@@ -180,13 +185,30 @@ function parseFechaCell_(cell) {
   return null;
 }
 
+// Strip accents + uppercase for case/accent-insensitive cell text matching
+function normalizeCell_(s) {
+  return String(s || '').trim().toUpperCase()
+    .normalize('NFD').replace(/[̀-ͯ]/g, '');
+}
+
 function isDescansoCell_(row) {
-  // DESCANSO and INHÁBIL (paid holiday) both = no work expected that day.
-  // Both appear in all data cells (cols 3-9).
+  // DESCANSO = weekly rest day. (INHABIL is now treated separately as festivo.)
   for (let c = 3; c <= 9; c++) {
     if (typeof row[c] === 'string') {
-      const s = row[c].trim();
-      if (s === 'DESCANSO' || s === 'INHÁBIL') return true;
+      const s = normalizeCell_(row[c]);
+      if (s === 'DESCANSO') return true;
+    }
+  }
+  return false;
+}
+
+function isFestivoCell_(row) {
+  // INHABIL / INHÁBIL = paid holiday (Mexican federal or empresa). Checador
+  // marks it across all time columns. No work expected, no falta, paid day.
+  for (let c = 3; c <= 9; c++) {
+    if (typeof row[c] === 'string') {
+      const s = normalizeCell_(row[c]);
+      if (s === 'INHABIL') return true;
     }
   }
   return false;
@@ -194,7 +216,7 @@ function isDescansoCell_(row) {
 
 function isFaltaCell_(row) {
   for (let c = 3; c <= 9; c++) {
-    if (typeof row[c] === 'string' && row[c].trim() === 'FALTA') return true;
+    if (typeof row[c] === 'string' && normalizeCell_(row[c]) === 'FALTA') return true;
   }
   return false;
 }
@@ -301,7 +323,8 @@ function saveAsistenciaRaw(records, sourceFile) {
       'ALaborar_min': rec.aLaborar_min,
       'Saldo_min': rec.saldo_min,
       'UploadedAt': nowIso,
-      'SourceFile': sourceFile || ''
+      'SourceFile': sourceFile || '',
+      'IsFestivo': rec.isFestivo === true
     };
     const rowArr = ASISTENCIA_RAW_HEADERS.map(h => rowDict[h] != null ? rowDict[h] : '');
     if (existingMap[id]) updates.push({ rowNum: existingMap[id], rowArr: rowArr });
@@ -450,6 +473,10 @@ function recomputeSemanal(weekStart, weekEnd, sourceFile) {
     vacByNumero[v.numeroColab].add(v.fecha);
   });
 
+  // Días festivos (Mexican federal + empresa overrides) — apply to everyone
+  const festivosSet = (typeof getDiasFestivosSet_ === 'function')
+    ? getDiasFestivosSet_() : new Set();
+
   Object.keys(byEmpleado).forEach(numStr => {
     const emp = byEmpleado[numStr];
     const id = emp.numero + '_' + weekStart;
@@ -459,7 +486,7 @@ function recomputeSemanal(weekStart, weekEnd, sourceFile) {
 
     // If row is locked, skip the recompute (preserve manual values)
     if (existing.Locked === true || existing.Locked === '__YES__') {
-      const aggLocked = aggregateEmpDays_(emp.days, emp.numero, rulesMap, empPermisos, empVacSet);
+      const aggLocked = aggregateEmpDays_(emp.days, emp.numero, rulesMap, empPermisos, empVacSet, festivosSet);
       if (existing.DiasTrabajados !== aggLocked.diasTrabajados) {
         const rowNum = existing._row;
         const colDT = semHeaders.indexOf('DiasTrabajados') + 1;
@@ -469,7 +496,7 @@ function recomputeSemanal(weekStart, weekEnd, sourceFile) {
       return;
     }
 
-    const agg = aggregateEmpDays_(emp.days, emp.numero, rulesMap, empPermisos, empVacSet);
+    const agg = aggregateEmpDays_(emp.days, emp.numero, rulesMap, empPermisos, empVacSet, festivosSet);
     if (agg.permisoAnalyses) allPermisoAnalyses.push.apply(allPermisoAnalyses, agg.permisoAnalyses);
 
     // Build SEMANAL row
@@ -482,6 +509,7 @@ function recomputeSemanal(weekStart, weekEnd, sourceFile) {
       'DiasTrabajados': agg.diasTrabajados,
       'DiasDescanso': agg.diasDescanso,
       'DiasVacacion': agg.diasVacacion || 0,
+      'DiasFestivos': agg.diasFestivos || 0,
       'FaltasRaw': agg.faltasRaw,
       // FaltasReal + FaltasJustificadas are user-input (preserved across recomputes).
       // FaltasInjustificadas + HorasNoTrabajadas are derived (always recomputed) so
@@ -551,15 +579,25 @@ function recomputeSemanal(weekStart, weekEnd, sourceFile) {
 
     const expectedDays = rules.expectedDaysPerWeek || 6;
     const noCheckVacDays = (vacByNumero[numero] || new Set()).size;
+    // Count festivos that fall in this week's workdays (Vie-Jue)
+    let noCheckFestDays = 0;
+    let cur = new Date(weekStart + 'T00:00:00');
+    const wkEnd = new Date(weekEnd + 'T00:00:00');
+    while (cur <= wkEnd) {
+      const fStr = formatDateStr(cur);
+      if (festivosSet.has(fStr)) noCheckFestDays++;
+      cur.setDate(cur.getDate() + 1);
+    }
     const rowDict = {
       'ID': id,
       'NumeroColab': numero,
       'Nombre': rules.nombre || ('Empleado #' + numero),
       'SemanaInicio': weekStart,
       'SemanaFin': weekEnd,
-      'DiasTrabajados': Math.max(0, expectedDays - noCheckVacDays),
+      'DiasTrabajados': Math.max(0, expectedDays - noCheckVacDays - noCheckFestDays),
       'DiasDescanso': 7 - expectedDays,
       'DiasVacacion': noCheckVacDays,
+      'DiasFestivos': noCheckFestDays,
       'FaltasRaw': 0,
       'FaltasReal': 0,
       'FaltasJustificadas': 0,
@@ -1066,7 +1104,7 @@ function syncNombresFromNotion() {
  *                    .reposeWindow (from computeReposeWindow_) and .reposeStatus
  *                    (from checkReposeStatus_) when applicable
  */
-function aggregateEmpDays_(days, numero, rulesMap, permisos, vacacionDaysSet) {
+function aggregateEmpDays_(days, numero, rulesMap, permisos, vacacionDaysSet, festivosSet) {
   const rules = (rulesMap && rulesMap[numero]) || {};
   const skipEntrada = rules.skipEntradaRetardos === true;
   const skipComida = rules.skipComidaRetardos === true;
@@ -1083,10 +1121,13 @@ function aggregateEmpDays_(days, numero, rulesMap, permisos, vacacionDaysSet) {
 
   // Set of dates this employee is on approved vacation
   const vacSet = vacacionDaysSet || new Set();
+  // Set of company-paid holidays (LFT Art. 74 + empresa overrides)
+  const festSet = festivosSet || new Set();
 
   let diasTrabajados = 0;
   let diasDescanso = 0;
   let diasVacacion = 0;
+  let diasFestivos = 0;
   let faltasRaw = 0;
   let faltasPermisoCubierto = 0;
   let faltasJustificadasAuto = 0;  // bumped when a falta is covered by a permiso with comprobante + valid asunto
@@ -1111,6 +1152,15 @@ function aggregateEmpDays_(days, numero, rulesMap, permisos, vacacionDaysSet) {
 
     const fecha = formatDateStr(d.Fecha);
     const permisosToday = permisosByDate[fecha] || [];
+
+    // Día festivo — either marked by checador as INHABIL (d.IsFestivo) OR
+    // listed in our DIAS_FESTIVOS sheet (festSet). Either source counts.
+    // Paid, no work expected, no falta, no retardo.
+    const isFestivoDay = (d.IsFestivo === true || d.IsFestivo === 'TRUE') || festSet.has(fecha);
+    if (isFestivoDay) {
+      diasFestivos++;
+      return;
+    }
 
     // Vacation day takes precedence over everything — not a falta, not HNT, not a retardo trigger
     if (vacSet.has(fecha)) {
@@ -1299,6 +1349,7 @@ function aggregateEmpDays_(days, numero, rulesMap, permisos, vacacionDaysSet) {
     diasTrabajados: diasTrabajados,
     diasDescanso: diasDescanso,
     diasVacacion: diasVacacion,
+    diasFestivos: diasFestivos,
     faltasRaw: faltasRaw,
     faltasPermisoCubierto: faltasPermisoCubierto,
     faltasJustificadasAuto: faltasJustificadasAuto,
