@@ -1,169 +1,115 @@
 /**
  * ═══════════════════════════════════════════════════════════════
- * NB · Días Festivos Backend
+ * NB · Días Festivos — Mexican federal holidays (computed)
  * ═══════════════════════════════════════════════════════════════
  *
- * Holds the list of paid-but-not-worked days (federal holidays per LFT
- * Art. 74 + any company-specific days). Engine respects these dates:
- *   - No falta if checador shows absence
- *   - No retardo flags
- *   - Counted in DiasFestivos (new SEMANAL column)
+ * Per LFT Art. 74. Computed at runtime using fixed-day + Nth-Monday
+ * rules — zero maintenance, works forever.
  *
- * For swap exceptions (e.g. Día del Trabajo Friday → swapped to Saturday):
- *   - Delete the original holiday row from this sheet
- *   - Add a new row for the compensatory day
- *   The engine just respects what's in the list.
+ * Source-of-truth hierarchy:
+ *   1. Checador's INHABIL mark (RAW.IsFestivo) — actual operational truth.
+ *      Handles swaps automatically (admin marks the actual day off in
+ *      the checador system → it shows up here as IsFestivo).
+ *   2. Computed federal holidays (this file) — fallback ONLY for:
+ *      a) noChecador employees who don't appear in the xlsx
+ *      b) calendar preview of months not yet uploaded
  *
- * Setup:
- *   1. setupDiasFestivosSheet()
- *   2. seedDiasFestivosMx() — federal holidays 2026 + 2027
+ * If the checador and the computed list disagree for a date that's been
+ * uploaded, the checador wins (because it reflects what actually happened).
  *
  * Author: Claude + Louie · 2026-05-06
  */
 
-// ─── Constants ────────────────────────────────────────────────────────────
-const DIAS_FESTIVOS_TAB = 'DIAS_FESTIVOS';
-const DIAS_FESTIVOS_HEADERS = [
-  'Fecha',     // YYYY-MM-DD
-  'Nombre',    // 'Día del Trabajo', etc.
-  'Tipo',      // 'Federal' | 'Empresa'
-  'Notas'
-];
+// ─── LFT Art. 74 federal holidays ─────────────────────────────────────────
 
-const DIAS_FESTIVOS_CACHE_KEY = 'dias_festivos_v1';
-const DIAS_FESTIVOS_CACHE_TTL = 600;  // 10 min
-
-// ─── Setup ────────────────────────────────────────────────────────────────
-
-function setupDiasFestivosSheet() {
-  const sheet = getOrCreateTab(DIAS_FESTIVOS_TAB, DIAS_FESTIVOS_HEADERS);
-  const range = sheet.getRange(1, 1, 1, DIAS_FESTIVOS_HEADERS.length);
-  range.setValues([DIAS_FESTIVOS_HEADERS]);
-  range.setFontWeight('bold');
-  range.setBackground('#1a3a1a');
-  range.setFontColor('white');
-  sheet.setFrozenRows(1);
-  [110, 280, 110, 320].forEach((w, i) => sheet.setColumnWidth(i + 1, w));
-  Logger.log('DIAS_FESTIVOS sheet ready · ' + DIAS_FESTIVOS_HEADERS.length + ' columns');
-  return { ok: true };
+/** Returns Nth weekday-of-month as YYYY-MM-DD. weekday 0=Sun..6=Sat */
+function nthWeekdayOfMonth_(year, month1Indexed, weekday, n) {
+  // Find first occurrence of weekday in the month
+  const first = new Date(year, month1Indexed - 1, 1);
+  const offset = ((weekday - first.getDay()) + 7) % 7;
+  const day = 1 + offset + (n - 1) * 7;
+  const pad = x => String(x).padStart(2, '0');
+  return year + '-' + pad(month1Indexed) + '-' + pad(day);
 }
 
-// ─── Seed: Mexican federal holidays per LFT Art. 74 ──────────────────────
-
 /**
- * Pre-fills Mexican federal holidays for 2026 and 2027.
- * Idempotent — skips dates already present.
- *
- * Per LFT Art. 74:
+ * Returns array of {fecha, nombre} for the year's federal holidays.
+ * Per LFT Art. 74 (post-2023 form):
  *   - 1 enero · Año Nuevo
- *   - 1er lunes de febrero · Día de la Constitución (movido del 5 feb)
- *   - 3er lunes de marzo · Natalicio Benito Juárez (movido del 21 mar)
+ *   - 1er lunes febrero · Día de la Constitución (movible)
+ *   - 3er lunes marzo · Natalicio Benito Juárez (movible)
  *   - 1 mayo · Día del Trabajo
- *   - 16 septiembre · Independencia
- *   - 3er lunes de noviembre · Día de la Revolución (movido del 20 nov)
+ *   - 16 septiembre · Día de la Independencia
+ *   - 3er lunes noviembre · Día de la Revolución (movible)
+ *   - 1 octubre cada 6 años · Toma de Posesión Presidente (2024, 2030, ...)
  *   - 25 diciembre · Navidad
- *   - Día de elecciones federales (cada 6 años; 2024, 2030, ...)
- *   - 1 octubre Toma de Posesión Presidente (cada 6 años; 2024, 2030, ...)
+ *   (Día de elecciones federales también, pero la fecha varía y se omite aquí)
  */
-function seedDiasFestivosMx() {
-  const sheet = getOrCreateTab(DIAS_FESTIVOS_TAB, DIAS_FESTIVOS_HEADERS);
-  const data = sheet.getDataRange().getValues();
-  const headers = data[0];
-  const fechaCol = headers.indexOf('Fecha');
-  const existing = new Set();
-  for (let r = 1; r < data.length; r++) {
-    const f = formatDateStr(data[r][fechaCol]);
-    if (f) existing.add(f);
-  }
-
-  const SEED = [
-    // 2026
-    { fecha: '2026-01-01', nombre: 'Año Nuevo' },
-    { fecha: '2026-02-02', nombre: 'Día de la Constitución (1er lunes feb)' },
-    { fecha: '2026-03-16', nombre: 'Natalicio de Benito Juárez (3er lunes mar)' },
-    { fecha: '2026-05-01', nombre: 'Día del Trabajo' },
-    { fecha: '2026-09-16', nombre: 'Día de la Independencia' },
-    { fecha: '2026-11-16', nombre: 'Día de la Revolución (3er lunes nov)' },
-    { fecha: '2026-12-25', nombre: 'Navidad' },
-    // 2027
-    { fecha: '2027-01-01', nombre: 'Año Nuevo' },
-    { fecha: '2027-02-01', nombre: 'Día de la Constitución (1er lunes feb)' },
-    { fecha: '2027-03-15', nombre: 'Natalicio de Benito Juárez (3er lunes mar)' },
-    { fecha: '2027-05-01', nombre: 'Día del Trabajo' },
-    { fecha: '2027-09-16', nombre: 'Día de la Independencia' },
-    { fecha: '2027-11-15', nombre: 'Día de la Revolución (3er lunes nov)' },
-    { fecha: '2027-12-25', nombre: 'Navidad' }
+function getMxFederalHolidays_(year) {
+  const out = [
+    { fecha: year + '-01-01', nombre: 'Año Nuevo' },
+    { fecha: nthWeekdayOfMonth_(year, 2, 1, 1), nombre: 'Día de la Constitución' },
+    { fecha: nthWeekdayOfMonth_(year, 3, 1, 3), nombre: 'Natalicio de Benito Juárez' },
+    { fecha: year + '-05-01', nombre: 'Día del Trabajo' },
+    { fecha: year + '-09-16', nombre: 'Día de la Independencia' },
+    { fecha: nthWeekdayOfMonth_(year, 11, 1, 3), nombre: 'Día de la Revolución' },
+    { fecha: year + '-12-25', nombre: 'Navidad' }
   ];
-
-  const rows = [];
-  let inserted = 0, skipped = 0;
-  SEED.forEach(s => {
-    if (existing.has(s.fecha)) { skipped++; return; }
-    rows.push([s.fecha, s.nombre, 'Federal', '']);
-    inserted++;
-  });
-  if (rows.length) {
-    sheet.getRange(sheet.getLastRow() + 1, 1, rows.length, DIAS_FESTIVOS_HEADERS.length).setValues(rows);
+  // Toma de Posesión: Oct 1 every 6 years starting 2024
+  if (((year - 2024) % 6) === 0 && year >= 2024) {
+    out.push({ fecha: year + '-10-01', nombre: 'Toma de Posesión Presidente' });
   }
-  CacheService.getScriptCache().remove(DIAS_FESTIVOS_CACHE_KEY);
-  Logger.log('seedDiasFestivosMx: inserted=' + inserted + ', skipped=' + skipped);
-  return { ok: true, inserted, skipped };
+  return out;
 }
 
-// ─── Read ─────────────────────────────────────────────────────────────────
-
 /**
- * Returns Set of YYYY-MM-DD strings for all holidays.
- * Cached 10 min.
+ * Returns Set<YYYY-MM-DD> for the years specified (or current ± 1 if omitted).
+ * Used as fallback for noChecador employees + calendar future preview.
  */
-function getDiasFestivosSet_() {
-  const cache = CacheService.getScriptCache();
-  const cached = cache.get(DIAS_FESTIVOS_CACHE_KEY);
-  if (cached) {
-    try { return new Set(JSON.parse(cached)); } catch (e) {}
-  }
-  const sheet = getOrCreateTab(DIAS_FESTIVOS_TAB, DIAS_FESTIVOS_HEADERS);
-  const data = sheet.getDataRange().getValues();
-  const out = [];
-  for (let r = 1; r < data.length; r++) {
-    const f = formatDateStr(data[r][0]);
-    if (f) out.push(f);
-  }
-  cache.put(DIAS_FESTIVOS_CACHE_KEY, JSON.stringify(out), DIAS_FESTIVOS_CACHE_TTL);
-  return new Set(out);
+function getMxFederalHolidaysSet_(years) {
+  const ys = years || [new Date().getFullYear() - 1, new Date().getFullYear(), new Date().getFullYear() + 1];
+  const set = new Set();
+  ys.forEach(y => getMxFederalHolidays_(y).forEach(h => set.add(h.fecha)));
+  return set;
 }
 
+// ─── Public API: list federal holidays in a date range (for calendar) ───
+
 /**
- * Returns array of {fecha, nombre, tipo, notas} for calendar display.
- * Filtered by date range if from/to provided.
+ * Returns federal holidays in a date range (inclusive). Used by the calendar
+ * to render holidays for months that haven't been uploaded yet to checador.
+ * Body params: { from?: 'YYYY-MM-DD', to?: 'YYYY-MM-DD' }
  */
 function listDiasFestivos(params) {
-  const sheet = getOrCreateTab(DIAS_FESTIVOS_TAB, DIAS_FESTIVOS_HEADERS);
-  const data = sheet.getDataRange().getValues();
-  if (data.length < 2) return { ok: true, festivos: [] };
-  const from = params && params.from;
-  const to   = params && params.to;
+  const today = new Date();
+  const from = (params && params.from) || (today.getFullYear() - 1) + '-01-01';
+  const to   = (params && params.to)   || (today.getFullYear() + 1) + '-12-31';
+
+  // Span all years touched by the range
+  const fromYear = parseInt(from.slice(0, 4));
+  const toYear   = parseInt(to.slice(0, 4));
   const out = [];
-  for (let r = 1; r < data.length; r++) {
-    const fecha = formatDateStr(data[r][0]);
-    if (!fecha) continue;
-    if (from && fecha < from) continue;
-    if (to && fecha > to) continue;
-    out.push({
-      fecha,
-      nombre: String(data[r][1] || ''),
-      tipo: String(data[r][2] || 'Federal'),
-      notas: String(data[r][3] || '')
+  for (let y = fromYear; y <= toYear; y++) {
+    getMxFederalHolidays_(y).forEach(h => {
+      if (h.fecha >= from && h.fecha <= to) {
+        out.push({ fecha: h.fecha, nombre: h.nombre, tipo: 'Federal', notas: '' });
+      }
     });
   }
   out.sort((a, b) => a.fecha.localeCompare(b.fecha));
   return { ok: true, festivos: out };
 }
 
-/** Cache buster — run after manually editing the DIAS_FESTIVOS sheet. */
-function refreshDiasFestivos() {
-  CacheService.getScriptCache().remove(DIAS_FESTIVOS_CACHE_KEY);
-  const set = getDiasFestivosSet_();
-  Logger.log('Días festivos cargados: ' + set.size);
-  return { ok: true, count: set.size };
+// ─── Engine bridge ───────────────────────────────────────────────────────
+
+/**
+ * Returns Set<YYYY-MM-DD> of festivos to apply during recomputeSemanal.
+ * Currently just the computed federal holidays — checador's IsFestivo
+ * flag handles per-employee per-day truth.
+ *
+ * Kept as a function (not inlined) so we can add future overrides without
+ * touching the engine.
+ */
+function getDiasFestivosSet_() {
+  return getMxFederalHolidaysSet_();
 }
