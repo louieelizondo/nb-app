@@ -46,7 +46,6 @@ const ASISTENCIA_SEMANAL_HEADERS = [
   'SemanaFin',                  // Jue YYYY-MM-DD
   'DiasTrabajados',
   'DiasDescanso',
-  'DiasVacacion',               // count of approved vacation days falling in this week
   'FaltasRaw',                  // count of FALTA days from checador (excludes vacation)
   'FaltasReal',                 // after classification (manual override)
   'FaltasJustificadas',         // with comprobante
@@ -60,7 +59,8 @@ const ASISTENCIA_SEMANAL_HEADERS = [
   'Ajustes',                    // text — manual notes
   'Locked',                     // 🔒 No sincronizar override
   'LastComputedAt',
-  'SourceFile'
+  'SourceFile',
+  'DiasVacacion'                // appended at end (matches getOrCreateTab auto-migration position)
 ];
 
 // NB attendance rules (mirror of asistencia/scripts/config.py)
