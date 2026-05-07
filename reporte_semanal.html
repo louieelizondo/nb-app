@@ -723,7 +723,9 @@ function renderSemTable(rows) {
     const punt = r.Puntualidad === true || r.Puntualidad === '__YES__';
     const asis = r.Asistencia === true || r.Asistencia === '__YES__';
     const { nombres, apellidos } = splitNombre(r.Nombre || '');
-    const detalle = r.RetardosDetalle || '';
+    // Defensive: RetardosDetalle should be a string, but a previous bad
+    // recompute run can leave a number/Date here. Coerce before .replace.
+    const detalle = (r.RetardosDetalle == null) ? '' : String(r.RetardosDetalle);
     const detalleClean = detalle
       .replace(/^Retardos\s*\(\d+\):\s*/i, '')   // strip "Retardos (N):" prefix
       .replace(/\s*·\s*/g, '\n');                 // each retardo on its own line

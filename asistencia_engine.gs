@@ -1589,6 +1589,33 @@ function resetSemanalEmpleadoTodas(numero) {
   return { ok: true, deleted: toDelete.length, weeksRecomputed: weeks.length };
 }
 
+/**
+ * Deletes ALL rows for a week and re-recomputes from RAW.
+ * Use after a corrupt recompute (e.g. column shift bug). Pass weekStart as
+ * the Friday YYYY-MM-DD.
+ *
+ * Example:  resetSemanalSemana('2026-05-01')
+ */
+function resetSemanalSemana(weekStart) {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(ASISTENCIA_SEMANAL_TAB);
+  if (!sheet) return { ok: false, error: 'Sheet not found' };
+  const data = sheet.getDataRange().getValues();
+  const headers = data[0];
+  const iniIdx = headers.indexOf('SemanaInicio');
+  const toDelete = [];
+  for (let r = 1; r < data.length; r++) {
+    if (formatDateStr(data[r][iniIdx]) === weekStart) toDelete.push(r + 1);
+  }
+  toDelete.sort((a, b) => b - a).forEach(r => sheet.deleteRow(r));
+  const friday = new Date(weekStart + 'T00:00:00');
+  const thursday = new Date(friday);
+  thursday.setDate(friday.getDate() + 6);
+  const weekEnd = Utilities.formatDate(thursday, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+  const result = recomputeSemanal(weekStart, weekEnd, 'resetSemana');
+  Logger.log('resetSemanalSemana: deleted=' + toDelete.length + ', recomputed=' + JSON.stringify(result));
+  return { ok: true, deleted: toDelete.length, recomputed: result };
+}
+
 
 /** Update one SEMANAL row's manual fields (after parsing locks/classifications).
  *  Recomputes Puntualidad / Asistencia / FaltasInjustificadas after the edit so
