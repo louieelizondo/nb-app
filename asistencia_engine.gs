@@ -1715,3 +1715,10 @@ function updateSemanaRow(body) {
   }
   throw new Error('Row no encontrada: ' + id);
 }
+
+// ─── DEV WRAPPERS — kept in the file so Louie can run them via the ▶ button ─
+
+/** Edit the date and run from the editor when you need to clean a week. */
+function _runReset() {
+  return resetSemanalSemana('2026-05-01');
+}
