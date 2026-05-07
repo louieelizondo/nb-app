@@ -542,6 +542,36 @@ The columns Cocina1/2/3, Casa1/2, Express, Granja, etc. in INGRESOS are **sales 
 - **Bono Asistencia Mensual** — monthly attendance bonus
 - All currently in Notion, planned migration to Sheets + web apps
 
+### Per-User Access Control / RBAC (planned)
+
+Replace Google OAuth (currently in nb_auth.js) with custom username/password auth tied to COLABORADORES sheet. Per-page boolean columns:
+
+```
+COLABORADORES additions:
+  Username           // short, work-friendly (not email)
+  Password_Hash      // bcrypt or sha256+salt
+  Access_Dashboard   // bool
+  Access_Ingresos    // bool
+  Access_Gastos      // bool
+  Access_Cortes      // bool
+  Access_Inventario  // bool
+  Access_Permisos    // bool — view/submit only
+  Access_Vacaciones  // bool — view/submit only
+  Access_Aprobaciones // bool — admin: approve/reject
+  Access_Reporte_Semanal // bool
+  Access_Bonos       // bool
+  // etc.
+```
+
+UX:
+- Login with username + password (not email)
+- After login, index.html shows ONLY the cards they have access to
+- Pages check access on load, redirect if not allowed
+- Accountant gets financials access but not employee data
+- Employees get permisos + vacaciones submission only
+
+Approver hardcode in current permisos backend (`canApprovePermisos_`) becomes a sheet lookup once this lands.
+
 ### Registers
 - Currently: 4 in-store (Caja 1-4 Tienda) + 2 delivery (Repartidor 1-2 Delivery)
 - Config is dynamic via CONFIG_CAJAS tab (presence-based, 3 columns: Caja + Tipo + POS_ID)

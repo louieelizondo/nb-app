@@ -165,6 +165,17 @@ function submitPermiso(body) {
     }
   }
 
+  // Always notify admin (Louie) so he can review without polling
+  try {
+    sendAdminSubmitNotification_('permiso', {
+      id: id, nombre: p.nombre, fechaPermiso: p.fechaPermiso,
+      horario: p.horarioAusente, asunto: p.asunto, descripcion: p.descripcion,
+      reponer: p.reponer
+    });
+  } catch (err) {
+    Logger.log('ADMIN_NOTIFY_ERROR (permiso): ' + err.message);
+  }
+
   log('PERMISO_SUBMIT', id + ' · ' + p.nombre + ' · ' + p.fechaPermiso);
   return { ok: true, id: id };
 }
@@ -291,6 +302,17 @@ function submitVacacion(body) {
       Logger.log('VACACION_EMAIL_ERROR (submit): ' + err.message);
     }
   }
+
+  // Always notify admin
+  try {
+    sendAdminSubmitNotification_('vacacion', {
+      id, nombre: v.nombre, fechaInicio: v.fechaInicio, fechaFin: v.fechaFin,
+      dias, descripcion: v.descripcion
+    });
+  } catch (err) {
+    Logger.log('ADMIN_NOTIFY_ERROR (vacacion): ' + err.message);
+  }
+
   log('VACACION_SUBMIT', id + ' · ' + v.nombre + ' · ' + v.fechaInicio + '→' + v.fechaFin + ' (' + dias + 'd)');
   return { ok: true, id };
 }
@@ -979,6 +1001,64 @@ function sendPermisoEmail_(toEmail, type, data) {
     </div>
   `;
   GmailApp.sendEmail(toEmail, subject, '', { htmlBody: html, name: 'NB Permisos' });
+}
+
+// ─── Admin notification ─────────────────────────────────────────────────
+
+const ADMIN_NOTIFY_EMAIL = 'le.nbclub@gmail.com';
+const ADMIN_PERMISOS_URL = 'https://louieelizondo.github.io/nb-app/permisos-admin.html';
+
+/**
+ * Sends a notification to the admin (Louie) when a new permiso/vacación is
+ * submitted. Includes the key info + a direct link to the admin queue.
+ *
+ * type: 'permiso' | 'vacacion'
+ * data: same shape as employee email data, plus details specific to type
+ */
+function sendAdminSubmitNotification_(type, data) {
+  const isVac = type === 'vacacion';
+  const subject = isVac
+    ? '🏖 Nueva solicitud de vacaciones — ' + (data.nombre || '')
+    : '📝 Nuevo permiso pendiente — ' + (data.nombre || '');
+  const fmtDate = (s) => {
+    if (!s) return '—';
+    const m = String(s).match(/^(\d{4})-(\d{2})-(\d{2})/);
+    return m ? (m[3] + '/' + m[2] + '/' + m[1]) : s;
+  };
+  const logoUrl = 'https://louieelizondo.github.io/nb-app/avocado-logo.png';
+  const colorBar = isVac ? '#bf360c' : '#1565c0';
+
+  const fields = isVac ? `
+        <tr><td style="padding:7px 0;color:#998777;width:140px">Inicio</td><td><strong>${fmtDate(data.fechaInicio)}</strong></td></tr>
+        <tr><td style="padding:7px 0;color:#998777">Fin</td><td><strong>${fmtDate(data.fechaFin)}</strong></td></tr>
+        <tr><td style="padding:7px 0;color:#998777">Días</td><td>${data.dias || '—'}</td></tr>
+  ` : `
+        <tr><td style="padding:7px 0;color:#998777;width:140px">Fecha permiso</td><td><strong>${fmtDate(data.fechaPermiso)}</strong></td></tr>
+        <tr><td style="padding:7px 0;color:#998777">Horario</td><td>${data.horario || '—'}</td></tr>
+        <tr><td style="padding:7px 0;color:#998777">Asunto</td><td>${data.asunto || '—'}</td></tr>
+        <tr><td style="padding:7px 0;color:#998777">Reponer</td><td>${data.reponer || '—'}</td></tr>
+  `;
+
+  const html = `
+    <div style="font-family:-apple-system,Segoe UI,sans-serif;max-width:560px;margin:0 auto;color:#2d2319">
+      <div style="background:linear-gradient(135deg,#1a3a1a 0%,#2e6b2e 100%);color:white;padding:24px;border-radius:14px 14px 0 0;text-align:center">
+        <img src="${logoUrl}" alt="Natural Balance" style="width:60px;height:60px;display:block;margin:0 auto 8px;background:rgba(255,255,255,.95);padding:5px;border-radius:12px">
+        <h2 style="margin:0;font-size:17px;font-weight:700">${subject.replace(/^[🏖📝]\s/, '')}</h2>
+      </div>
+      <div style="background:white;padding:24px;border-left:4px solid ${colorBar};border-radius:0 0 14px 14px;box-shadow:0 4px 16px rgba(0,0,0,.05)">
+        <p style="margin:0 0 14px;font-size:14px"><strong>${data.nombre || ''}</strong> envió una nueva ${isVac ? 'solicitud de vacaciones' : 'solicitud de permiso'}.</p>
+        <table style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:18px">
+          ${fields}
+          ${data.descripcion ? `<tr><td style="padding:7px 0;color:#998777;vertical-align:top">Descripción</td><td>${data.descripcion}</td></tr>` : ''}
+        </table>
+        <div style="text-align:center;margin-top:20px">
+          <a href="${ADMIN_PERMISOS_URL}" style="display:inline-block;padding:12px 24px;background:#2e6b2e;color:white;text-decoration:none;border-radius:10px;font-weight:700;font-size:14px">→ Revisar y aprobar</a>
+        </div>
+        <p style="margin:18px 0 0;font-size:11px;color:#bbb;border-top:1px solid #f0ebe4;padding-top:12px">Ref: ${data.id || ''}</p>
+      </div>
+    </div>
+  `;
+  GmailApp.sendEmail(ADMIN_NOTIFY_EMAIL, subject, '', { htmlBody: html, name: 'NB Permisos' });
 }
 
 // ─── RBAC hook (Phase 1 stub, future-proof) ──────────────────────────────

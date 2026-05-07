@@ -545,7 +545,14 @@ function recomputeSemanal(weekStart, weekEnd, sourceFile) {
       'FaltasPermisoCubierto': agg.faltasPermisoCubierto || 0,
       'Retardos': agg.retardos,
       'RetardosDetalle': agg.retardosDetalle,
-      'HorasNoTrabajadas': agg.horasNoTrabajadas,
+      // HrsDeducir = (FaltasReales − FaltasJustificadas) × hours/day + permiso shortfalls.
+      // Uses the user-edited FaltasReales (not raw) so manual overrides flow through to pay.
+      'HorasNoTrabajadas': (function() {
+        const finalReal = parseInt(existing.FaltasReal != null && existing.FaltasReal !== '' ? existing.FaltasReal : agg.faltasRaw) || 0;
+        const finalJust = Math.max(parseInt(existing.FaltasJustificadas || 0) || 0, agg.faltasJustificadasAuto || 0);
+        const finalInj  = Math.max(0, finalReal - finalJust);
+        return finalInj * (agg.hoursPerDay || 8) + (agg.hntFromPermisos || 0) + (agg.hntFromShortfall || 0);
+      })(),
       'Puntualidad': agg.retardos <= 1 && agg.faltasRaw === 0,
       'Asistencia': agg.faltasRaw === 0,
       'Ajustes': existing.Ajustes || '',  // libre — manual notes only, no auto-fill
@@ -1361,7 +1368,11 @@ function aggregateEmpDays_(days, numero, rulesMap, permisos, vacacionDaysSet, fe
     retardosDetalle = (retardosDetalle ? retardosDetalle + '\n' : '') + permisoLines.join('\n');
   }
 
-  const horasNoTrabajadas = faltasRaw * hoursPerDay + hntFromPermisos + hntFromShortfall;
+  // HNT components, returned separately so recomputeSemanal can compute the
+  // final HrsDeducir using the user-edited FaltasReales/FaltasJustificadas
+  // instead of the raw checador count.
+  const hntFromFaltasRaw = faltasRaw * hoursPerDay;
+  const horasNoTrabajadas = hntFromFaltasRaw + hntFromPermisos + hntFromShortfall;
 
   return {
     diasTrabajados: diasTrabajados,
@@ -1373,7 +1384,10 @@ function aggregateEmpDays_(days, numero, rulesMap, permisos, vacacionDaysSet, fe
     faltasJustificadasAuto: faltasJustificadasAuto,
     retardos: retardos.length,
     retardosDetalle: retardosDetalle,
-    horasNoTrabajadas: horasNoTrabajadas,
+    horasNoTrabajadas: horasNoTrabajadas,         // legacy: used FaltasRaw
+    hntFromPermisos: hntFromPermisos,             // permiso shortfall + reponer-no
+    hntFromShortfall: hntFromShortfall,           // shortfall portion
+    hoursPerDay: hoursPerDay,                     // exposed for recompute
     permisoAnalyses: permisoAnalyses
   };
 }
