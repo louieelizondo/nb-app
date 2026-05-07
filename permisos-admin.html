@@ -868,8 +868,8 @@ function ensureYearSelector() {
   const sel = $('recordYear');
   if (sel.options.length > 0) return;
   const thisYear = new Date().getFullYear();
-  // Show 2 prior years + current + 2 next years
-  for (let y = thisYear - 2; y <= thisYear + 2; y++) {
+  // Show current year + next 3. No past years (we don't track historical balances).
+  for (let y = thisYear; y <= thisYear + 3; y++) {
     const opt = document.createElement('option');
     opt.value = String(y);
     opt.textContent = String(y);
@@ -912,7 +912,7 @@ function renderRecord(rows) {
         <tr data-num="${r.numero}">
           <td class="num">${r.numero}</td>
           <td><span class="name">${r.nombre || '—'}</span><br><span class="sub" style="color:#c62828">${r.error}</span></td>
-          <td colspan="9" style="color:#998777;font-style:italic">Sin balance</td>
+          <td colspan="6" style="color:#998777;font-style:italic">Sin balance</td>
         </tr>`;
     }
     const aniv = r.anosCompletos < 1 ? 'Aún no aplica' : `Año ${r.anosCompletos}`;
@@ -924,13 +924,10 @@ function renderRecord(rows) {
           <span class="name">${r.nombre}</span>
           <br><span class="sub">Inicio ${fmtDate(r.inicioLaboral)} · ${aniv} ${statusBadge(r.status)}</span>
         </td>
-        <td class="num"><span class="sub">${r.anualidadCalendarYear ?? '—'}</span></td>
         <td class="num">${r.diasEntitled ?? 0}</td>
         <td class="num">${pill(r.diasUsados ?? 0, (r.diasUsados ?? 0) > 0 ? 'warn' : 'zero')}</td>
-        <td class="num">${pill(r.diasReservadosActual ?? 0)}</td>
-        <td class="num">${pill(r.diasReservadosProxima ?? 0)}</td>
+        <td class="num">${pill(r.diasReservados ?? 0)}</td>
         <td class="num">${pill(r.disponibles ?? 0)}</td>
-        <td class="num"><span class="sub">${r.proximaAnualidadDias ?? 0}</span></td>
         <td class="num">${pill(r.permisosAprobados ?? 0)}</td>
         <td class="num">${pill(r.vacacionesAprobadas ?? 0)}</td>
       </tr>`;
@@ -942,13 +939,10 @@ function renderRecord(rows) {
         <tr>
           <th class="num">#</th>
           <th>Colaborador</th>
-          <th class="num">Año<br>Anualidad</th>
           <th class="num">Asignados</th>
           <th class="num">Usados</th>
-          <th class="num">Reservados<br>Actual</th>
-          <th class="num">Reservados<br>Próxima</th>
+          <th class="num">Reservados</th>
           <th class="num">Disponibles</th>
-          <th class="num">Próxima<br>Anualidad</th>
           <th class="num">Permisos<br>Aprob.</th>
           <th class="num">Vacaciones<br>Aprob.</th>
         </tr>

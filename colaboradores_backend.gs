@@ -399,3 +399,82 @@ function setSheetTimezoneChihuahua() {
   Logger.log('Sheet timezone changed: ' + old + ' → America/Chihuahua');
   return { ok: true, before: old, after: 'America/Chihuahua' };
 }
+
+/**
+ * Repair tool — schema changes over time caused duplicate / orphan columns
+ * to be auto-appended at the end of the sheet (e.g. an old 'Telefono' column
+ * after 'Celular' was renamed; or 'Dias_Usados_Backfill_Actual' got appended
+ * to the end before setupColaboradoresSheet rewrote headers in a different
+ * position).
+ *
+ * This walks every row, builds the canonical row from whichever physical
+ * column has data for each logical key, and truncates the extra columns.
+ *
+ * Run from the editor:  repairColaboradoresColumns()
+ */
+function repairColaboradoresColumns() {
+  const sheet = getOrCreateTab(COLABORADORES_TAB, COLABORADORES_HEADERS);
+  const lastCol = sheet.getLastColumn();
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return { ok: true, repaired: 0, columnsTrimmed: 0 };
+
+  const data = sheet.getRange(1, 1, lastRow, lastCol).getValues();
+  const headerRow = data[0].map(h => String(h || '').trim());
+
+  // Map each canonical header → list of physical column indexes (0-based)
+  // that ever held that value (current header row + known legacy aliases).
+  const aliasToCanonical = {
+    'Telefono': 'Celular',
+    'Phone': 'Celular',
+    'Dias_Usados': 'Dias_Usados_Backfill_Actual',
+    'Dias_Usados_Bac': 'Dias_Usados_Backfill_Actual',
+    'Dias_Usados_Backfill': 'Dias_Usados_Backfill_Actual'
+  };
+  const canonicalToCols = {};
+  COLABORADORES_HEADERS.forEach(h => { canonicalToCols[h] = []; });
+  headerRow.forEach((h, i) => {
+    if (canonicalToCols[h] !== undefined) canonicalToCols[h].push(i);
+    else if (aliasToCanonical[h] && canonicalToCols[aliasToCanonical[h]] !== undefined) {
+      canonicalToCols[aliasToCanonical[h]].push(i);
+    }
+  });
+
+  // For each data row, build a clean canonical row by picking the first
+  // non-empty value across all candidate physical columns for that field.
+  const targetCols = COLABORADORES_HEADERS.length;
+  const rebuilt = [COLABORADORES_HEADERS.slice()];
+  let repaired = 0;
+  for (let r = 1; r < data.length; r++) {
+    const row = data[r];
+    const newRow = COLABORADORES_HEADERS.map((h) => {
+      const candidates = canonicalToCols[h] || [];
+      for (let i = 0; i < candidates.length; i++) {
+        const v = row[candidates[i]];
+        if (v !== '' && v !== null && v !== undefined) return v;
+      }
+      return '';
+    });
+    rebuilt.push(newRow);
+    // count rows that needed any change
+    repaired++;
+  }
+
+  // Clear the entire used range and write the rebuilt data + truncate cols
+  if (lastCol > targetCols) {
+    sheet.deleteColumns(targetCols + 1, lastCol - targetCols);
+  }
+  sheet.getRange(1, 1, rebuilt.length, targetCols).setValues(rebuilt);
+
+  // Re-style header
+  const range = sheet.getRange(1, 1, 1, targetCols);
+  range.setFontWeight('bold');
+  range.setBackground('#1a3a1a');
+  range.setFontColor('white');
+  sheet.setFrozenRows(1);
+
+  CacheService.getScriptCache().remove(COLABORADORES_CACHE_KEY);
+  CacheService.getScriptCache().remove(EMPLEADO_RULES_CACHE_KEY);
+  const summary = { ok: true, repaired, columnsTrimmed: Math.max(0, lastCol - targetCols) };
+  Logger.log('repairColaboradoresColumns: ' + JSON.stringify(summary));
+  return summary;
+}

@@ -771,12 +771,13 @@ function getColaboradorAnualidadInfo_(numero, targetYear, sheetData, sheetIdx) {
 
   const diasEntitled = yos < 1 ? 0 : lftDaysForYear_(yos);
 
-  // Walk vacation rows for this colaborador, classify per Anualidad_Year column
-  // (preferred) or by date (legacy fallback).
+  // Walk vacation rows for this colaborador. Count ONLY rows that belong to
+  // the queried anualidad year (per Anualidad_Year column or date inference).
+  // No mixing — the historial view shows a single year cleanly.
   const data = sheetData;
   const idx = sheetIdx;
   const anualidadYearCol = idx('Anualidad_Year');
-  let usadosFromRows = 0, reservadosActual = 0, reservadosProxima = 0;
+  let usadosFromRows = 0, reservados = 0;
   for (let r = 1; r < data.length; r++) {
     const row = data[r];
     if (String(row[idx('Tipo')]) !== 'Vacacion') continue;
@@ -788,58 +789,46 @@ function getColaboradorAnualidadInfo_(numero, targetYear, sheetData, sheetIdx) {
     const endStr   = formatDateStr(row[idx('Fecha_Fin')]) || startStr;
     if (!startStr) continue;
 
-    // Determine which anualidad this row belongs to
     let belongsToYear = null;
     if (anualidadYearCol >= 0) {
       const explicit = parseInt(row[anualidadYearCol]);
       if (explicit) belongsToYear = explicit;
     }
     if (!belongsToYear) {
-      // Fallback: infer from start date
-      // Find which anualidad window contains startStr
+      // Fallback: infer from start date relative to anniversary
       const sy = parseInt(startStr.slice(0, 4));
       const startMonth = parseInt(startStr.slice(5, 7));
       const startDay = parseInt(startStr.slice(8, 10));
-      // If start date is on/after anniversary mmdd of year sy, it belongs to year sy
-      if (startMonth > im || (startMonth === im && startDay >= id)) {
-        belongsToYear = sy;
-      } else {
-        belongsToYear = sy - 1;
-      }
+      if (startMonth > im || (startMonth === im && startDay >= id)) belongsToYear = sy;
+      else belongsToYear = sy - 1;
     }
 
-    if (belongsToYear === anualidadCalYear) {
-      // This row is in the requested anualidad
-      if (endStr < todayStr) usadosFromRows += dias;
-      else                    reservadosActual += dias;
-    } else if (belongsToYear === anualidadCalYear + 1) {
-      reservadosProxima += dias;
-    }
+    // Only count if this row is for the queried year
+    if (belongsToYear !== anualidadCalYear) continue;
+
+    if (endStr < todayStr) usadosFromRows += dias;
+    else                    reservados += dias;
   }
 
-  // Backfill: only apply when the requested anualidad is the CURRENT one
-  // (the column tracks pre-system usage in the active anualidad).
+  // Backfill: only applies to the CURRENT anualidad (the column tracks
+  // pre-system usage in the active window). For future/closed years, no backfill.
   const backfill = (status === 'current' && (anualidadCalYear === currentAnualidadCalYear))
     ? (parseFloat(c.diasUsadosBackfill) || 0)
     : 0;
   const diasUsados = usadosFromRows + backfill;
-  const disponibles = Math.max(0, diasEntitled - diasUsados - reservadosActual);
+  const disponibles = Math.max(0, diasEntitled - diasUsados - reservados);
 
   return {
     anualidadCalendarYear: anualidadCalYear,
     status,
     anualidadInicio: anualidadInicioStr,
     anualidadFin: anualidadFinStr,
-    nextAnniversary: nextAnnivStr,
     anosCompletos: yos,
     diasEntitled,
     diasUsados,
     diasUsadosBackfill: backfill,
-    diasReservadosActual: reservadosActual,
-    diasReservadosProxima: reservadosProxima,
-    disponibles,
-    proximaAnualidadDias: lftDaysForYear_(yos + 1),
-    proximaDisponibles: Math.max(0, lftDaysForYear_(yos + 1) - reservadosProxima)
+    diasReservados: reservados,
+    disponibles
   };
 }
 
