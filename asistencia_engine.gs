@@ -1153,11 +1153,12 @@ function aggregateEmpDays_(days, numero, rulesMap, permisos, vacacionDaysSet, fe
     const fecha = formatDateStr(d.Fecha);
     const permisosToday = permisosByDate[fecha] || [];
 
-    // Día festivo — either marked by checador as INHABIL (d.IsFestivo) OR
-    // listed in our DIAS_FESTIVOS sheet (festSet). Either source counts.
-    // Paid, no work expected, no falta, no retardo.
-    const isFestivoDay = (d.IsFestivo === true || d.IsFestivo === 'TRUE') || festSet.has(fecha);
-    if (isFestivoDay) {
+    // Día festivo — checador's INHABIL mark is the only source of truth here.
+    // The computed federal-holidays set (festSet) is NOT applied to checador
+    // employees: if someone actually worked a federal holiday (e.g. swap to
+    // Saturday), the checador shows them present and that wins. festSet is
+    // only used for noChecador employees (handled separately in recompute).
+    if (d.IsFestivo === true || d.IsFestivo === 'TRUE') {
       diasFestivos++;
       return;
     }
