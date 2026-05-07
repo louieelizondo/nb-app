@@ -35,7 +35,8 @@ const ASISTENCIA_RAW_HEADERS = [
   'Saldo_min',                  // can be negative
   'UploadedAt',
   'SourceFile',
-  'IsFestivo'                   // INHABIL/INHÁBIL from checador (paid, no work)
+  'IsFestivo',                  // INHABIL/INHÁBIL from checador (paid, no work)
+  'IsVacacion'                  // VACACIONES from checador (paid, counted as vacation)
 ];
 
 const ASISTENCIA_SEMANAL_TAB = 'ASISTENCIA_SEMANAL';
@@ -146,8 +147,9 @@ function parseAsistenciaXlsx(rows2D) {
 
     const isDescanso = isDescansoCell_(row);
     const isFestivo = isFestivoCell_(row);
+    const isVacacion = isVacacionCell_(row);
     const isFalta = isFaltaCell_(row);
-    const noWork = isDescanso || isFestivo || isFalta;
+    const noWork = isDescanso || isFestivo || isVacacion || isFalta;
 
     records.push({
       numero: parseInt(numero),
@@ -156,6 +158,7 @@ function parseAsistenciaXlsx(rows2D) {
       diaSemana: DIAS_SP[dayOfWeek_(fecha)],
       isDescanso: isDescanso,
       isFestivo: isFestivo,
+      isVacacion: isVacacion,
       isFalta: isFalta,
       retEntrada_min: noWork ? 0 : parseDurationToMinutes_(row[3]),
       salComerAntes_min: noWork ? 0 : parseDurationToMinutes_(row[4]),
@@ -209,6 +212,17 @@ function isFestivoCell_(row) {
     if (typeof row[c] === 'string') {
       const s = normalizeCell_(row[c]);
       if (s === 'INHABIL') return true;
+    }
+  }
+  return false;
+}
+
+function isVacacionCell_(row) {
+  // VACACIONES = paid vacation day, not a falta, counted as vacación for HR.
+  for (let c = 3; c <= 9; c++) {
+    if (typeof row[c] === 'string') {
+      const s = normalizeCell_(row[c]);
+      if (s === 'VACACIONES' || s === 'VACACION') return true;
     }
   }
   return false;
@@ -324,7 +338,8 @@ function saveAsistenciaRaw(records, sourceFile) {
       'Saldo_min': rec.saldo_min,
       'UploadedAt': nowIso,
       'SourceFile': sourceFile || '',
-      'IsFestivo': rec.isFestivo === true
+      'IsFestivo': rec.isFestivo === true,
+      'IsVacacion': rec.isVacacion === true
     };
     const rowArr = ASISTENCIA_RAW_HEADERS.map(h => rowDict[h] != null ? rowDict[h] : '');
     if (existingMap[id]) updates.push({ rowNum: existingMap[id], rowArr: rowArr });
@@ -1163,8 +1178,10 @@ function aggregateEmpDays_(days, numero, rulesMap, permisos, vacacionDaysSet, fe
       return;
     }
 
-    // Vacation day takes precedence over everything — not a falta, not HNT, not a retardo trigger
-    if (vacSet.has(fecha)) {
+    // Vacation — two sources: checador's VACACIONES mark (d.IsVacacion) OR
+    // an approved vacation row in PERMISOS (vacSet). Either counts.
+    // Not a falta, not HNT, not a retardo trigger.
+    if ((d.IsVacacion === true || d.IsVacacion === 'TRUE') || vacSet.has(fecha)) {
       diasVacacion++;
       return;
     }
