@@ -350,15 +350,21 @@ function getVacacionBalance(numeroColab) {
   const anualidadInicioStr = (iy + anos) + '-' + mmdd;
   const nextAnnivStr       = (iy + anos + 1) + '-' + mmdd;
   const anualidadFinStr    = addDaysStr_(nextAnnivStr, -1);
+  const proxAnualidadFinStr = addDaysStr_((iy + anos + 2) + '-' + mmdd, -1);
   const diasEntitled       = lftDaysForYear_(anos);
   const proximaAnualidadDias = lftDaysForYear_(anos + 1);
 
-  // Sum used + reserved from sheet rows (string compare on YYYY-MM-DD works lexicographically)
+  // Walk vacation rows and bucket by (anualidad × past-vs-future).
+  // Mental model the user uses:
+  //   - "Usados" = days already taken (past or completed) — backfill + ended rows in current anualidad
+  //   - "Reservados (actual)" = future booked rows in current anualidad
+  //   - "Reservados (próxima)" = booked rows that fall in the next anualidad
+  //   - "Disponibles" = entitled - usados - reservadosActual
   const sheet = getOrCreateTab(PERMISOS_TAB, PERMISOS_HEADERS);
   const data = sheet.getDataRange().getValues();
   const headers = data[0];
   const idx = (h) => headers.indexOf(h);
-  let usadosFromRows = 0, reservados = 0;
+  let usadosFromRows = 0, reservadosActual = 0, reservadosProxima = 0;
   for (let r = 1; r < data.length; r++) {
     const row = data[r];
     if (String(row[idx('Tipo')]) !== 'Vacacion') continue;
@@ -367,15 +373,32 @@ function getVacacionBalance(numeroColab) {
     if (respuesta === 'Rechazado' || respuesta === 'Cancelado') continue;
     const dias = parseInt(row[idx('Dias_Vacacion')]) || 0;
     const startStr = formatDateStr(row[idx('Fecha_Permiso')]);
+    const endStr   = formatDateStr(row[idx('Fecha_Fin')]) || startStr;
     if (!startStr) continue;
+
+    // Which anualidad does this row fall in?
+    let anualidad;
     if (startStr >= anualidadInicioStr && startStr <= anualidadFinStr) {
-      usadosFromRows += dias;
-    } else if (startStr > anualidadFinStr) {
-      reservados += dias;
+      anualidad = 'actual';
+    } else if (startStr >= addDaysStr_(anualidadFinStr, 1) && startStr <= proxAnualidadFinStr) {
+      anualidad = 'proxima';
+    } else {
+      continue;  // outside window we care about
+    }
+
+    // Past vs future: ended already → usados; not yet ended → reservados
+    if (anualidad === 'actual') {
+      if (endStr < todayStr) usadosFromRows += dias;
+      else                    reservadosActual += dias;
+    } else {
+      // Próxima anualidad reservations — always future from current perspective
+      reservadosProxima += dias;
     }
   }
 
   const diasUsados = usadosFromRows + backfill;
+  const disponibles = Math.max(0, diasEntitled - diasUsados - reservadosActual);
+  const proximaDisponibles = Math.max(0, proximaAnualidadDias - reservadosProxima);
 
   return {
     numero: num,
@@ -389,9 +412,11 @@ function getVacacionBalance(numeroColab) {
     diasEntitled,
     diasUsados,
     diasUsadosBackfill: backfill,
-    diasReservados: reservados,
-    disponibles: Math.max(0, diasEntitled - diasUsados),
-    proximaAnualidadDias
+    diasReservadosActual: reservadosActual,
+    diasReservadosProxima: reservadosProxima,
+    disponibles,
+    proximaAnualidadDias,
+    proximaDisponibles
   };
 }
 

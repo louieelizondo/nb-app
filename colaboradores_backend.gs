@@ -385,3 +385,17 @@ function refreshColaboradores() {
   Logger.log('Cache cleared. Active colaboradores: ' + Object.keys(out).length);
   return out;
 }
+
+/**
+ * Sets the spreadsheet timezone to America/Chihuahua. Run once after
+ * cloning or if the dates show off-by-one in the form. After running,
+ * re-run migrateColaboradoresFromNotion() to refresh stored dates with
+ * the new TZ baseline.
+ */
+function setSheetTimezoneChihuahua() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const old = ss.getSpreadsheetTimeZone();
+  ss.setSpreadsheetTimeZone('America/Chihuahua');
+  Logger.log('Sheet timezone changed: ' + old + ' → America/Chihuahua');
+  return { ok: true, before: old, after: 'America/Chihuahua' };
+}

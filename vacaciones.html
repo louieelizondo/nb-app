@@ -85,11 +85,10 @@
 
     .balance {
       display: grid;
-      grid-template-columns: repeat(4, 1fr);
+      grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
       gap: 8px;
       margin-top: 8px;
     }
-    @media(max-width: 600px) { .balance { grid-template-columns: 1fr 1fr; } }
     .balance-cell {
       padding: 14px 12px;
       background: #f8f5ef;
@@ -203,12 +202,22 @@
   <div id="balanceBox" style="display:none;margin-top:18px">
     <h2 style="margin-bottom:8px">Tu balance de vacaciones</h2>
     <div id="balanceMeta" style="font-size:12px;color:#998777;margin-bottom:8px"></div>
+
+    <div style="font-size:11px;color:#5e4e3d;font-weight:700;text-transform:uppercase;letter-spacing:.4px;margin:6px 0">Anualidad actual</div>
     <div class="balance">
-      <div class="balance-cell"><div class="num" id="balEntitled">—</div><div class="label">Días esta anualidad</div></div>
+      <div class="balance-cell"><div class="num" id="balEntitled">—</div><div class="label">Asignados</div></div>
       <div class="balance-cell"><div class="num" id="balUsados">—</div><div class="label">Usados</div></div>
       <div class="balance-cell"><div class="num" id="balReservados">—</div><div class="label">Reservados</div></div>
       <div class="balance-cell disponibles"><div class="num" id="balDisponibles">—</div><div class="label">Disponibles</div></div>
     </div>
+
+    <div style="font-size:11px;color:#5e4e3d;font-weight:700;text-transform:uppercase;letter-spacing:.4px;margin:14px 0 6px">Próxima anualidad <span style="font-weight:400;color:#998777;text-transform:none;letter-spacing:0">(reservación adelantada · solo dentro de los 2 meses previos al aniversario)</span></div>
+    <div class="balance">
+      <div class="balance-cell"><div class="num" id="balProxEntitled">—</div><div class="label">Asignados</div></div>
+      <div class="balance-cell"><div class="num" id="balProxReservados">—</div><div class="label">Reservados</div></div>
+      <div class="balance-cell disponibles"><div class="num" id="balProxDisponibles">—</div><div class="label">Disponibles</div></div>
+    </div>
+
     <p class="hint" id="balNote"></p>
   </div>
 </form>
@@ -313,13 +322,16 @@ async function loadBalance() {
     currentBalance = j;
     $('balEntitled').textContent = j.diasEntitled;
     $('balUsados').textContent = j.diasUsados;
-    $('balReservados').textContent = j.diasReservados;
+    $('balReservados').textContent = j.diasReservadosActual ?? 0;
     $('balDisponibles').textContent = j.disponibles;
+    $('balProxEntitled').textContent = j.proximaAnualidadDias ?? 0;
+    $('balProxReservados').textContent = j.diasReservadosProxima ?? 0;
+    $('balProxDisponibles').textContent = j.proximaDisponibles ?? j.proximaAnualidadDias ?? 0;
     const backfillNote = j.diasUsadosBackfill > 0
-      ? ` · Backfill manual: <strong>${j.diasUsadosBackfill}</strong>`
+      ? ` · Backfill (días usados antes del sistema): <strong>${j.diasUsadosBackfill}</strong>`
       : '';
     $('balanceMeta').innerHTML =
-      `Inicio laboral: <strong>${fmtDateMx(j.inicioLaboral)}</strong> · Anualidad actual: ${fmtDateMx(j.anualidadInicio)} → ${fmtDateMx(j.anualidadFin)} · Próxima anualidad: <strong>${fmtDateMx(j.nextAnniversary)}</strong> (${j.proximaAnualidadDias} días)${backfillNote}`;
+      `Inicio laboral: <strong>${fmtDateMx(j.inicioLaboral)}</strong> · Anualidad actual: ${fmtDateMx(j.anualidadInicio)} → ${fmtDateMx(j.anualidadFin)} · Próxima anualidad inicia: <strong>${fmtDateMx(j.nextAnniversary)}</strong>${backfillNote}`;
     $('balNote').textContent = j.anosCompletos === 0
       ? 'Aún no aplicas a vacaciones — primera anualidad inicia en tu primer aniversario.'
       : '';
