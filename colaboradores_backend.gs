@@ -408,6 +408,26 @@ function refreshColaboradores() {
 }
 
 /**
+ * Direct sanity test — completely bypasses getColaboradoresFromSheet_().
+ * If this prints 14 but the other debug prints 0, the function is the bug.
+ */
+function _testDirectBackfill() {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('COLABORADORES');
+  const data = sheet.getDataRange().getValues();
+  const headers = data[0].map(h => String(h || '').trim());
+  const idx = headers.indexOf('Dias_Usados_Backfill_Actual');
+  Logger.log('headers.indexOf("Dias_Usados_Backfill_Actual") = ' + idx);
+  Logger.log('Monica row[' + idx + '] = ' + JSON.stringify(data[1][idx]) + ' (typeof ' + typeof data[1][idx] + ')');
+  Logger.log('parseFloat result = ' + parseFloat(data[1][idx]));
+  Logger.log('parseFloat || 0 = ' + (parseFloat(data[1][idx]) || 0));
+
+  // Now let's compare with what getColaboradoresFromSheet_ produces
+  CacheService.getScriptCache().remove(COLABORADORES_CACHE_KEY);
+  const colabs = getColaboradoresFromSheet_();
+  Logger.log('getColaboradoresFromSheet_()[1].diasUsadosBackfill = ' + (colabs[1] && colabs[1].diasUsadosBackfill));
+}
+
+/**
  * Debug — logs everything about a colaborador's backfill column lookup.
  * Run after filling Dias_Usados_Backfill_Actual to verify it's being
  * read correctly. Pass any active numero (1, 9, 10, 34, 38, etc.).
