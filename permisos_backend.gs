@@ -667,6 +667,83 @@ function getAusenciasCalendar(params) {
  *   vacacionesTotal, vacacionesAprobadas
  * }
  */
+/**
+ * Returns multi-year balance trajectory for a single colaborador.
+ * One entry per year from `fromYear` to `toYear` (inclusive).
+ * Used by the Historial RH inline detail view.
+ *
+ * Body params: { numero, fromYear?: 2025, toYear?: currentYear + 2 }
+ */
+function getColaboradorMultiYearRecord(params) {
+  const num = parseInt(params && params.numero);
+  if (!num) return { error: 'numero requerido' };
+  const today = new Date();
+  const fromYear = parseInt(params.fromYear) || 2025;
+  const toYear   = parseInt(params.toYear)   || today.getFullYear() + 2;
+
+  const colabs = (typeof getColaboradoresFromSheet_ === 'function')
+    ? getColaboradoresFromSheet_() : {};
+  const c = colabs[num];
+  if (!c) return { error: 'Colaborador #' + num + ' no encontrado' };
+
+  // Read PERMISOS once, share across all year calls
+  const sheet = getOrCreateTab(PERMISOS_TAB, PERMISOS_HEADERS);
+  const data = sheet.getDataRange().getValues();
+  const headers = data[0];
+  const idx = (h) => headers.indexOf(h);
+
+  // Per-year permiso/vacacion stats for this colab (filtered by Anualidad_Year)
+  const anualidadYearCol = idx('Anualidad_Year');
+  const statsByYear = {};
+  for (let r = 1; r < data.length; r++) {
+    const row = data[r];
+    if (parseInt(row[idx('NumeroColab')]) !== num) continue;
+    const tipo = String(row[idx('Tipo')] || '');
+    const resp = String(row[idx('Respuesta')] || '');
+    let year = anualidadYearCol >= 0 ? parseInt(row[anualidadYearCol]) : null;
+    if (!year) {
+      // Infer from start date relative to anniversary
+      const startStr = formatDateStr(row[idx('Fecha_Permiso')]);
+      if (!startStr || !c.inicioLaboral) continue;
+      const [iy, im, id] = c.inicioLaboral.split('-').map(Number);
+      const sy = parseInt(startStr.slice(0, 4));
+      const sm = parseInt(startStr.slice(5, 7));
+      const sd = parseInt(startStr.slice(8, 10));
+      year = (sm > im || (sm === im && sd >= id)) ? sy : sy - 1;
+    }
+    if (!year) continue;
+    if (!statsByYear[year]) statsByYear[year] = { permisosTotal: 0, permisosAprobados: 0, vacacionesTotal: 0, vacacionesAprobadas: 0 };
+    if (tipo === 'Vacacion') {
+      statsByYear[year].vacacionesTotal++;
+      if (resp === 'Aprobado') statsByYear[year].vacacionesAprobadas++;
+    } else {
+      statsByYear[year].permisosTotal++;
+      if (resp === 'Aprobado') statsByYear[year].permisosAprobados++;
+    }
+  }
+
+  const years = [];
+  for (let y = fromYear; y <= toYear; y++) {
+    const info = getColaboradorAnualidadInfo_(num, y, data, idx);
+    const stats = statsByYear[y] || { permisosTotal: 0, permisosAprobados: 0, vacacionesTotal: 0, vacacionesAprobadas: 0 };
+    years.push({
+      ...info,
+      permisosTotal: stats.permisosTotal,
+      permisosAprobados: stats.permisosAprobados,
+      vacacionesTotal: stats.vacacionesTotal,
+      vacacionesAprobadas: stats.vacacionesAprobadas
+    });
+  }
+
+  return {
+    ok: true,
+    numero: num,
+    nombre: c.nombre,
+    inicioLaboral: c.inicioLaboral || null,
+    years: years
+  };
+}
+
 function getColaboradoresRecord(params) {
   const targetYear = params && params.year ? parseInt(params.year) : null;
   const colabs = (typeof getColaboradoresFromSheet_ === 'function')

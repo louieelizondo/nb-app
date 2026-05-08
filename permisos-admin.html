@@ -399,7 +399,7 @@
   <div id="tab-historial" style="display:none">
     <div style="max-width:1100px;margin:0 auto 14px;padding:0 4px;display:flex;gap:12px;flex-wrap:wrap;align-items:center;justify-content:space-between">
       <div style="font-size:13px;color:#5e4e3d">
-        <strong>Tabla completa de colaboradores activos.</strong> Click en una fila para filtrar Aprobaciones por ese colaborador.
+        <strong>Tabla completa de colaboradores activos.</strong> Click en una fila para ver su trayectoria por año.
       </div>
       <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
         <label style="font-size:12px;font-weight:700;color:#5e4e3d;text-transform:uppercase;letter-spacing:.4px">Año anualidad:</label>
@@ -868,14 +868,16 @@ function ensureYearSelector() {
   const sel = $('recordYear');
   if (sel.options.length > 0) return;
   const thisYear = new Date().getFullYear();
-  // Show current year + next 3. No past years (we don't track historical balances).
-  for (let y = thisYear; y <= thisYear + 3; y++) {
+  // 2025 (incomplete year — some employees still have leftover days) + current + next.
+  // Three years total. Edit if you need to look further out.
+  const years = [2025, thisYear, thisYear + 1].filter((y, i, a) => a.indexOf(y) === i).sort();
+  years.forEach(y => {
     const opt = document.createElement('option');
     opt.value = String(y);
     opt.textContent = String(y);
     if (y === thisYear) opt.selected = true;
     sel.appendChild(opt);
-  }
+  });
   currentRecordYear = thisYear;
 }
 
@@ -950,17 +952,83 @@ function renderRecord(rows) {
       <tbody>${tr}</tbody>
     </table>
   `;
-  // Click a row → switch to Aprobaciones tab filtered by that colab
+  // Click a row → show inline multi-year detail for that colaborador
   document.querySelectorAll('.record-table tbody tr').forEach(row => {
     row.addEventListener('click', () => {
       const num = row.dataset.num;
       if (!num) return;
-      $('colabSelect').value = num;
-      currentColabFilter = num;
-      switchTab('aprobaciones');
-      render();
+      showColabMultiYearDetail(parseInt(num));
     });
   });
+}
+
+// ─── Inline employee detail (multi-year cards) ─────────────────────────
+async function showColabMultiYearDetail(numero) {
+  $('recordContent').innerHTML = '<div style="text-align:center;padding:30px;color:#998777">Cargando trayectoria…</div>';
+  try {
+    const r = await fetch(API + '?action=get_colaborador_multi_year&numero=' + numero);
+    const j = await r.json();
+    if (j.error) throw new Error(j.error);
+    renderColabMultiYearDetail(j);
+  } catch (err) {
+    $('recordContent').innerHTML = `<div style="text-align:center;padding:30px;color:#c62828">Error: ${err.message}</div>`;
+  }
+}
+
+function renderColabMultiYearDetail(d) {
+  const statusBadge = (s) => {
+    if (s === 'before-inicio') return '<span style="font-size:11px;padding:2px 8px;border-radius:8px;background:#f5f5f5;color:#998777;text-transform:uppercase;letter-spacing:.4px;font-weight:700">Aún no aplica</span>';
+    if (s === 'future')        return '<span style="font-size:11px;padding:2px 8px;border-radius:8px;background:#e1f5fe;color:#01579b;text-transform:uppercase;letter-spacing:.4px;font-weight:700">Futura</span>';
+    if (s === 'closed')        return '<span style="font-size:11px;padding:2px 8px;border-radius:8px;background:#eeeeee;color:#424242;text-transform:uppercase;letter-spacing:.4px;font-weight:700">Cerrada</span>';
+    return '<span style="font-size:11px;padding:2px 8px;border-radius:8px;background:#c8e6c9;color:#1b5e20;text-transform:uppercase;letter-spacing:.4px;font-weight:700">Actual</span>';
+  };
+
+  const cards = d.years.map(y => {
+    const dim = (y.status === 'before-inicio') ? 'opacity:.55' : '';
+    return `
+      <div class="card-detail" style="background:white;border-radius:12px;padding:18px 20px;margin-bottom:12px;border-left:4px solid ${y.status === 'current' ? '#2e7d32' : (y.status === 'future' ? '#1976d2' : '#bdbdbd')};box-shadow:0 2px 8px rgba(0,0,0,.04);${dim}">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px;margin-bottom:14px">
+          <div>
+            <strong style="font-size:18px;color:#1b5e20">Anualidad ${y.anualidadCalendarYear}</strong>
+            <span style="margin-left:10px;color:#5e4e3d;font-size:13px">${y.anosCompletos < 1 ? 'Aún no aplica' : 'Año ' + y.anosCompletos}</span>
+            <span style="margin-left:10px">${statusBadge(y.status)}</span>
+          </div>
+          <span style="font-size:12px;color:#998777">📝 ${y.permisosAprobados}/${y.permisosTotal} permisos · 🏖 ${y.vacacionesAprobadas}/${y.vacacionesTotal} vacaciones</span>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-bottom:10px">
+          <div style="background:#f8f5ef;padding:10px;border-radius:8px;text-align:center">
+            <div style="font-size:22px;font-weight:800;color:#1a3a1a">${y.diasEntitled ?? 0}</div>
+            <div style="font-size:10px;color:#5e4e3d;font-weight:700;text-transform:uppercase;letter-spacing:.4px;margin-top:2px">Asignados</div>
+          </div>
+          <div style="background:#f8f5ef;padding:10px;border-radius:8px;text-align:center">
+            <div style="font-size:22px;font-weight:800;color:#1a3a1a">${y.diasUsados ?? 0}</div>
+            <div style="font-size:10px;color:#5e4e3d;font-weight:700;text-transform:uppercase;letter-spacing:.4px;margin-top:2px">Usados</div>
+          </div>
+          <div style="background:#f8f5ef;padding:10px;border-radius:8px;text-align:center">
+            <div style="font-size:22px;font-weight:800;color:#1a3a1a">${y.diasReservados ?? 0}</div>
+            <div style="font-size:10px;color:#5e4e3d;font-weight:700;text-transform:uppercase;letter-spacing:.4px;margin-top:2px">Reservados</div>
+          </div>
+          <div style="background:#e8f5e9;padding:10px;border-radius:8px;text-align:center">
+            <div style="font-size:24px;font-weight:800;color:#1b5e20">${y.disponibles ?? 0}</div>
+            <div style="font-size:10px;color:#1b5e20;font-weight:700;text-transform:uppercase;letter-spacing:.4px;margin-top:2px">Disponibles</div>
+          </div>
+        </div>
+        <p style="margin:0;font-size:11px;color:#998777">Anualidad ${fmtDate(y.anualidadInicio)} → ${fmtDate(y.anualidadFin)}</p>
+      </div>
+    `;
+  }).join('');
+
+  $('recordContent').innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:16px;flex-wrap:wrap;gap:10px">
+      <div>
+        <h3 style="font-size:18px;font-weight:800;color:#1a3a1a;margin:0">${d.nombre} <span style="color:#998777;font-weight:500">#${d.numero}</span></h3>
+        <p style="font-size:12px;color:#5e4e3d;margin:4px 0 0">Inicio laboral ${fmtDate(d.inicioLaboral)} · Trayectoria por anualidad</p>
+      </div>
+      <button type="button" id="btnBackTable" style="padding:8px 14px;background:white;color:#2e6b2e;border:1px solid #d4cabe;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">← Volver a la tabla</button>
+    </div>
+    ${cards}
+  `;
+  $('btnBackTable').addEventListener('click', () => loadRecord());
 }
 
 $('btnReloadRecord').addEventListener('click', () => { recordLoaded = false; loadRecord(); });

@@ -114,6 +114,7 @@ function doGet(e) {
       case 'get_vacacion_balance':           return jsonResp(getVacacionBalance(e.parameter.numero));
       case 'get_ausencias_calendar':         return jsonResp(getAusenciasCalendar(e.parameter));
       case 'get_colaboradores_record':       return jsonResp(getColaboradoresRecord(e.parameter));
+      case 'get_colaborador_multi_year':     return jsonResp(getColaboradorMultiYearRecord(e.parameter));
       // Días festivos
       case 'list_dias_festivos':             return jsonResp(listDiasFestivos(e.parameter));
       default:              return jsonResp({ error: 'Unknown action: ' + action }, 400);
