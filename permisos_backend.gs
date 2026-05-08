@@ -677,6 +677,10 @@ function getAusenciasCalendar(params) {
 function getColaboradorMultiYearRecord(params) {
   const num = parseInt(params && params.numero);
   if (!num) return { error: 'numero requerido' };
+  // Admin endpoint — bypass cache so any sheet edit (e.g. backfill values
+  // typed by Louie) shows up immediately without waiting for cache TTL.
+  CacheService.getScriptCache().remove(COLABORADORES_CACHE_KEY);
+  CacheService.getScriptCache().remove(EMPLEADO_RULES_CACHE_KEY);
   const today = new Date();
   const fromYear = parseInt(params.fromYear) || 2025;
   const toYear   = parseInt(params.toYear)   || today.getFullYear() + 2;
@@ -746,6 +750,10 @@ function getColaboradorMultiYearRecord(params) {
 
 function getColaboradoresRecord(params) {
   const targetYear = params && params.year ? parseInt(params.year) : null;
+  // Admin endpoint — bypass cache so manual sheet edits (e.g. backfill,
+  // estado changes) reflect immediately. Cheap because called rarely.
+  CacheService.getScriptCache().remove(COLABORADORES_CACHE_KEY);
+  CacheService.getScriptCache().remove(EMPLEADO_RULES_CACHE_KEY);
   const colabs = (typeof getColaboradoresFromSheet_ === 'function')
     ? getColaboradoresFromSheet_() : {};
   const sheet = getOrCreateTab(PERMISOS_TAB, PERMISOS_HEADERS);
