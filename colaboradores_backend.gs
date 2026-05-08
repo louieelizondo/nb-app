@@ -408,6 +408,34 @@ function refreshColaboradores() {
 }
 
 /**
+ * Loops every row, logs each one with numero=1 so we can see if there
+ * are duplicates that overwrite Monica's correct data.
+ */
+function _testLoopDebug() {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('COLABORADORES');
+  const data = sheet.getDataRange().getValues();
+  const headers = data[0].map(h => String(h || '').trim());
+  const numColIdx = headers.indexOf('Numero');
+  const backfillIdx = headers.indexOf('Dias_Usados_Backfill_Actual');
+  const estadoIdx = headers.indexOf('Estado');
+  Logger.log('Total data rows: ' + (data.length - 1));
+  Logger.log('numColIdx = ' + numColIdx + ', backfillIdx = ' + backfillIdx + ', estadoIdx = ' + estadoIdx);
+  let count1 = 0;
+  for (let r = 1; r < data.length; r++) {
+    const row = data[r];
+    const numero = parseInt(row[numColIdx]);
+    if (numero === 1) {
+      count1++;
+      Logger.log('Row index ' + r + ' (sheet row ' + (r+1) + '): numero=' + numero +
+                 ', estado=' + JSON.stringify(row[estadoIdx]) +
+                 ', backfill=' + JSON.stringify(row[backfillIdx]) +
+                 ', parseFloat=' + parseFloat(row[backfillIdx]));
+    }
+  }
+  Logger.log('Total rows with numero=1: ' + count1);
+}
+
+/**
  * Direct sanity test — completely bypasses getColaboradoresFromSheet_().
  * If this prints 14 but the other debug prints 0, the function is the bug.
  */
