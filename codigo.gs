@@ -183,6 +183,7 @@ function doPost(e) {
       case 'submit_vacacion':                return jsonResp(submitVacacion(body));
       case 'update_permiso_status':          return jsonResp(updatePermisoStatus(body));
       case 'cancel_permiso':                 return jsonResp(cancelPermiso(body));
+      case 'cerrar_permiso':                 return jsonResp(cerrarPermiso(body));
       case 'delete_permiso':                 return jsonResp(deletePermiso(body));
       case 'upload_comprobante_to_permiso':  return jsonResp(uploadComprobanteToPermiso(body));
       case 'recompute_week_for_date':        return jsonResp(recomputeWeekForDate(body));

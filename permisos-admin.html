@@ -659,9 +659,12 @@ function render() {
       const compBtn = isVacacion ? '' : `
           <button class="btn upload" onclick="pickComprobante('${p.id}')">${p.comprobanteUrl ? '↻ Reemplazar comprobante' : '📎 Subir comprobante'}</button>
           <input type="file" id="cf-${p.id}" class="file-input-hidden" accept=".pdf,.jpg,.jpeg,.png" onchange="uploadComprobante('${p.id}', this)">`;
+      const cerrarBtn = (isVacacion || p.cerrado) ? '' : `
+          <button class="btn" style="background:#7b1fa2;color:white" onclick="cerrarP('${p.id}')" title="Marcar como resuelto — el motor dejará de calcularlo">✓ Cerrar (resuelto)</button>`;
       actionsHTML = `
         <div class="permiso-actions">
           ${compBtn}
+          ${cerrarBtn}
           <button class="btn cancel" onclick="cancelP('${p.id}')">Cancelar ${isVacacion ? 'vacación' : 'permiso'}</button>
           <button class="btn delete" onclick="del('${p.id}')" title="Eliminar fila por completo">🗑</button>
         </div>`;
@@ -725,6 +728,7 @@ function render() {
     `;
 
     const tipoBadge = `<span class="badge" style="background:${isVacacion ? '#fff3e0' : '#e3f2fd'};color:${isVacacion ? '#bf360c' : '#0d47a1'}">${isVacacion ? '🏖 Vacación' : '⏱ Permiso'}</span>`;
+    const cerradoBadge = p.cerrado ? `<span class="badge" style="background:#f3e5f5;color:#4a148c">✓ CERRADO</span>` : '';
 
     return `
       <div class="permiso ${cls}">
@@ -732,6 +736,7 @@ function render() {
           <h3>${p.nombre} <span style="font-size:12px;color:#998777;font-weight:500">#${p.numeroColab || '?'}</span></h3>
           <div class="badges">
             ${tipoBadge}
+            ${cerradoBadge}
             ${cd && (p.respuesta === 'Pendiente' || p.respuesta === 'Aprobado') ? `<span class="badge countdown ${cd.kind}">${cd.text}</span>` : ''}
             <span class="badge ${cls}">${p.respuesta}</span>
           </div>
@@ -756,6 +761,16 @@ async function decide(id, estado) {
     action: 'update_permiso_status', id, estado,
     email: user.email, fechaFinalPagado: fechaFinal, notasAdmin: notas
   }, `Permiso ${estado.toLowerCase()}.`);
+}
+
+async function cerrarP(id) {
+  const user = getNbAuthUser();
+  if (!user) return;
+  const motivo = prompt('¿Por qué cerrar este permiso? (ej: "Reposeado off-system", "HNT cobrado en nómina", "Duplicado")') || '';
+  if (!confirm('¿Cerrar este permiso? El motor dejará de calcularlo en futuras nóminas.')) return;
+  await postAction({
+    action: 'cerrar_permiso', id, email: user.email, motivo: motivo
+  }, 'Permiso cerrado.');
 }
 
 async function cancelP(id) {

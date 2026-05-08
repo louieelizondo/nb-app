@@ -56,7 +56,8 @@ const PERMISOS_HEADERS = [
   'Repose_Status',       // pending | completo | shortfall | over_cap_no_repose | not_required (Permiso)
   'Repose_Detail',       // text breakdown (Permiso)
   'Computed_At',         // timestamp of last engine writeback
-  'Anualidad_Year'       // year the anualidad started (Vacacion only) — explicit override
+  'Anualidad_Year',      // year the anualidad started (Vacacion only) — explicit override
+  'Cerrado_Manual'       // admin marked this permiso as resolved (reposeado/cobrado/etc) — engine skips it
 ];
 
 const PERMISOS_FOLDER_NAME = 'NB_Comprobantes_Permisos';
@@ -1142,6 +1143,7 @@ function listPermisos(params) {
       reposeStatus:      String(row[idx('Repose_Status')] || ''),
       reposeDetail:      String(row[idx('Repose_Detail')] || ''),
       computedAt:        formatDateStr(row[idx('Computed_At')]),
+      cerrado:           row[idx('Cerrado_Manual')] === true || row[idx('Cerrado_Manual')] === 'TRUE',
       _row:              r + 1
     });
   }
@@ -1225,6 +1227,46 @@ function updatePermisoStatus(body) {
 
       log('PERMISO_DECISION', body.id + ' · ' + body.estado + ' · ' + body.email);
       return { ok: true, id: body.id, estado: body.estado };
+    }
+  }
+  return { error: 'Permiso no encontrado: ' + body.id };
+}
+
+// ─── Admin: mark permiso as manually closed ──────────────────────────────
+
+/**
+ * Body: { id, email, motivo? }
+ * Sets Cerrado_Manual=TRUE + appends motivo to Notas_Admin. Engine excludes
+ * closed permisos from analysis — useful when:
+ *   - HNT was already deducted from pay manually
+ *   - Colaborador reposed off-system and you trust them
+ *   - Permiso was a duplicate / no longer relevant
+ */
+function cerrarPermiso(body) {
+  if (!body.id || !body.email) return { error: 'Faltan campos: id, email' };
+  if (!canApprovePermisos_(body.email)) {
+    return { error: 'Sin permisos para cerrar (' + body.email + ')' };
+  }
+  const sheet = getOrCreateTab(PERMISOS_TAB, PERMISOS_HEADERS);
+  const data = sheet.getDataRange().getValues();
+  const headers = data[0];
+  const idCol = headers.indexOf('ID');
+  const cerradoCol = headers.indexOf('Cerrado_Manual');
+  const notasCol = headers.indexOf('Notas_Admin');
+  for (let r = 1; r < data.length; r++) {
+    if (String(data[r][idCol]) === String(body.id)) {
+      const rowNum = r + 1;
+      sheet.getRange(rowNum, cerradoCol + 1).setValue(true);
+      if (body.motivo) {
+        const existingNotas = String(data[r][notasCol] || '').trim();
+        const newNotas = existingNotas
+          ? existingNotas + ' · Cerrado: ' + body.motivo
+          : 'Cerrado: ' + body.motivo;
+        sheet.getRange(rowNum, notasCol + 1).setValue(newNotas);
+      }
+      CacheService.getScriptCache().remove(PERMISOS_CACHE_KEY_SHEET);
+      log('PERMISO_CLOSE', body.id + ' · ' + body.email + (body.motivo ? ' · ' + body.motivo : ''));
+      return { ok: true, id: body.id };
     }
   }
   return { error: 'Permiso no encontrado: ' + body.id };
@@ -1535,6 +1577,9 @@ function getApprovedPermisosFromSheet_() {
   for (let r = 1; r < data.length; r++) {
     const row = data[r];
     if (String(row[idx('Respuesta')]) !== 'Aprobado') continue;
+    // Skip permisos manually closed by admin (already paid/cobrado/etc).
+    const cerrado = row[idx('Cerrado_Manual')];
+    if (cerrado === true || cerrado === 'TRUE') continue;
     // Engine permiso pipeline only handles Tipo=Permiso (or unset, for legacy rows).
     // Vacaciones are processed separately via getApprovedVacacionesFromSheet_.
     const tipo = String(row[idx('Tipo')] || 'Permiso');
