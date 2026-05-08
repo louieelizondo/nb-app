@@ -185,6 +185,7 @@ function doPost(e) {
       case 'cancel_permiso':                 return jsonResp(cancelPermiso(body));
       case 'delete_permiso':                 return jsonResp(deletePermiso(body));
       case 'upload_comprobante_to_permiso':  return jsonResp(uploadComprobanteToPermiso(body));
+      case 'recompute_week_for_date':        return jsonResp(recomputeWeekForDate(body));
       default:                 return jsonResp({ error: 'Unknown action: ' + action }, 400);
     }
   } catch(err) {

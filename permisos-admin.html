@@ -686,7 +686,17 @@ function render() {
           ${p.reposeDetail ? `<pre>${p.reposeDetail.replace(/&/g,'&amp;').replace(/</g,'&lt;')}</pre>` : ''}
         </div>`;
     } else if (!isVacacion && p.respuesta === 'Aprobado') {
-      analysisHTML = `<div class="analysis" style="border-left-color:#ffa726"><strong>Análisis del checador:</strong> <span class="analysis-status-badge pending">Pendiente</span> <span style="color:#998777;font-size:11px;margin-left:8px">— Se computará la próxima vez que corras la nómina semanal de esa semana.</span></div>`;
+      analysisHTML = `
+        <div class="analysis" style="border-left-color:#ffa726">
+          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+            <div>
+              <strong>Análisis del checador:</strong>
+              <span class="analysis-status-badge pending">Pendiente</span>
+              <span style="color:#998777;font-size:11px;margin-left:8px">— Aún no se ha corrido la nómina de esa semana.</span>
+            </div>
+            <button class="btn" style="background:#1565c0;color:white;font-size:12px;padding:6px 12px" onclick="recomputeWeek('${p.fechaPermiso}', this)">🔄 Recomputar semana</button>
+          </div>
+        </div>`;
     }
 
     // Body fields differ by type
@@ -798,6 +808,25 @@ async function uploadComprobante(id, fileEl) {
     base64, filename: file.name
   }, 'Comprobante subido. La falta se marcará como justificada al recomputar la semana.');
   fileEl.value = '';
+}
+
+async function recomputeWeek(fechaPermiso, btnEl) {
+  if (!fechaPermiso) return;
+  if (btnEl) { btnEl.disabled = true; btnEl.textContent = 'Recomputando…'; }
+  try {
+    const resp = await fetch(API, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action: 'recompute_week_for_date', fechaPermiso: fechaPermiso })
+    });
+    const data = await resp.json();
+    if (data.error) throw new Error(data.error);
+    showMsg(`✓ Recomputada la semana ${data.weekStart} → ${data.weekEnd}.`, 'success', 4000);
+    await loadPermisos();
+  } catch (err) {
+    showMsg('Error: ' + err.message, 'error', 6000);
+    if (btnEl) { btnEl.disabled = false; btnEl.textContent = '🔄 Recomputar semana'; }
+  }
 }
 
 async function postAction(body, successMsg) {

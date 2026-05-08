@@ -1753,3 +1753,18 @@ function updateSemanaRow(body) {
 function _runReset() {
   return resetSemanalSemana('2026-05-01');
 }
+
+/**
+ * Recomputes the week containing the given date. Called from the admin UI
+ * when the user clicks 'Recomputar semana' on a permiso card.
+ *
+ * Body: { fechaPermiso: 'YYYY-MM-DD' }
+ * Resolves the Vie-Jue week containing that date and runs resetSemanalSemana.
+ */
+function recomputeWeekForDate(body) {
+  const date = String(body && body.fechaPermiso || '').slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return { error: 'fechaPermiso inválido' };
+  const week = vieJueWeek_(date);
+  const result = resetSemanalSemana(week.start);
+  return { ok: true, weekStart: week.start, weekEnd: week.end, result };
+}
