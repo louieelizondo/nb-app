@@ -408,6 +408,39 @@ function refreshColaboradores() {
 }
 
 /**
+ * Debug — logs everything about a colaborador's backfill column lookup.
+ * Run after filling Dias_Usados_Backfill_Actual to verify it's being
+ * read correctly. Pass any active numero (1, 9, 10, 34, 38, etc.).
+ */
+function debugColaboradorBackfill(numero) {
+  numero = numero || 1;  // default to Monica
+  CacheService.getScriptCache().remove(COLABORADORES_CACHE_KEY);
+  const sheet = getOrCreateTab(COLABORADORES_TAB, COLABORADORES_HEADERS);
+  const data = sheet.getDataRange().getValues();
+  const headers = data[0].map(h => String(h || '').trim());
+  Logger.log('Headers (positions): ' + headers.map((h, i) => i + '=' + h).join(' | '));
+  Logger.log('Looking for: Dias_Usados_Backfill_Actual');
+  Logger.log('Exact indexOf: ' + headers.indexOf('Dias_Usados_Backfill_Actual'));
+
+  // Find the row for this numero
+  const numCol = headers.indexOf('Numero');
+  let foundRow = null;
+  for (let r = 1; r < data.length; r++) {
+    if (parseInt(data[r][numCol]) === parseInt(numero)) {
+      foundRow = data[r];
+      break;
+    }
+  }
+  if (!foundRow) { Logger.log('No row for numero ' + numero); return null; }
+
+  const colabs = getColaboradoresFromSheet_();
+  const c = colabs[numero];
+  Logger.log('Row values per header:\n' + headers.map((h, i) => h + ' = ' + JSON.stringify(foundRow[i])).join('\n'));
+  Logger.log('\ngetColaboradoresFromSheet_() returned for #' + numero + ':\n' + JSON.stringify(c, null, 2));
+  return { headers, row: foundRow, colab: c };
+}
+
+/**
  * Sets the spreadsheet timezone to America/Chihuahua. Run once after
  * cloning or if the dates show off-by-one in the form. After running,
  * re-run migrateColaboradoresFromNotion() to refresh stored dates with
