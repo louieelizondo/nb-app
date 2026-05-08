@@ -501,7 +501,7 @@ function recomputeSemanal(weekStart, weekEnd, sourceFile) {
 
     // If row is locked, skip the recompute (preserve manual values)
     if (existing.Locked === true || existing.Locked === '__YES__') {
-      const aggLocked = aggregateEmpDays_(emp.days, emp.numero, rulesMap, empPermisos, empVacSet, festivosSet);
+      const aggLocked = aggregateEmpDays_(emp.days, emp.numero, rulesMap, empPermisos, empVacSet, festivosSet, weekStart, weekEnd);
       if (existing.DiasTrabajados !== aggLocked.diasTrabajados) {
         const rowNum = existing._row;
         const colDT = semHeaders.indexOf('DiasTrabajados') + 1;
@@ -511,7 +511,7 @@ function recomputeSemanal(weekStart, weekEnd, sourceFile) {
       return;
     }
 
-    const agg = aggregateEmpDays_(emp.days, emp.numero, rulesMap, empPermisos, empVacSet, festivosSet);
+    const agg = aggregateEmpDays_(emp.days, emp.numero, rulesMap, empPermisos, empVacSet, festivosSet, weekStart, weekEnd);
     if (agg.permisoAnalyses) allPermisoAnalyses.push.apply(allPermisoAnalyses, agg.permisoAnalyses);
 
     // Build SEMANAL row
@@ -938,7 +938,11 @@ function computeReposeWindow_(permiso, workDays) {
   const workDaysSet = {};
   (Array.isArray(workDays) ? workDays : ['Lun','Mar','Mié','Jue','Vie','Sáb']).forEach(d => workDaysSet[d] = true);
 
-  const startStr = addDaysStr_(permiso.fechaPermiso, 1);  // day after permiso
+  // Repose window starts ON the permiso day itself — even on the permiso
+  // day, the colaborador can pay back time (e.g., shorter lunch in the
+  // afternoon for a morning permiso). For the permiso day, the saldo gets
+  // the permiso time added back before counting paidToday (see checkReposeStatus_).
+  const startStr = permiso.fechaPermiso;
 
   let dayCount = 0;
   let endStr = startStr;
@@ -994,7 +998,14 @@ function checkReposeStatus_(permiso, rawForColab, todayStr) {
       perDay.push({ fecha: currentStr, expected: 0, paid: 0, balance: balance, status: 'descanso' });
     } else {
       const saldo = parseInt(r.Saldo_min) || 0;
-      const paidToday = Math.max(0, saldo);
+      // On the permiso day, the saldo from checador is already negative by
+      // the permiso time (he was absent that long). Add it back so we measure
+      // the NET repose — i.e., time worked beyond what was missed.
+      const isPermisoDay = (currentStr === permiso.fechaPermiso);
+      const adjustedSaldo = isPermisoDay
+        ? saldo + (permiso.effectiveAusenteMin || 0)
+        : saldo;
+      const paidToday = Math.max(0, adjustedSaldo);
       balance += (paidToday - dailyMin);
       totalReposed += paidToday;
       const status = paidToday >= dailyMin ? 'ok' : (paidToday > 0 ? 'partial' : 'missed');
@@ -1126,7 +1137,7 @@ function syncNombresFromNotion() {
  *                    .reposeWindow (from computeReposeWindow_) and .reposeStatus
  *                    (from checkReposeStatus_) when applicable
  */
-function aggregateEmpDays_(days, numero, rulesMap, permisos, vacacionDaysSet, festivosSet) {
+function aggregateEmpDays_(days, numero, rulesMap, permisos, vacacionDaysSet, festivosSet, weekStart, weekEnd) {
   const rules = (rulesMap && rulesMap[numero]) || {};
   const skipEntrada = rules.skipEntradaRetardos === true;
   const skipComida = rules.skipComidaRetardos === true;
@@ -1246,6 +1257,15 @@ function aggregateEmpDays_(days, numero, rulesMap, permisos, vacacionDaysSet, fe
     const effectiveHrs = fmtHrs(p.effectiveAusenteMin || 0);
     const reponer = p.reponer === 'Si';
 
+    // Should THIS week charge HNT for this permiso?
+    // Each permiso is charged exactly ONCE — in the week containing the
+    // permiso date (for direct deduction cases like Reponer=No or > 4h)
+    // OR in the week the repose window CLOSES (for shortfall cases).
+    const isInPermisoWeek = !weekStart || (p.fechaPermiso >= weekStart && p.fechaPermiso <= weekEnd);
+    const winEnd = p.reposeWindow && p.reposeWindow.endDate;
+    const isInWindowEndWeek = !weekStart || (winEnd && winEnd >= weekStart && winEnd <= weekEnd);
+    const isSingleWeek = !weekStart || (isInPermisoWeek && isInWindowEndWeek);
+
     // Detail buffer for sheet writeback (per-permiso, separate from week's permisoLines)
     const detailBuf = [];
     let analysisStatus = 'pending';
@@ -1256,9 +1276,9 @@ function aggregateEmpDays_(days, numero, rulesMap, permisos, vacacionDaysSet, fe
       hdr += ' (real ' + actualHrs + 'h)';
     }
 
-    // Case 1: > 4h actual → no repose, full HNT
+    // Case 1: > 4h actual → no repose, full HNT (charge in permiso week only)
     if (p.overCapNoRepose) {
-      hntFromPermisos += effectiveHrs;
+      if (isInPermisoWeek) hntFromPermisos += effectiveHrs;
       const line = hdr + ' · ❌ excede 4h, descontar ' + effectiveHrs + 'h completo';
       permisoLines.push(line);
       analysisStatus = 'over_cap_no_repose';
@@ -1270,9 +1290,9 @@ function aggregateEmpDays_(days, numero, rulesMap, permisos, vacacionDaysSet, fe
       return;
     }
 
-    // Case 2: Reponer=No → direct deduction
+    // Case 2: Reponer=No → direct deduction (charge in permiso week only)
     if (!reponer) {
-      hntFromPermisos += effectiveHrs;
+      if (isInPermisoWeek) hntFromPermisos += effectiveHrs;
       const line = hdr + ' · descontar ' + effectiveHrs + 'h';
       permisoLines.push(line);
       analysisStatus = 'not_required';
@@ -1297,9 +1317,9 @@ function aggregateEmpDays_(days, numero, rulesMap, permisos, vacacionDaysSet, fe
       return;
     }
 
-    // Case 4: Reponer=Sí, no método chosen
+    // Case 4: Reponer=Sí, no método chosen → charge in permiso week
     if (!p.reposeWindow || !p.reposeStatus) {
-      hntFromPermisos += effectiveHrs;
+      if (isInPermisoWeek) hntFromPermisos += effectiveHrs;
       const line = hdr + ' · ⚠️ sin método de reponer · descontar ' + effectiveHrs + 'h';
       permisoLines.push(line);
       analysisStatus = 'no_method';
@@ -1315,14 +1335,16 @@ function aggregateEmpDays_(days, numero, rulesMap, permisos, vacacionDaysSet, fe
     const reposedHrs = fmtHrs(st.reposedMin);
     const expectedHrs = fmtHrs(st.expectedMin);
 
-    // Header line
+    // Header line. Shortfall HNT charges only in the WINDOW-END week — that
+    // way we don't double-count when the permiso week and window-end week
+    // are different.
     let headerLine;
     if (st.complete) {
       headerLine = hdr + ' · ✅ reposeado ' + reposedHrs + 'h';
       analysisStatus = 'completo';
     } else if (st.windowOver) {
       const shortHrs = fmtHrs(st.shortfallMin);
-      hntFromShortfall += shortHrs;
+      if (isInWindowEndWeek) hntFromShortfall += shortHrs;
       headerLine = hdr + ' · ⚠️ falta reponer ' + shortHrs + 'h · descontar ' + shortHrs + 'h';
       analysisStatus = 'shortfall';
     } else {
