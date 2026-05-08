@@ -379,6 +379,10 @@ function getColaboradoresFromSheet_() {
     if (!numero) continue;
     const estado = String(row[idx('Estado')] || '').trim();
     if (estado && estado.toLowerCase().indexOf('inactivo') >= 0) continue;
+    // Skip phantom rows (no Notion_Page_Id) — they were created by sync
+    // artifacts and would overwrite real rows in this dedup loop.
+    const pageId = String(row[idx('Notion_Page_Id')] || '').trim();
+    if (!pageId) continue;
     out[numero] = {
       nombre:             String(row[idx('Nombre')] || '').trim(),
       email:              String(row[idx('Email')] || '').trim(),
@@ -405,6 +409,38 @@ function refreshColaboradores() {
   const out = getColaboradoresFromSheet_();
   Logger.log('Cache cleared. Active colaboradores: ' + Object.keys(out).length);
   return out;
+}
+
+/**
+ * Removes phantom rows from COLABORADORES — rows that have a Numero but
+ * no Notion_Page_Id (sync artifacts, manually-created blanks, etc).
+ * These rows were causing real data to be overwritten by empty values.
+ *
+ * Run from the editor:  cleanupPhantomColaboradores()
+ */
+function cleanupPhantomColaboradores() {
+  const sheet = getOrCreateTab(COLABORADORES_TAB, COLABORADORES_HEADERS);
+  const data = sheet.getDataRange().getValues();
+  const headers = data[0].map(h => String(h || '').trim());
+  const numCol = headers.indexOf('Numero');
+  const pageIdCol = headers.indexOf('Notion_Page_Id');
+
+  // Collect rows to delete (1-indexed, matching sheet row numbers)
+  const toDelete = [];
+  for (let r = 1; r < data.length; r++) {
+    const numero = parseInt(data[r][numCol]);
+    const pageId = String(data[r][pageIdCol] || '').trim();
+    // Phantom: has a numero but no page_id, OR completely empty
+    const isEmpty = data[r].every(v => v === '' || v === null);
+    if (isEmpty || (numero && !pageId)) {
+      toDelete.push(r + 1);  // sheet row number is r + 1
+    }
+  }
+  // Delete from bottom up to preserve indices
+  toDelete.sort((a, b) => b - a).forEach(rn => sheet.deleteRow(rn));
+  CacheService.getScriptCache().remove(COLABORADORES_CACHE_KEY);
+  Logger.log('cleanupPhantomColaboradores: removed ' + toDelete.length + ' phantom rows');
+  return { ok: true, removed: toDelete.length };
 }
 
 /**
