@@ -883,19 +883,26 @@ function ensureYearSelector() {
 
 async function loadRecord() {
   ensureYearSelector();
-  $('recordContent').innerHTML = '<div style="text-align:center;padding:30px;color:#998777">Cargando…</div>';
+  // Read year from DOM directly — variable can drift if loadRecord fires
+  // before the change handler updates currentRecordYear.
+  const yearFromDom = $('recordYear') && $('recordYear').value;
+  const yearToFetch = yearFromDom || currentRecordYear || (new Date().getFullYear());
+  currentRecordYear = parseInt(yearToFetch);
+  $('recordContent').innerHTML = '<div style="text-align:center;padding:30px;color:#998777">Cargando año ' + yearToFetch + '…</div>';
   try {
-    const r = await fetch(API + '?action=get_colaboradores_record&year=' + (currentRecordYear || ''));
+    const r = await fetch(API + '?action=get_colaboradores_record&year=' + yearToFetch);
     const j = await r.json();
     if (!j.ok) throw new Error(j.error || 'Error');
-    renderRecord(j.colaboradores || []);
+    // Show queried year above the table for sanity
+    const titleHtml = '<div style="margin-bottom:10px;font-size:13px;color:#5e4e3d">Mostrando datos de la <strong>anualidad ' + (j.year || yearToFetch) + '</strong></div>';
+    renderRecord(j.colaboradores || [], titleHtml);
     recordLoaded = true;
   } catch (err) {
     $('recordContent').innerHTML = `<div style="text-align:center;padding:30px;color:#c62828">Error: ${err.message}</div>`;
   }
 }
 
-function renderRecord(rows) {
+function renderRecord(rows, titleHtml) {
   if (!rows.length) {
     $('recordContent').innerHTML = '<div style="text-align:center;padding:30px;color:#998777">No hay colaboradores activos.</div>';
     return;
@@ -937,7 +944,7 @@ function renderRecord(rows) {
       </tr>`;
   }).join('');
 
-  $('recordContent').innerHTML = `
+  $('recordContent').innerHTML = (titleHtml || '') + `
     <table class="record-table">
       <thead>
         <tr>
