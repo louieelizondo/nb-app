@@ -63,6 +63,18 @@ const PERMISOS_FOLDER_NAME = 'NB_Comprobantes_Permisos';
 const PERMISOS_CACHE_KEY_SHEET = 'asistencia_permisos_sheet_v1';
 const PERMISOS_CACHE_TTL_SHEET = 300;  // 5 min — matches Notion cache
 
+// ─── One-time backfill: days used pre-system per current anualidad ───────
+// Edit this map directly when needed. Just maps numeroColab → días used.
+// Going forward, real vacation rows in PERMISOS sheet drive everything;
+// this is only here to seed the few people who had usage before the system.
+const VACACION_BACKFILL = {
+  1:  14,   // Monica Reyes (entitled 26, 12 left)
+  9:  16,   // Iris Soto (used all)
+  10: 12,   // Elena Aguilar (used all)
+  34: 10,   // Antonio Aguiñaga (entitled 14, 4 left including 2 reserved)
+  38: 10    // Elvia Acosta (entitled 12, 2 left)
+};
+
 // ─── Sheet setup ──────────────────────────────────────────────────────────
 
 /**
@@ -362,7 +374,8 @@ function getVacacionBalance(numeroColab) {
 
   const pad = n => String(n).padStart(2, '0');
   const mmdd = pad(im) + '-' + pad(id);
-  const backfill = parseFloat(c.diasUsadosBackfill) || 0;
+  // Backfill from hardcoded map (not sheet) — see VACACION_BACKFILL constant.
+  const backfill = parseFloat(VACACION_BACKFILL[num]) || 0;
 
   if (anos < 1) {
     const firstAnnivStr = (iy + 1) + '-' + mmdd;
@@ -990,10 +1003,10 @@ function getColaboradorAnualidadInfo_(numero, targetYear, sheetData, sheetIdx) {
     else                    reservados += dias;
   }
 
-  // Backfill: only applies to the CURRENT anualidad (the column tracks
-  // pre-system usage in the active window). For future/closed years, no backfill.
+  // Backfill: hardcoded map applies only to the CURRENT anualidad.
+  // For future/closed years, no backfill (real vacation rows drive everything).
   const backfill = (status === 'current' && (anualidadCalYear === currentAnualidadCalYear))
-    ? (parseFloat(c.diasUsadosBackfill) || 0)
+    ? (parseFloat(VACACION_BACKFILL[numero]) || 0)
     : 0;
   const diasUsados = usadosFromRows + backfill;
   const disponibles = Math.max(0, diasEntitled - diasUsados - reservados);
