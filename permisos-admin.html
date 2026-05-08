@@ -932,6 +932,8 @@ function renderRecord(rows) {
         <td class="num">${pill(r.disponibles ?? 0)}</td>
         <td class="num">${pill(r.permisosAprobados ?? 0)}</td>
         <td class="num">${pill(r.vacacionesAprobadas ?? 0)}</td>
+        <td class="num">${pill(r.faltasYear ?? 0, (r.faltasYear ?? 0) > 0 ? 'warn' : 'zero')}</td>
+        <td class="num">${pill(r.retardosYear ?? 0, (r.retardosYear ?? 0) > 0 ? 'warn' : 'zero')}</td>
       </tr>`;
   }).join('');
 
@@ -947,6 +949,8 @@ function renderRecord(rows) {
           <th class="num">Disponibles</th>
           <th class="num">Permisos<br>Aprob.</th>
           <th class="num">Vacaciones<br>Aprob.</th>
+          <th class="num">Faltas<br>(año)</th>
+          <th class="num">Retardos<br>(año)</th>
         </tr>
       </thead>
       <tbody>${tr}</tbody>
@@ -993,7 +997,7 @@ function renderColabMultiYearDetail(d) {
             <span style="margin-left:10px;color:#5e4e3d;font-size:13px">${y.anosCompletos < 1 ? 'Aún no aplica' : 'Año ' + y.anosCompletos}</span>
             <span style="margin-left:10px">${statusBadge(y.status)}</span>
           </div>
-          <span style="font-size:12px;color:#998777">📝 ${y.permisosAprobados}/${y.permisosTotal} permisos · 🏖 ${y.vacacionesAprobadas}/${y.vacacionesTotal} vacaciones</span>
+          <span style="font-size:12px;color:#998777">📝 ${y.permisosAprobados}/${y.permisosTotal} permisos · 🏖 ${y.vacacionesAprobadas}/${y.vacacionesTotal} vacaciones · ⚠️ ${y.faltasYear || 0} faltas · ⏰ ${y.retardosYear || 0} retardos</span>
         </div>
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-bottom:10px">
           <div style="background:#f8f5ef;padding:10px;border-radius:8px;text-align:center">

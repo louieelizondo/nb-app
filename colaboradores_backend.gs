@@ -349,8 +349,29 @@ function getColaboradoresFromSheet_() {
     return {};
   }
 
-  const headers = data[0];
-  const idx = (h) => headers.indexOf(h);
+  const headers = data[0].map(h => String(h || '').trim());
+  // Robust column lookup: tries exact match first, then alias map, then
+  // prefix match against truncated header names. Survives historical
+  // schema renames (Telefono → Celular, Dias_Usados_Bac → Dias_Usados_Backfill_Actual).
+  const aliasMap = {
+    'Celular': ['Telefono', 'Phone', 'Cel'],
+    'Dias_Usados_Backfill_Actual': ['Dias_Usados_Bac', 'Dias_Usados', 'Dias_Usados_Backfill']
+  };
+  const idx = (h) => {
+    let i = headers.indexOf(h);
+    if (i >= 0) return i;
+    const aliases = aliasMap[h] || [];
+    for (let a of aliases) {
+      i = headers.indexOf(a);
+      if (i >= 0) return i;
+    }
+    // Prefix fallback: header starts-with the first 12 chars of canonical
+    const prefix = h.substring(0, 12).toLowerCase();
+    for (let j = 0; j < headers.length; j++) {
+      if (String(headers[j]).toLowerCase().startsWith(prefix)) return j;
+    }
+    return -1;
+  };
   const out = {};
   for (let r = 1; r < data.length; r++) {
     const row = data[r];

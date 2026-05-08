@@ -726,16 +726,44 @@ function getColaboradorMultiYearRecord(params) {
     }
   }
 
+  // Pre-bucket faltas/retardos for this colab from SEMANAL by year
+  const semSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('ASISTENCIA_SEMANAL');
+  const semByYear = {};
+  if (semSheet && semSheet.getLastRow() > 1) {
+    const semData = semSheet.getDataRange().getValues();
+    const semHeaders = semData[0];
+    const semIdx = (h) => semHeaders.indexOf(h);
+    const semNumIdx = semIdx('NumeroColab');
+    const semIniIdx = semIdx('SemanaInicio');
+    const semFaltasIdx = semIdx('FaltasReal');
+    const semRetIdx = semIdx('Retardos');
+    if (semNumIdx >= 0 && semIniIdx >= 0) {
+      for (let r = 1; r < semData.length; r++) {
+        if (parseInt(semData[r][semNumIdx]) !== num) continue;
+        const ini = formatDateStr(semData[r][semIniIdx]);
+        if (!ini) continue;
+        const yr = parseInt(ini.slice(0, 4));
+        if (!yr) continue;
+        if (!semByYear[yr]) semByYear[yr] = { faltas: 0, retardos: 0 };
+        semByYear[yr].faltas   += parseInt(semData[r][semFaltasIdx]) || 0;
+        semByYear[yr].retardos += parseInt(semData[r][semRetIdx]) || 0;
+      }
+    }
+  }
+
   const years = [];
   for (let y = fromYear; y <= toYear; y++) {
     const info = getColaboradorAnualidadInfo_(num, y, data, idx);
     const stats = statsByYear[y] || { permisosTotal: 0, permisosAprobados: 0, vacacionesTotal: 0, vacacionesAprobadas: 0 };
+    const sem = semByYear[y] || { faltas: 0, retardos: 0 };
     years.push({
       ...info,
       permisosTotal: stats.permisosTotal,
       permisosAprobados: stats.permisosAprobados,
       vacacionesTotal: stats.vacacionesTotal,
-      vacacionesAprobadas: stats.vacacionesAprobadas
+      vacacionesAprobadas: stats.vacacionesAprobadas,
+      faltasYear: sem.faltas,
+      retardosYear: sem.retardos
     });
   }
 
@@ -761,23 +789,84 @@ function getColaboradoresRecord(params) {
   const headers = data[0];
   const idx = (h) => headers.indexOf(h);
 
-  // Pre-bucket rows by numeroColab for permiso/vacacion counts
-  const statsByNum = {};
+  // Pre-bucket rows by numeroColab AND by year for filtered counts.
+  // Permisos: by calendar year of Fecha_Permiso.
+  // Vacaciones: by Anualidad_Year column (preferred) or inferred from date.
+  const statsByNumYear = {};  // { numero: { year: { permisosTotal, ... } } }
+  const colabsForInfer = (typeof getColaboradoresFromSheet_ === 'function')
+    ? getColaboradoresFromSheet_() : {};
+  const anualidadYearCol = idx('Anualidad_Year');
   for (let r = 1; r < data.length; r++) {
     const num = parseInt(data[r][idx('NumeroColab')]);
     if (!num) continue;
-    if (!statsByNum[num]) statsByNum[num] = {
+    const tipo = String(data[r][idx('Tipo')] || '');
+    const resp = String(data[r][idx('Respuesta')] || '');
+    const fechaPermiso = formatDateStr(data[r][idx('Fecha_Permiso')]);
+
+    let year = null;
+    if (tipo === 'Vacacion' && anualidadYearCol >= 0) {
+      year = parseInt(data[r][anualidadYearCol]);
+    }
+    if (!year && fechaPermiso) {
+      // For permisos: use calendar year of fecha_permiso
+      // For vacaciones without explicit Anualidad_Year: infer from anniversary
+      if (tipo === 'Vacacion') {
+        const c = colabsForInfer[num];
+        if (c && c.inicioLaboral) {
+          const [iy, im, id] = c.inicioLaboral.split('-').map(Number);
+          const sy = parseInt(fechaPermiso.slice(0, 4));
+          const sm = parseInt(fechaPermiso.slice(5, 7));
+          const sd = parseInt(fechaPermiso.slice(8, 10));
+          year = (sm > im || (sm === im && sd >= id)) ? sy : sy - 1;
+        }
+      } else {
+        year = parseInt(fechaPermiso.slice(0, 4));
+      }
+    }
+    if (!year) continue;
+
+    if (!statsByNumYear[num]) statsByNumYear[num] = {};
+    if (!statsByNumYear[num][year]) statsByNumYear[num][year] = {
       permisosTotal: 0, permisosAprobados: 0,
       vacacionesTotal: 0, vacacionesAprobadas: 0
     };
-    const tipo = String(data[r][idx('Tipo')] || '');
-    const resp = String(data[r][idx('Respuesta')] || '');
+    const bucket = statsByNumYear[num][year];
     if (tipo === 'Vacacion') {
-      statsByNum[num].vacacionesTotal++;
-      if (resp === 'Aprobado') statsByNum[num].vacacionesAprobadas++;
+      bucket.vacacionesTotal++;
+      if (resp === 'Aprobado') bucket.vacacionesAprobadas++;
     } else {
-      statsByNum[num].permisosTotal++;
-      if (resp === 'Aprobado') statsByNum[num].permisosAprobados++;
+      bucket.permisosTotal++;
+      if (resp === 'Aprobado') bucket.permisosAprobados++;
+    }
+  }
+
+  // Also pre-bucket SEMANAL faltas/retardos per colab per calendar year.
+  // We sum FaltasReal + Retardos across all weeks where SemanaInicio falls
+  // in the queried calendar year. (Weeks span Vie-Jue so a week can straddle
+  // years; using SemanaInicio's year is the convention.)
+  const semSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('ASISTENCIA_SEMANAL');
+  const semByNumYear = {};
+  if (semSheet && semSheet.getLastRow() > 1) {
+    const semData = semSheet.getDataRange().getValues();
+    const semHeaders = semData[0];
+    const semIdx = (h) => semHeaders.indexOf(h);
+    const semNumIdx = semIdx('NumeroColab');
+    const semIniIdx = semIdx('SemanaInicio');
+    const semFaltasIdx = semIdx('FaltasReal');
+    const semRetIdx = semIdx('Retardos');
+    if (semNumIdx >= 0 && semIniIdx >= 0) {
+      for (let r = 1; r < semData.length; r++) {
+        const num = parseInt(semData[r][semNumIdx]);
+        if (!num) continue;
+        const ini = formatDateStr(semData[r][semIniIdx]);
+        if (!ini) continue;
+        const yr = parseInt(ini.slice(0, 4));
+        if (!yr) continue;
+        if (!semByNumYear[num]) semByNumYear[num] = {};
+        if (!semByNumYear[num][yr]) semByNumYear[num][yr] = { faltas: 0, retardos: 0 };
+        semByNumYear[num][yr].faltas   += parseInt(semData[r][semFaltasIdx]) || 0;
+        semByNumYear[num][yr].retardos += parseInt(semData[r][semRetIdx]) || 0;
+      }
     }
   }
 
@@ -785,9 +874,13 @@ function getColaboradoresRecord(params) {
   Object.keys(colabs).forEach(numStr => {
     const num = parseInt(numStr);
     const c = colabs[numStr];
-    const stats = statsByNum[num] || { permisosTotal: 0, permisosAprobados: 0, vacacionesTotal: 0, vacacionesAprobadas: 0 };
 
     const info = getColaboradorAnualidadInfo_(num, targetYear, data, idx);
+    const yearKey = info.anualidadCalendarYear || targetYear || (new Date()).getFullYear();
+    const stats = (statsByNumYear[num] && statsByNumYear[num][yearKey]) || {
+      permisosTotal: 0, permisosAprobados: 0, vacacionesTotal: 0, vacacionesAprobadas: 0
+    };
+    const sem = (semByNumYear[num] && semByNumYear[num][yearKey]) || { faltas: 0, retardos: 0 };
     out.push({
       numero: num,
       nombre: c.nombre,
@@ -796,7 +889,9 @@ function getColaboradoresRecord(params) {
       permisosTotal: stats.permisosTotal,
       permisosAprobados: stats.permisosAprobados,
       vacacionesTotal: stats.vacacionesTotal,
-      vacacionesAprobadas: stats.vacacionesAprobadas
+      vacacionesAprobadas: stats.vacacionesAprobadas,
+      faltasYear: sem.faltas,
+      retardosYear: sem.retardos
     });
   });
   // Sort by numero ASC (1, 5, 9, 10, 34, ...)
