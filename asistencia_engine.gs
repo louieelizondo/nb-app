@@ -892,18 +892,16 @@ const PERMISO_REPOSE_CAP_MIN = 240;  // > 4 hours = no repose option, direct HNT
 function decoratePermisoActuals_(permiso, rawForColab) {
   const actualMin = getActualAusenteMin_(rawForColab, permiso.fechaPermiso);
   const formMin = (parseFloat(permiso.horasAusente) || 0) * 60;
-  // Use the LARGER of form-stated and checador-detected absence. Form-stated
-  // is the contract (what the colab said they'd be out). Checador-detected
-  // is the saldo deficit. If checador shows a bigger absence (e.g. they left
-  // earlier than the permiso said), use that. Otherwise trust the form.
-  // Important for repose math: using only actualMin (= |saldo|) makes the
-  // permiso-day adjustment cancel out (saldo + |saldo| = 0). Using formMin
-  // gives the right answer because it's independent of the day's saldo.
+  // Use the SMALLER of form-stated and checador-detected absence.
+  // The form is a request/estimate; the checador is what actually happened.
+  // If the employee took less time than requested (e.g. handled the errand faster),
+  // they only owe repose for what they actually took — not the estimate.
+  // If checador is not yet available, fall back to the form value.
   let effectiveMin;
   if (actualMin == null) {
-    effectiveMin = formMin;  // checador not uploaded yet
+    effectiveMin = formMin;  // checador not uploaded yet — use form as placeholder
   } else {
-    effectiveMin = Math.max(formMin, actualMin);
+    effectiveMin = Math.min(formMin, actualMin);
   }
   const overCap = effectiveMin > PERMISO_REPOSE_CAP_MIN;
   permiso.actualAusenteMin = actualMin;
