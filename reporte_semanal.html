@@ -243,6 +243,7 @@
   <div class="card" id="results-card" style="display:none">
     <h2 class="results-header">
       <span>3. Resultados de la semana</span>
+      <button id="btn-recompute" class="secondary share-btn">🔄 Recomputar semana</button>
       <button id="btn-share" class="secondary share-btn">📥 Descargar Excel</button>
     </h2>
     <div class="alert info">
@@ -797,6 +798,28 @@ function autoGrowTextarea(el) {
   el.style.height = Math.max(28, el.scrollHeight) + 'px';
 }
 
+async function recomputeWeek() {
+  const btn = document.getElementById('btn-recompute');
+  btn.disabled = true;
+  btn.textContent = '⏳ Recomputando...';
+  setStatus('loading', 'Recomputando semana actual y anterior...');
+  try {
+    const resp = await fetch(API, { method: 'POST', body: JSON.stringify({ action: 'recompute_now' }) });
+    const data = await resp.json();
+    if (!data.ok && !data.currentWeek) throw new Error(data.error || 'Error desconocido');
+    const cur = data.currentWeek || {};
+    const prev = data.prevWeek || {};
+    const msg = '✅ Recomputado · semana actual: ' + (cur.computed || 0) + ' empleados · semana anterior: ' + (prev.computed || 0);
+    setStatus('saved', msg);
+    await loadCurrentWeek();
+  } catch (err) {
+    setStatus('error', 'Error al recomputar: ' + err.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '🔄 Recomputar semana';
+  }
+}
+
 async function saveSemRow(idx) {
   const r = currentRows[idx];
   const tbody = document.getElementById('sem-tbody');
@@ -829,6 +852,7 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('btn-load').addEventListener('click', loadCurrentWeek);
   document.getElementById('btn-upload').addEventListener('click', uploadXlsx);
   document.getElementById('btn-share').addEventListener('click', exportExcel);
+  document.getElementById('btn-recompute').addEventListener('click', recomputeWeek);
   document.getElementById('week-select').addEventListener('change', loadCurrentWeek);
   document.getElementById('btn-prev').addEventListener('click', () => {
     const sel = document.getElementById('week-select');
