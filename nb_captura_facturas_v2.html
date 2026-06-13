@@ -6,6 +6,13 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="nb-brand.css">
 <title>NB · Captura de Facturas v2</title>
+<script>
+(function () {
+  if (/[?&]legacy=1(?:&|$)/.test(location.search)) return;
+  location.replace('https://nb-admin-nu.vercel.app/facturas.html');
+})();
+</script>
+<noscript><meta http-equiv="refresh" content="0;url=https://nb-admin-nu.vercel.app/facturas.html"></noscript>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #f0f4f0; color: #1a1a1a; min-height: 100vh; }
@@ -440,6 +447,11 @@ tr:last-child td { border-bottom: none; }
 </style>
 </head>
 <body>
+<div id="nb-redirect-fallback" style="position:fixed;inset:0;z-index:99999;background:#fff5f5;padding:24px;font-family:system-ui,sans-serif;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;">
+  <p style="font-size:18px;font-weight:800;color:#b71c1c;margin-bottom:12px;">Esta página ya no se usa</p>
+  <p style="font-size:14px;color:#555;max-width:360px;margin-bottom:20px;">La captura de facturas ahora está en el nuevo sistema (junio 2026).</p>
+  <a href="https://nb-admin-nu.vercel.app/facturas.html" style="display:inline-block;background:#2e6b2e;color:white;padding:14px 28px;border-radius:10px;font-weight:700;text-decoration:none;font-size:16px;">Ir a Captura de Facturas →</a>
+</div>
 
 <div class="topbar">
   <div class="logo">NB</div>
