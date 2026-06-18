@@ -647,7 +647,7 @@
   <span class="nav-brand">NB Finance</span>
   <a href="dashboard_nb.html" id="nav-dashboard">Dashboard</a>
   <a href="registro_ingresos.html" id="nav-ingresos" class="active">Ingresos</a>
-  <a href="nb_portal_pagos.html" id="nav-pagos">Gastos</a>
+  <a href="https://nb-admin-nu.vercel.app/portal-pagos.html" target="_blank" rel="noopener" id="nav-pagos">Gastos</a>
   <a href="corte_caja.html" target="_blank" id="nav-corte">Cortes de Tienda</a>
 </nav>
 <!-- END NB NAVIGATION BAR -->
@@ -810,8 +810,11 @@
 
     <div class="form-grid" style="grid-template-columns: 1fr 1fr;">
       <div class="summary-box">
-        <div class="label">Ya Facturado</div>
+        <div class="label">Ya Facturado (Cliente + Global)</div>
         <div class="value" id="monthly-facturado">$0.00</div>
+        <div class="label" style="margin-top:6px;font-size:11px;color:#7a6b5d;">
+          Cliente <span id="monthly-cliente">$0.00</span> &nbsp;·&nbsp; Global <span id="monthly-global">$0.00</span>
+        </div>
       </div>
       <div class="summary-box alert" id="monthly-falta-box">
         <div class="label">Falta Facturar</div>
@@ -828,24 +831,54 @@
       </div>
     </div>
 
+    <!-- "Cerrar mes" helper: muestra el monto EXACTO que falta facturar (el número
+         que se escribe en el botón "Monto Exacto" del selector de facturas). -->
+    <div class="summary-box" id="cerrar-mes-box" style="margin-bottom:20px;border:2px dashed #2e7d32;background:#f1f8e9;">
+      <div class="label" style="font-weight:700;">Cerrar mes — Monto exacto a facturar</div>
+      <div class="value" id="cerrar-mes-monto" style="font-size:26px;">$0.00</div>
+      <div style="display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap;">
+        <input type="text" id="cerrar-mes-copy" readonly value="0.00"
+               style="width:140px;padding:6px 8px;font-size:14px;text-align:right;font-family:monospace;">
+        <button class="btn btn-secondary" type="button" onclick="copyCerrarMes()">Copiar</button>
+        <span style="font-size:12px;color:#7a6b5d;">Pégalo en "Monto Exacto" del selector de facturas.</span>
+      </div>
+    </div>
+
+    <!-- Log de facturas auto-llenado (mejora progresiva): aparece sólo si el backend
+         expone get_facturacion_log. Si no, se oculta y se usa la captura manual de abajo. -->
+    <div id="facturacion-log-wrap" style="display:none;margin-bottom:20px;">
+      <h3>Log de Facturas del Mes</h3>
+      <div style="max-width:calc(100vw - 80px);overflow-x:auto;border-radius:12px;border:1px solid #e0d8cf;">
+        <table style="font-size:13px;min-width:600px;border-collapse:collapse;">
+          <thead>
+            <tr>
+              <th style="white-space:nowrap;">Fecha</th>
+              <th style="white-space:nowrap;">Tipo</th>
+              <th style="white-space:nowrap;">Folio</th>
+              <th style="white-space:nowrap;text-align:right;">Monto</th>
+            </tr>
+          </thead>
+          <tbody id="facturacion-log-body"></tbody>
+        </table>
+      </div>
+    </div>
+
     <h3>Detalle Diario</h3>
+    <p style="font-size:12px;color:#7a6b5d;margin-bottom:8px;">
+      Captura por día: <b>Cliente</b> (facturas a cliente) y <b>Global</b> (suma de facturas globales del día).
+      La reconciliación (Falta) se hace sólo a nivel <b>mensual</b> arriba.
+    </p>
     <div style="display:block;max-width:calc(100vw - 80px);overflow-x:auto;-webkit-overflow-scrolling:touch;border-radius:12px;border:1px solid #e0d8cf;">
-      <table style="font-size:13px;min-width:1200px;border-collapse:collapse;">
+      <table style="font-size:13px;min-width:760px;border-collapse:collapse;">
         <thead>
           <tr>
             <th style="white-space:nowrap;">Fecha</th>
             <th style="white-space:nowrap;">Pagos Rec.</th>
             <th style="white-space:nowrap;">Sobre 2</th>
             <th style="white-space:nowrap;">A Fact.</th>
-            <th style="white-space:nowrap;">F. Client</th>
-            <th>G1</th>
-            <th>G2</th>
-            <th>G3</th>
-            <th>G4</th>
-            <th>G5</th>
-            <th>G6</th>
+            <th style="white-space:nowrap;">Cliente</th>
+            <th style="white-space:nowrap;">Global</th>
             <th style="white-space:nowrap;">Facturado</th>
-            <th style="white-space:nowrap;color:#c62828;font-weight:700;">Falta</th>
           </tr>
         </thead>
         <tbody id="facturacion-table-body">
@@ -1630,6 +1663,12 @@ async function loadFacturacionMonth() {
       totalFacturado += parseFloat(r.TotalFacturado) || 0;
     });
 
+    // ── ONE source of truth for FALTA (mes) ──────────────────────────────
+    // A Facturar = Total Pagos − Total Sobre 2  (convención del encabezado, SIN cashback)
+    // Ya Facturado = Cliente + Global  (= Σ TotalFacturado = Σ FactClientes + Σ FactGen1..6)
+    // Falta = A Facturar − Ya Facturado
+    // Se eliminó el "Falta" por día y el "Falta" de totales-de-tabla basado en
+    // TotalXFacturar (que restaba cashback de forma inconsistente → bug del ~$783).
     const xFacturar = totalPagos - totalSobre2;
     const falta = xFacturar - totalFacturado;
     const percent = xFacturar > 0 ? Math.round((totalFacturado / xFacturar) * 100) : 0;
@@ -1640,7 +1679,7 @@ async function loadFacturacionMonth() {
     document.getElementById('monthly-facturado').textContent = formatPeso(totalFacturado);
     document.getElementById('monthly-falta').textContent = formatPeso(falta);
 
-    document.getElementById('facturacion-progress').style.width = percent + '%';
+    document.getElementById('facturacion-progress').style.width = Math.min(percent, 100) + '%';
     document.getElementById('facturacion-progress-text').textContent = percent + '%';
 
     if (falta <= 0) {
@@ -1649,47 +1688,66 @@ async function loadFacturacionMonth() {
       document.getElementById('monthly-falta-box').classList.add('alert');
     }
 
+    // "Cerrar mes": monto exacto que aún falta facturar (≥ 0). Es el número a pegar
+    // en el botón "Monto Exacto" del selector de facturas.
+    const cerrar = Math.max(0, Math.round(falta * 100) / 100);
+    document.getElementById('cerrar-mes-monto').textContent = formatPeso(cerrar);
+    document.getElementById('cerrar-mes-copy').value = cerrar.toFixed(2);
+
     // Sort ascending (oldest first) so dates go 1, 2, 3...
     ingresos.sort((a, b) => new Date(a.Fecha) - new Date(b.Fecha));
 
-    // Calculate column totals
-    let tPagos = 0, tSobre2 = 0, tAFact = 0, tFC = 0, tG1 = 0, tG2 = 0, tG3 = 0, tG4 = 0, tG5 = 0, tG6 = 0, tFacturado = 0, tFalta = 0;
+    // Calculate column totals (Cliente + Global colapsado)
+    let tPagos = 0, tSobre2 = 0, tAFact = 0, tCliente = 0, tGlobal = 0, tFacturado = 0;
     ingresos.forEach(r => {
       const pagos = parseFloat(r.PagosRecibidos) || 0;
       const sobre2 = parseFloat(r.Sobre2) || 0;
+      const cliente = parseFloat(r.FactClientes) || 0;
+      // Global del día = suma de FactGen1..6 (se conserva la compatibilidad de datos).
+      const global = ['FactGen1','FactGen2','FactGen3','FactGen4','FactGen5','FactGen6']
+        .reduce((s, f) => s + (parseFloat(r[f]) || 0), 0);
       tPagos += pagos;
       tSobre2 += sobre2;
       tAFact += pagos - sobre2;
-      tFC += parseFloat(r.FactClientes) || 0;
-      tG1 += parseFloat(r.FactGen1) || 0;
-      tG2 += parseFloat(r.FactGen2) || 0;
-      tG3 += parseFloat(r.FactGen3) || 0;
-      tG4 += parseFloat(r.FactGen4) || 0;
-      tG5 += parseFloat(r.FactGen5) || 0;
-      tG6 += parseFloat(r.FactGen6) || 0;
+      tCliente += cliente;
+      tGlobal += global;
       tFacturado += parseFloat(r.TotalFacturado) || 0;
-      tFalta += (parseFloat(r.TotalXFacturar) || 0) - (parseFloat(r.TotalFacturado) || 0);
     });
 
-    // Populate daily table
+    document.getElementById('monthly-cliente').textContent = formatPeso(tCliente);
+    document.getElementById('monthly-global').textContent = formatPeso(tGlobal);
+
+    // Populate daily table. La columna "Global" es UN solo input ligado a FactGen1;
+    // FactGen2..6 se conservan como inputs ocultos con su valor original para que el
+    // guardado haga round-trip sin perder datos históricos. Al editar "Global", su
+    // valor se escribe íntegro en FactGen1 (que ya contiene la suma cargada).
     const tbody = document.getElementById('facturacion-table-body');
-    const rows = ingresos.map(r => `
+    const rows = ingresos.map(r => {
+      const fecha = (r.Fecha || '').slice(0, 10);
+      const cliente = parseFloat(r.FactClientes) || 0;
+      const g1 = parseFloat(r.FactGen1) || 0;
+      const gRest = ['FactGen2','FactGen3','FactGen4','FactGen5','FactGen6']
+        .reduce((s, f) => s + (parseFloat(r[f]) || 0), 0);
+      const globalSum = g1 + gRest;
+      // El "Global" visible (FactGen1) lleva la SUMA consolidada de G1..G6.
+      // Por eso los FactGen2..6 ocultos se ponen en 0: al guardar, el total global
+      // queda íntegro en FactGen1 y NO se duplica (evita el doble-conteo).
+      // (Los valores históricos siguen en la hoja hasta el próximo guardado, y en
+      //  el respaldo registro_ingresos.BEFORE-overhaul.html.)
+      const hidden = ['FactGen2','FactGen3','FactGen4','FactGen5','FactGen6']
+        .map(f => `<input type="hidden" data-fecha="${fecha}" data-field="${f}" value="0">`)
+        .join('');
+      return `
       <tr>
         <td>${formatDate(r.Fecha)}</td>
         <td>${formatPeso(r.PagosRecibidos)}</td>
         <td>${formatPeso(r.Sobre2)}</td>
         <td>${formatPeso((r.PagosRecibidos || 0) - (r.Sobre2 || 0))}</td>
-        <td><input type="number" data-fecha="${(r.Fecha||'').slice(0,10)}" data-field="FactClientes" value="${r.FactClientes || 0}" style="width:100px;padding:6px 8px;font-size:13px;"></td>
-        <td><input type="number" data-fecha="${(r.Fecha||'').slice(0,10)}" data-field="FactGen1" value="${r.FactGen1 || 0}" style="width:100px;padding:6px 8px;font-size:13px;"></td>
-        <td><input type="number" data-fecha="${(r.Fecha||'').slice(0,10)}" data-field="FactGen2" value="${r.FactGen2 || 0}" style="width:100px;padding:6px 8px;font-size:13px;"></td>
-        <td><input type="number" data-fecha="${(r.Fecha||'').slice(0,10)}" data-field="FactGen3" value="${r.FactGen3 || 0}" style="width:100px;padding:6px 8px;font-size:13px;"></td>
-        <td><input type="number" data-fecha="${(r.Fecha||'').slice(0,10)}" data-field="FactGen4" value="${r.FactGen4 || 0}" style="width:100px;padding:6px 8px;font-size:13px;"></td>
-        <td><input type="number" data-fecha="${(r.Fecha||'').slice(0,10)}" data-field="FactGen5" value="${r.FactGen5 || 0}" style="width:100px;padding:6px 8px;font-size:13px;"></td>
-        <td><input type="number" data-fecha="${(r.Fecha||'').slice(0,10)}" data-field="FactGen6" value="${r.FactGen6 || 0}" style="width:100px;padding:6px 8px;font-size:13px;"></td>
+        <td><input type="number" data-fecha="${fecha}" data-field="FactClientes" value="${cliente}" style="width:110px;padding:6px 8px;font-size:13px;"></td>
+        <td><input type="number" data-fecha="${fecha}" data-field="FactGen1" value="${globalSum}" style="width:110px;padding:6px 8px;font-size:13px;">${hidden}</td>
         <td class="total">${formatPeso(r.TotalFacturado)}</td>
-        <td class="total" style="color:#c62828;font-weight:700;">${formatPeso((r.TotalXFacturar || 0) - (r.TotalFacturado || 0))}</td>
-      </tr>
-    `).join('');
+      </tr>`;
+    }).join('');
 
     // Totals row
     const totalsRow = `<tr style="background:#e8f5e9;font-weight:700;position:sticky;bottom:0;">
@@ -1697,20 +1755,71 @@ async function loadFacturacionMonth() {
       <td>${formatPeso(tPagos)}</td>
       <td>${formatPeso(tSobre2)}</td>
       <td>${formatPeso(tAFact)}</td>
-      <td>${formatPeso(tFC)}</td>
-      <td>${formatPeso(tG1)}</td>
-      <td>${formatPeso(tG2)}</td>
-      <td>${formatPeso(tG3)}</td>
-      <td>${formatPeso(tG4)}</td>
-      <td>${formatPeso(tG5)}</td>
-      <td>${formatPeso(tG6)}</td>
+      <td>${formatPeso(tCliente)}</td>
+      <td>${formatPeso(tGlobal)}</td>
       <td>${formatPeso(tFacturado)}</td>
-      <td style="color:#c62828;">${formatPeso(tFalta)}</td>
     </tr>`;
 
     tbody.innerHTML = rows + totalsRow;
+
+    // Mejora progresiva: log de facturas auto-llenado si el backend lo expone.
+    loadFacturacionLog(month);
   } catch (err) {
     showToast('Error: ' + err.message, 'error');
+  }
+}
+
+// Copia el monto exacto a facturar al portapapeles (para "Monto Exacto").
+function copyCerrarMes() {
+  const el = document.getElementById('cerrar-mes-copy');
+  el.select();
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(el.value);
+    } else {
+      document.execCommand('copy');
+    }
+    showStatusBanner('✅ Monto copiado: ' + el.value, 2500);
+  } catch (e) {
+    showStatusBanner('Copia manual: ' + el.value, 3000);
+  }
+}
+
+// Mejora progresiva: intenta cargar el log de facturas del backend nuevo.
+// Si el endpoint no existe (no desplegado), oculta el panel silenciosamente y
+// se sigue usando la captura manual del Detalle Diario.
+async function loadFacturacionLog(month) {
+  const wrap = document.getElementById('facturacion-log-wrap');
+  const body = document.getElementById('facturacion-log-body');
+  if (!wrap || !body) return;
+  try {
+    const data = await callAPI('get_facturacion_log', { month });
+    const log = (data && data.facturas) || [];
+    if (!Array.isArray(log) || log.length === 0) {
+      wrap.style.display = 'none';
+      return;
+    }
+    let sum = 0;
+    const rows = log.map(f => {
+      const monto = parseFloat(f.monto) || 0;
+      sum += monto;
+      const tipo = (f.tipo || '').toString().toLowerCase().indexOf('cli') >= 0 ? 'Cliente' : 'Global';
+      return `<tr>
+        <td>${formatDate(f.fecha)}</td>
+        <td>${tipo}</td>
+        <td>${(f.folio || '').toString()}</td>
+        <td style="text-align:right;">${formatPeso(monto)}</td>
+      </tr>`;
+    }).join('');
+    const totalRow = `<tr style="background:#e8f5e9;font-weight:700;">
+      <td colspan="3">TOTAL (${log.length} facturas)</td>
+      <td style="text-align:right;">${formatPeso(sum)}</td>
+    </tr>`;
+    body.innerHTML = rows + totalRow;
+    wrap.style.display = 'block';
+  } catch (e) {
+    // Endpoint no disponible → mejora progresiva: ocultar y usar captura manual.
+    wrap.style.display = 'none';
   }
 }
 
